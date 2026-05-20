@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cshp-red: #FF3131;
+  --color-cshp-black: #191919;
+  --color-cshp-white: #FFFFFF;
+  --color-cshp-gray: #5E5E5E;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background-color: #f9fafb;
+}

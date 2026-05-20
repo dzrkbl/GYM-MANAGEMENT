@@ -1,0 +1,8 @@
+{
+  "name": "CSHP - Système de Gestion",
+  "description": "Système de gestion complet pour le Centre Sportif de Haute-Performance (CSHP).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  phone        String?
+  role         String   // ADMIN, SECTION_MANAGER, COACH
+  section      String?  // Renseigné si le rôle est SECTION_MANAGER, ou comma separated
+  remuneration Float?   @default(0)
+  actif        Boolean  @default(true)
+  dateDebut    DateTime @default(now())
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  grades       Grade[]  @relation("Examiner")
+  courses      Course[]
+}
+
+model Member {
+  id            String          @id @default(uuid())
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime?
+  gender        String?
+  phone         String?
+  email         String?
+  photoUrl      String?
+  status        String          @default("ACTIVE") // ACTIVE, INACTIVE, PENDING
+  signupDate    DateTime        @default(now())
+  notes         String?
+  parentName    String?         // Pour les mineurs
+  parentPhone   String?         // Pour les mineurs
+  currentBelt   String?         @default("BLANCHE")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  sections      MemberSection[]
+  subscriptions Subscription[]
+  payments      Payment[]
+  attendances   Attendance[]
+  grades        Grade[]
+}
+
+model MemberSection {
+  id             String   @id @default(uuid())
+  memberId       String
+  section        String   // KARATE, JUDO, U8, TAEKWONDO, KICKBOXING, FITNESS, PRIVATE
+  belt           String?  @default("Blanche")
+  enrollmentDate DateTime @default(now())
+  
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, section])
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  memberId  String
+  section   String   // Lier l'abonnement à une section (ex: KARATE)
+  type      String   // MONTHLY, QUARTERLY
+  amount    Float
+  startDate DateTime
+  endDate   DateTime
+  status    String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  payments  Payment[]
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  subscriptionId String?
+  memberId       String
+  amount         Float
+  method         String?       // CASH, TRANSFER, CARD
+  dueDate        DateTime
+  paidDate       DateTime?
+  status         String        @default("PENDING") // PAID, PENDING, OVERDUE
+  reminderSentAt DateTime?     // Évite les doublons d'alertes
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  member         Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+
+
+model Course {
+  id        String   @id @default(uuid())
+  section   String
+  date      DateTime? // Si null -> template récurrent. Si renseigné -> instance spécifique.
+  dayOfWeek Int      // 0 = Dimanche, 1 = Lundi, etc.
+  startTime String   // "16:30"
+  endTime   String   // "18:00"
+  capacity  Int?
+  coachId   String?  // Assigner le cours à un coach
+  actif     Boolean  @default(true)
+
+  coach     User?    @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  attendances Attendance[]
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  memberId  String
+  courseId  String
+  date      DateTime
+  status    String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED
+
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, courseId, date])
+}
+
+model Grade {
+  id                 String   @id @default(uuid())
+  memberId           String
+  section            String
+  ceinturePrecedente String
+  ceintureMontante   String
+  date               DateTime
+  examinateurId      String
+  note               String?
+  createdAt          DateTime @default(now())
+
+  member             Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  examinateur        User     @relation("Examiner", fields: [examinateurId], references: [id])
+}
+
+model Lead {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String
+  gender      String?
+  phone       String?
+  email       String?
+  sport       String   // KARATE, JUDO, TAEKWONDO, KICKBOXING, PRIVATE
+  requestType String   // ESSAI, RAPPEL, TARIFS, AUTRE
+  status      String   @default("NEW") // NEW, CONTACTED, CONVERTED, LOST
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

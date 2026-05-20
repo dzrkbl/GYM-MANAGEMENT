@@ -1,0 +1,211 @@
+import { Router, Request, Response } from 'express';
+import { prisma } from '../lib/prisma';
+import { sendSuccess, sendError } from '../lib/api-response';
+import { authenticate, requireRole } from '../middleware/auth';
+
+const router = Router();
+
+// Help function for revenues
+const getRevenusForMonth = async (year: number, month: number, section?: string) => {
+  const startDate = new Date(year, month, 1);
+  const endDate = new Date(year, month + 1, 0); // last day of month
+  
+  let whereClause: any = {
+    status: 'PAYÉ',
+    paidDate: { gte: startDate, lte: endDate }
+  };
+
+  if (section) {
+    whereClause.subscription = { section };
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: whereClause,
+    select: { amount: true, subscription: { select: { section: true } } }
+  });
+
+  const total = payments.reduce((sum, p) => sum + p.amount, 0);
+
+  const bySection = payments.reduce((acc, p) => {
+    const s = p.subscription?.section || 'INCONNU';
+    acc[s] = (acc[s] || 0) + p.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return { total, section: bySection };
+};
+
+// GET /api/dashboard/revenus
+router.get('/revenus', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const reqMonth = req.query.month as string || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const [yearStr, monthStr] = reqMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIndex = parseInt(monthStr, 10) - 1; // 0-based
+
+    const moisActuel = await getRevenusForMonth(year, monthIndex);
+    
+    // Mois précédent
+    let prevYear = year;
+    let prevMonthIndex = monthIndex - 1;
+    if (prevMonthIndex < 0) {
+      prevMonthIndex = 11;
+      prevYear -= 1;
+    }
+    const moisPrecedent = await getRevenusForMonth(prevYear, prevMonthIndex);
+
+    const variation = moisActuel.total - moisPrecedent.total;
+
+    return sendSuccess(res, { moisActuel, moisPrecedent, variation });
+  } catch (error) {
+    return sendError(res, 'Erreur lors de la récupération des revenus', 500);
+  }
+});
+
+// GET /api/dashboard/revenus/section
+router.get('/revenus/section', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const reqMonth = req.query.month as string || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const [yearStr, monthStr] = reqMonth.split('-');
+    
+    const revenues = await getRevenusForMonth(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1);
+    
+    return sendSuccess(res, { bySection: revenues.section });
+  } catch (error) {
+    return sendError(res, 'Erreur', 500);
+  }
+});
+
+// GET /api/dashboard/retards
+router.get('/retards', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const overdues = await prisma.payment.findMany({
+      where: {
+        status: { in: ['EN_ATTENTE', 'EN_RETARD'] },
+        dueDate: { lt: new Date() }
+      }
+    });
+
+    const count = overdues.length;
+    const montantTotal = overdues.reduce((sum, p) => sum + p.amount, 0);
+
+    return sendSuccess(res, { count, montantTotal });
+
+  } catch (error) {
+    return sendError(res, 'Erreur', 500);
+  }
+});
+
+// GET /api/dashboard/membres
+router.get('/membres', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+   try {
+     const membres = await prisma.member.findMany({
+       where: { status: 'ACTIF' },
+       include: { sections: true }
+     });
+
+     let total = membres.length;
+     const parSection: Record<string, number> = {};
+
+     for (const m of membres) {
+       for (const s of m.sections) {
+         parSection[s.section] = (parSection[s.section] || 0) + 1;
+       }
+     }
+
+     return sendSuccess(res, { total, parSection });
+   } catch (error) {
+     return sendError(res, 'Erreur', 500);
+   }
+});
+
+// GET /api/dashboard/resume
+router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const now = new Date();
+    
+    // Revenus
+    const moisActuel = await getRevenusForMonth(now.getFullYear(), now.getMonth());
+    let prevYear = now.getFullYear();
+    let prevMonthIndex = now.getMonth() - 1;
+    if (prevMonthIndex < 0) { prevMonthIndex = 11; prevYear -= 1; }
+    const moisPrecedent = await getRevenusForMonth(prevYear, prevMonthIndex);
+    
+    // Retards
+    const overdues = await prisma.payment.findMany({
+      where: {
+        status: { in: ['EN_ATTENTE', 'EN_RETARD'] },
+        dueDate: { lt: now }
+      }
+    });
+    const retardsCount = overdues.length;
+    const retardsMontant = overdues.reduce((sum, p) => sum + p.amount, 0);
+
+    // Membres
+    const membres = await prisma.member.findMany({
+       where: { status: 'ACTIF' },
+       include: { sections: true }
+    });
+    const parSection: Record<string, number> = {};
+    for (const m of membres) {
+       for (const s of m.sections) {
+         parSection[s.section] = (parSection[s.section] || 0) + 1;
+       }
+    }
+
+    // Présences de la semaine (global approximation for dashboard)
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+
+    const attendances = await prisma.attendance.findMany({
+      where: { date: { gte: weekStart, lte: weekEnd } }
+    });
+    
+    // basic approximation logic: get distinct courses this week
+    const uniqueCourses = new Set(attendances.map(a => `${a.courseId}_${a.date.toISOString()}`));
+    
+    // Active members
+    const activeMembersCount = membres.length;
+    
+    let tauxCetteSemaine = 0;
+    if (uniqueCourses.size > 0 && activeMembersCount > 0) {
+      // Just a very rough approximation since one member may attend multiple disciplines
+       tauxCetteSemaine = Math.round((attendances.length / (uniqueCourses.size * activeMembersCount)) * 100);
+       // cap to 100% just in case
+       if (tauxCetteSemaine > 100) tauxCetteSemaine = 100;
+    }
+
+    // Masse Salariale
+    const activeCoachs = await prisma.user.findMany({
+      where: { role: { in: ['COACH', 'SECTION_MANAGER'] }, actif: true }
+    });
+    const masseSalariale = activeCoachs.reduce((sum, c) => sum + (c.remuneration || 0), 0);
+
+    return sendSuccess(res, {
+      revenus: {
+        moisActuel: moisActuel.total,
+        moisPrecedent: moisPrecedent.total,
+        variation: moisActuel.total - moisPrecedent.total
+      },
+      membres: {
+        total: membres.length,
+        parSection
+      },
+      retards: {
+        count: retardsCount,
+        montantTotal: retardsMontant
+      },
+      presences: {
+        tauxCetteSemaine
+      },
+      masseSalariale
+    });
+
+  } catch (error) {
+    return sendError(res, 'Erreur du dashboard résumé', 500);
+  }
+});
+
+export default router;
