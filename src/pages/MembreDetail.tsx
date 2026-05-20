@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../lib/api';
+import { apiFetch, payerVersement } from '../lib/api';
 import { formatMontant, formatDate } from '../lib/format';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Modal } from '../components/ui/Modal';
-import { MembreForm } from '../components/forms/MembreForm';
-import { PaiementForm } from '../components/forms/PaiementForm';
+import { MembreForm } from '../components/membres/MembreForm';
 import { GradeForm } from '../components/forms/GradeForm';
-import { ArrowLeft, UserCircle, Phone, Calendar as CalIcon, Edit3, Award } from 'lucide-react';
+import { 
+  ArrowLeft, UserCircle, Phone, Calendar as CalIcon, Edit3, Award, 
+  DollarSign, Users, CheckCircle, Clock, Heart, Mail, Check, AlertTriangle, ShieldAlert
+} from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 export function MembreDetail() {
@@ -21,22 +23,31 @@ export function MembreDetail() {
   const [member, setMember] = useState<any>(null);
   const [attendances, setAttendances] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
+  const [allMembres, setAllMembres] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   
+  // Onglet actif : 'profil' | 'paiements' | 'presences' | 'famille'
+  const [activeTab, setActiveTab] = useState<'profil' | 'paiements' | 'presences' | 'famille'>('profil');
+
+  // Modales
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isPaying, setIsPaying] = useState(false);
-
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [selectedSection, setSelectedSection] = useState<{name: string, belt: string} | null>(null);
 
+  // Modale Paiement d'un versement
+  const [isPayVersementOpen, setIsPayVersementOpen] = useState(false);
+  const [currentVersement, setCurrentVersement] = useState<any>(null);
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payMethod, setPayMethod] = useState('VIREMENT');
+  const [payNote, setPayNote] = useState('');
+  const [isPayingVersement, setIsPayingVersement] = useState(false);
+
   useEffect(() => {
     fetchMemberData();
     fetchGrades();
+    fetchAllMembres();
   }, [id]);
 
   async function fetchGrades() {
@@ -45,6 +56,15 @@ export function MembreDetail() {
       setGrades(data);
     } catch (err) {
       console.warn("Erreur chargement grades", err);
+    }
+  }
+
+  async function fetchAllMembres() {
+    try {
+      const data = await apiFetch<any[]>('/membres');
+      setAllMembres(data);
+    } catch (err) {
+      console.warn("Erreur chargement de tous les membres", err);
     }
   }
 
@@ -68,44 +88,6 @@ export function MembreDetail() {
     }
   }
 
-  const handleEditMember = async (data: any) => {
-    setIsSubmitting(true);
-    try {
-      await apiFetch(`/membres/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
-      setIsEditModalOpen(false);
-      fetchMemberData();
-    } catch (error: any) {
-      alert(error.message || 'Erreur lors de la modification');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAddPayment = async (data: any) => {
-    setIsPaying(true);
-    try {
-      // Optimistic update for UI feel (optional, but requested for 'Marquer comme payé' list, doing it simple here)
-      await apiFetch('/paiements', {
-        method: 'POST',
-        body: JSON.stringify({
-          memberId: id!,
-          subscriptionId: activeSub?.id, 
-          status: 'PAYÉ',
-          ...data
-        })
-      });
-      setIsPaymentModalOpen(false);
-      fetchMemberData(); // refresh payments list
-    } catch (error: any) {
-      alert(error.message || 'Erreur lors du paiement');
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
   const handleGradeSubmit = async (data: any) => {
     setIsGrading(true);
     try {
@@ -128,183 +110,499 @@ export function MembreDetail() {
     setIsGradeModalOpen(true);
   };
 
+  // Enregistrer le paiement d'un versement
+  const openPayVersementModal = (versement: any) => {
+    setCurrentVersement(versement);
+    setPayDate(new Date().toISOString().split('T')[0]);
+    setPayMethod('VIREMENT');
+    setPayNote('');
+    setIsPayVersementOpen(true);
+  };
+
+  const handleSaveVersementPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentVersement) return;
+
+    setIsPayingVersement(true);
+    try {
+      await payerVersement(currentVersement.id, {
+        datePaiement: payDate,
+        methodePaiement: payMethod,
+        note: payNote,
+      });
+      setIsPayVersementOpen(false);
+      fetchMemberData();
+    } catch (err: any) {
+      alert(err.message || 'Erreur lors de la validation du paiement.');
+    } finally {
+      setIsPayingVersement(false);
+    }
+  };
+
   if (isLoading) return <div className="p-8 flex justify-center"><Spinner /></div>;
   if (error || !member) return <div className="p-4 bg-red-50 text-red-600 rounded-lg">{error || 'Membre introuvable'}</div>;
 
-  // Derive active subscription
-  const activeSub = member.subscriptions?.find((s: any) => s.status === 'ACTIVE' || s.status === 'EN_ATTENTE');
+  // Calcul du taux et du statut
+  const groupLabel = (g: string) => {
+    switch (g) {
+      case 'KARATE_GR1': return 'Karaté Gr. 1';
+      case 'KARATE_GR2': return 'Karaté Gr. 2';
+      case 'JUDO_GR1': return 'Judo Gr. 1';
+      case 'JUDO_GR2': return 'Judo Gr. 2';
+      case 'JUDO_GR3': return 'Judo Gr. 3';
+      case 'NINJAS_GR1': return 'Ninjas Gr. 1';
+      case 'NINJAS_GR2': return 'Ninjas Gr. 2';
+      case 'MENSUEL': return 'Mensuel';
+      default: return g || '-';
+    }
+  };
+
+  // Liste des parrainés
+  const parraines = allMembres.filter(m => m.referePar === member.id);
   
-  // Attendances calculation 30 days
+  // Parrain direct
+  const parrain = allMembres.find(m => m.id === member.referePar);
+
+  // Famille liée
+  const familleMembres = allMembres.filter(m => 
+    (member.membreFamilleId && m.id === member.membreFamilleId) || 
+    (m.membreFamilleId === member.id)
+  );
+
+  // Présences durant les 30 derniers jours
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const recentAttendances = attendances.filter(a => new Date(a.date) >= thirtyDaysAgo);
-  // Approximation of total cours is 8 per month per section generally. Let's just show raw count.
-  const presencesCount = recentAttendances.length;
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'ACTIF') return <Badge variant="success">✅ Actif</Badge>;
+    if (status === 'INACTIF') return <Badge variant="neutral">Inactif</Badge>;
+    if (status === 'EN_ATTENTE') return <Badge variant="warning">⏳ En attente</Badge>;
+    return null;
+  };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-8">
-      {/* Header */}
+    <div className="max-w-3xl mx-auto space-y-6 pb-12 px-4">
+      {/* Bouton retour et modification */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-0 md:relative z-10">
-        <button onClick={() => navigate(-1)} className="flex items-center text-cshp-gray hover:text-cshp-black cursor-pointer">
-          <ArrowLeft className="mr-2" size={20} /> Retour
+        <button onClick={() => navigate('/membres')} className="flex items-center text-gray-500 hover:text-gray-800 cursor-pointer font-semibold text-sm">
+          <ArrowLeft className="mr-2" size={20} /> Retour aux membres
         </button>
-        <Button variant="outline" onClick={() => setIsEditModalOpen(true)} className="min-h-[40px] text-sm py-1">
-          <Edit3 size={16} className="mr-2" /> Modifier
+        <Button variant="outline" onClick={() => setIsEditModalOpen(true)} className="min-h-[40px] text-sm py-1 border-gray-300">
+          <Edit3 size={16} className="mr-2" /> Modifier le Profil
         </Button>
       </div>
 
-      {/* Profil */}
-      <Card className="p-6">
-        <div className="flex gap-4 items-start">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-            <UserCircle size={40} className="text-gray-400" />
+      {/* HEADER DE PRÉSENTATION RAPIDE */}
+      <Card className="p-6 shadow-sm border border-gray-100 bg-white">
+        <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start text-center sm:text-left">
+          <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 shrink-0 shadow-inner">
+            <UserCircle size={56} className="stroke-[1.5]" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-cshp-black uppercase">{member.lastName} <span className="capitalize">{member.firstName}</span></h1>
-            {member.dateOfBirth && (
-              <p className="text-cshp-gray mt-1">
-                Né(e) le {formatDate(member.dateOfBirth)} 
-              </p>
-            )}
-            <div className="mt-2 space-y-1">
-              {member.phone && <div className="flex items-center text-sm text-cshp-black"><Phone size={14} className="mr-2 text-cshp-gray"/> {member.phone}</div>}
-              {member.parentName && (
-                <div className="flex items-center text-sm text-cshp-black bg-yellow-50 px-2 py-1 rounded inline-flex mt-1">
-                  👤 Parent: {member.parentName} — {member.parentPhone}
-                </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-center sm:justify-start">
+              <h1 className="text-2xl font-extrabold text-gray-900 uppercase tracking-tight">
+                {member.lastName} <span className="font-normal capitalize text-gray-700">{member.firstName}</span>
+              </h1>
+              <div className="inline-flex justify-center">{getStatusBadge(member.status)}</div>
+            </div>
+
+            <div className="text-sm text-gray-500 flex flex-wrap gap-x-4 gap-y-1 justify-center sm:justify-start">
+              {member.dateOfBirth && (
+                <span className="flex items-center gap-1">
+                  <CalIcon className="w-4 h-4 text-gray-400" /> Né(e) le : {formatDate(member.dateOfBirth)}
+                </span>
+              )}
+              {member.phone && (
+                <span className="flex items-center gap-1">
+                  <Phone className="w-4 h-4 text-gray-400" /> {member.phone}
+                </span>
+              )}
+              {member.email && (
+                <span className="flex items-center gap-1 font-medium">
+                  <Mail className="w-4 h-4 text-gray-400" /> {member.email}
+                </span>
+              )}
+            </div>
+
+            <div className="pt-2 flex flex-wrap gap-2 justify-center sm:justify-start">
+              <Badge variant="neutral" className="bg-slate-900 text-white font-bold px-3 py-1 text-xs">
+                {groupLabel(member.groupe)}
+              </Badge>
+              {member.sections?.[0]?.belt && (
+                <Badge variant="belt" className="font-semibold text-xs py-1">
+                  🥋 Belt: {member.sections[0].belt} {member.sections[0].beltSize ? `(${member.sections[0].beltSize})` : ''}
+                </Badge>
               )}
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Sections & Grades */}
-      <Card className="p-6">
-        <h3 className="text-xs font-bold text-cshp-gray tracking-wider mb-4 uppercase">Sections & Grades</h3>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-3">
-            {member.sections.map((s: any) => (
-               <div key={s.id} className="flex gap-4 items-center bg-gray-50 border border-gray-100 rounded-lg p-4 w-full sm:w-auto shrink-0 justify-between">
-                 <div className="flex gap-3 items-center">
-                   <Award size={20} className="text-cshp-red" />
-                   <div>
-                     <span className="font-bold text-cshp-black block">{s.section}</span>
-                     <Badge variant="belt" className="mt-1">{s.belt || 'Blanche'}</Badge>
-                   </div>
-                 </div>
-                 {user?.role !== 'COACH' && (
-                   <Button variant="outline" className="text-xs shrink-0" onClick={() => openGradeModal(s.section, s.belt)}>
-                     + Passage
-                   </Button>
-                 )}
-               </div>
-            ))}
+      {/* TABS DE NAVIGATION */}
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-1 sm:space-x-4" aria-label="Tabs">
+          {[
+            { id: 'profil', label: 'Profil Complet', icon: UserCircle },
+            { id: 'paiements', label: 'Échéances & Paiements', icon: DollarSign },
+            { id: 'presences', label: 'Présences', icon: Clock },
+            { id: 'famille', label: 'Famille & Parrainage', icon: Users },
+          ].map(tab => {
+            const IconComponent = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`py-3 px-3 flex items-center gap-1.5 border-b-2 font-bold text-xs sm:text-sm tracking-tight transition-all rounded-t-lg ${
+                  isActive
+                    ? 'border-cshp-red text-cshp-red bg-red-50/40'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+                }`}
+              >
+                <IconComponent className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* --- DUPLICATE DISPLAY FOR TABS CONTENT --- */}
+      
+      {/* 1. ONGLET PROFIL */}
+      {activeTab === 'profil' && (
+        <div className="space-y-6">
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Fiche d'identité</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Âge actuel</span>
+                <span className="text-gray-800 font-semibold text-sm">
+                  {member.dateOfBirth ? `${new Date().getFullYear() - new Date(member.dateOfBirth).getFullYear()} ans` : '-'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Poids corporel</span>
+                <span className="text-gray-800 font-semibold text-sm">
+                  {member.poids ? `${member.poids} kg` : 'Non renseigné'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de début</span>
+                <span className="text-gray-800 font-semibold text-sm">
+                  {member.dateInscription ? new Date(member.dateInscription).toLocaleDateString('fr-FR') : '-'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de fin d'adhésion</span>
+                <span className="text-gray-800 font-bold text-cshp-red text-sm">
+                  {member.finContrat ? new Date(member.finContrat).toLocaleDateString('fr-FR') : 'Indéfinie'}
+                </span>
+              </div>
+            </div>
+
+            {member.notes && (
+              <div className="pt-3 border-t border-gray-100">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold mb-1">Notes administratives ou médicales</span>
+                <div className="bg-slate-50 border border-slate-100 text-slate-800 rounded-lg p-3 text-sm leading-relaxed whitespace-pre-line italic">
+                  "{member.notes}"
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Grille de Ceintures et Historique des Passages de Grades */}
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Grades & Progression</h3>
+              {user?.role !== 'COACH' && member.sections?.[0] && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => openGradeModal(member.sections[0].section, member.sections[0].belt || "Blanche")}
+                  className="text-xs !min-h-0 h-9 px-3"
+                >
+                  Ajouter un passage
+                </Button>
+              )}
+            </div>
+
+            {grades.length > 0 ? (
+              <div className="space-y-3">
+                {grades.map(g => (
+                  <div key={g.id} className="text-sm border border-gray-100 bg-gray-50/50 rounded-xl p-3 flex justify-between items-start">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-900">🥋 {g.ceintureMontante}</span>
+                        <span className="text-gray-400 text-xs">({g.section})</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Instructeur : {g.examinateur ? `${g.examinateur.firstName} ${g.examinateur.lastName}` : 'Inconnu'}
+                      </p>
+                      {g.note && <p className="text-xs italic text-gray-600 mt-1">"{g.note}"</p>}
+                    </div>
+                    <span className="text-xs font-semibold text-gray-400 shrink-0">
+                      {new Date(g.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Aucun historique de grade enregistré.</p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* 2. ONGLET PAIEMENTS */}
+      {activeTab === 'paiements' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Fiche d'abonnement récapitulative */}
+          <div className="bg-slate-900 text-white rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
+            <div>
+              <span className="text-xs text-slate-400 font-extrabold uppercase tracking-wider block">
+                Formule contractée
+              </span>
+              <span className="text-xl font-black block mt-0.5">
+                Plan {member.plan || 'Non spécifié'}
+              </span>
+              <div className="text-xs text-slate-300 mt-1 space-y-0.5">
+                <p>• Cotisation initiale : {member.prixBase ? `${member.prixBase.toFixed(2)} $` : '0.00 $'}</p>
+                {member.rabaisFamille && <p>• Option famille appliquée (-10%)</p>}
+                {Number(member.rabaisCustomPct) > 0 && <p>• Rabais manuel appliqué : -{member.rabaisCustomPct}%</p>}
+              </div>
+            </div>
+            <div className="sm:text-right">
+              <span className="text-xs text-slate-400 block uppercase font-bold">Montant contractuel final :</span>
+              <span className="text-3xl font-extrabold text-cshp-red block">
+                {member.montantFinal ? `${member.montantFinal.toFixed(2)} $` : '0.00 $'}
+              </span>
+            </div>
           </div>
 
-          {grades.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <h4 className="text-sm font-bold text-cshp-black mb-3">Historique des passages</h4>
-              <ul className="space-y-3">
-                {grades.map(g => (
-                  <li key={g.id} className="text-sm flex flex-col md:flex-row md:items-center justify-between bg-white border border-gray-100 rounded-lg p-3 shadow-sm">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-cshp-black">🥋 {g.ceintureMontante}</span>
-                        <span className="text-cshp-gray text-xs">({g.section})</span>
+          {/* ÉCHÉANCIER COMPLET */}
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Échéancier de facturation</h3>
+            
+            {member.versements && member.versements.length > 0 ? (
+              <div className="space-y-4">
+                {member.versements.map((v: any, index: number) => {
+                  const isPaid = !!v.datePaiement;
+                  const isLate = !isPaid && new Date(v.datePrevue) < new Date();
+                  return (
+                    <div 
+                      key={v.id} 
+                      className={`border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all ${
+                        isPaid 
+                          ? 'border-emerald-100 bg-emerald-50/10' 
+                          : isLate 
+                          ? 'border-red-100 bg-red-50/10 animate-pulse' 
+                          : 'border-gray-100 hover:border-gray-200 bg-white'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 text-sm">Versement #{v.numeroVersement}</span>
+                          {isPaid ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full border border-emerald-200">
+                              Payé ✅
+                            </span>
+                          ) : isLate ? (
+                            <span className="bg-red-100 text-red-800 text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full border border-red-200">
+                              En retard ⚠️
+                            </span>
+                          ) : (
+                            <span className="bg-blue-100 text-blue-800 text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full border border-blue-200">
+                              Planifié 🔵
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p>Échéance prévue : <strong>{new Date(v.datePrevue).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
+                          {isPaid && (
+                            <div className="bg-slate-100/60 text-slate-700 p-2 rounded-lg mt-2 text-[11px] font-medium border border-slate-200/50">
+                              Paid on {new Date(v.datePaiement).toLocaleDateString('fr-FR')} via <span className="uppercase font-bold">{v.methodePaiement}</span>
+                              {v.note && <span className="block mt-0.5 text-gray-500 italic">"Note: {v.note}"</span>}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-1 text-cshp-gray">
-                        Examinateur : {g.examinateur?.firstName} {g.examinateur?.lastName}
+
+                      <div className="text-right w-full sm:w-auto flex sm:flex-col justify-between sm:justify-start items-center sm:items-end gap-2 shrink-0 border-t sm:border-0 pt-2 sm:pt-0 border-gray-100">
+                        <span className="text-lg font-black text-slate-900">{v.montant.toFixed(2)} $</span>
+                        {!isPaid && (
+                          <Button 
+                            className="bg-cshp-red hover:bg-red-700 text-white text-xs font-bold py-1 h-9 !min-h-0 flex items-center gap-1 shrink-0"
+                            onClick={() => openPayVersementModal(v)}
+                          >
+                            <DollarSign className="w-3.5 h-3.5" /> Encaisser
+                          </Button>
+                        )}
                       </div>
-                      {g.note && <div className="mt-2 text-xs italic text-gray-500">"{g.note}"</div>}
                     </div>
-                    <div className="text-cshp-gray font-medium shrink-0 mt-2 md:mt-0 text-right">
-                      {new Date(g.date).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Aucun échéancier de paiement disponible pour ce membre.</p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* 3. ONGLET PRÉSENCES */}
+      {activeTab === 'presences' && (
+        <div className="space-y-6">
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-5">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Statistiques de Fréquentation</h3>
+            
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="p-4 bg-slate-50 border rounded-2xl">
+                <span className="text-3xl font-black text-slate-900 block">{recentAttendances.length}</span>
+                <span className="text-xs text-gray-400 uppercase font-extrabold mt-1 block">30 derniers jours</span>
+              </div>
+              <div className="p-4 bg-slate-50 border rounded-2xl">
+                <span className="text-3xl font-black text-slate-900 block">{attendances.length}</span>
+                <span className="text-xs text-gray-400 uppercase font-extrabold mt-1 block">Présences totales</span>
+              </div>
             </div>
-          )}
+
+            <div className="space-y-3">
+              <h4 className="text-xs font-extrabold uppercase text-gray-400 tracking-wider">Toutes les séances de pointage</h4>
+              {attendances.length > 0 ? (
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {[...attendances]
+                    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .map((a, i) => (
+                      <div key={i} className="text-xs sm:text-sm bg-white border rounded-lg p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                        <span className="font-bold text-gray-800">
+                          {new Date(a.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.groupe}</span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Aucun pointage enregistré pour le moment.</p>
+              )}
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
 
-      {/* Abonnement */}
-      <Card className="p-6">
-         <h3 className="text-xs font-bold text-cshp-gray tracking-wider mb-4 uppercase">Abonnement Actif</h3>
-         {activeSub ? (
-           <div className="space-y-3">
-             <div className="flex justify-between items-start border-b border-gray-100 pb-3">
-               <div>
-                 <p className="font-bold text-cshp-black">{activeSub.type} · {activeSub.section}</p>
-                 <p className="text-cshp-red font-medium mt-1">{formatMontant(activeSub.amount)} / mois</p>
-               </div>
-               <Badge variant={activeSub.status === 'ACTIVE' ? 'success' : 'warning'}>
-                 {activeSub.status === 'ACTIVE' ? '✅ Actif' : '⏳ En attente'}
-               </Badge>
-             </div>
-             <p className="text-sm text-cshp-gray flex items-center">
-               <CalIcon size={14} className="mr-2" /> Fin de cycle : {formatDate(activeSub.endDate)}
-             </p>
-           </div>
-         ) : (
-           <p className="text-sm text-cshp-gray">Aucun abonnement actif.</p>
-         )}
-      </Card>
+      {/* 4. ONGLET FAMILLE & RÉFÉRENCEMENT */}
+      {activeTab === 'famille' && (
+        <div className="space-y-6">
+          {/* FAMILLE COMPLÈTE */}
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Membres de Famille</h3>
+            
+            {familleMembres.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {familleMembres.map(fam => (
+                  <div 
+                    key={fam.id} 
+                    className="p-3 bg-slate-50 border border-gray-100 rounded-xl flex items-center justify-between cursor-pointer hover:border-cshp-red"
+                    onClick={() => navigate(`/membres/${fam.id}`)}
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-gray-900 uppercase">{fam.lastName} <span className="capitalize font-medium text-gray-700">{fam.firstName}</span></p>
+                      <p className="text-xs text-gray-500 uppercase">{fam.groupe || '-'}</p>
+                    </div>
+                    <Badge variant="success" className="text-[10px]">Famille</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Aucun membre de la famille n'est actuellement lié.</p>
+            )}
+          </Card>
 
-      {/* Paiements */}
-      <Card className="p-6">
-         <div className="flex justify-between items-center mb-4">
-           <h3 className="text-xs font-bold text-cshp-gray tracking-wider uppercase">Historique des Paiements</h3>
-           {activeSub && (
-             <Button variant="outline" className="min-h-[36px] text-xs py-1 h-auto" onClick={() => setIsPaymentModalOpen(true)}>
-               + Enregistrer
-             </Button>
-           )}
-         </div>
-         {member.payments && member.payments.length > 0 ? (
-           <ul className="space-y-3">
-             {[...member.payments].sort((a,b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
-             .map((p: any) => (
-               <li key={p.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                 <div>
-                   <p className="font-medium text-sm text-cshp-black">
-                     {new Date(p.dueDate).toLocaleDateString('fr-CA', { month: 'long', year: 'numeric' })}
-                   </p>
-                   <p className="text-xs text-cshp-gray">{p.method || 'Non payé'}</p>
-                 </div>
-                 <div className="text-right">
-                   <p className="font-medium text-cshp-black">{formatMontant(p.amount)}</p>
-                   {p.status === 'PAYÉ' ? (
-                     <span className="text-xs font-semibold text-green-600 block mt-1">✅ Payé</span>
-                   ) : (
-                     <span className="text-xs font-semibold text-red-500 block mt-1">🔴 {p.status === 'EN_RETARD' ? 'En retard' : 'En attente'}</span>
-                   )}
-                 </div>
-               </li>
-             ))}
-           </ul>
-         ) : (
-           <p className="text-sm text-cshp-gray">Aucun paiement enregistré.</p>
-         )}
-      </Card>
+          {/* PARRAIN DIRECT & PARRAINÉ */}
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Parrainage d'adhésion</h3>
+            
+            {/* Référé par */}
+            {parrain ? (
+              <div className="space-y-2">
+                <span className="text-xs uppercase font-extrabold text-gray-400 block">Référé par (Parrain direct)</span>
+                <div 
+                  className="p-3 border border-indigo-100 bg-indigo-50/10 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-100 max-w-sm transition-colors"
+                  onClick={() => navigate(`/membres/${parrain.id}`)}
+                >
+                  <div>
+                    <p className="font-bold text-sm text-indigo-900 uppercase">{parrain.lastName} {parrain.firstName}</p>
+                    <p className="text-[10px] uppercase font-bold text-indigo-500">Parrain officiel</p>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-indigo-500" />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <span className="text-xs uppercase font-extrabold text-gray-400 block">Parrain direct</span>
+                <p className="text-xs text-gray-400 italic">Ce membre n'a pas été référé par un parrain.</p>
+              </div>
+            )}
 
-      {/* Présences */}
-      <Card className="p-6">
-        <h3 className="text-xs font-bold text-cshp-gray tracking-wider mb-4 uppercase">Présences (30 derniers jours)</h3>
-        <div className="flex items-center gap-4">
-          <div className="text-3xl font-bold text-cshp-black">{presencesCount}</div>
-          <div className="text-sm text-cshp-gray">cours assistés<br/>depuis 1 mois</div>
+            {/* Membres que j'ai parrainés */}
+            <div className="space-y-2 pt-3 border-t border-gray-100 mt-2">
+              <span className="text-xs uppercase font-extrabold text-gray-400 block">Membres parrainés par vous ({parraines.length})</span>
+              {parraines.length > 0 ? (
+                <div className="space-y-2">
+                  {parraines.map(p => (
+                    <div 
+                      key={p.id} 
+                      className="p-3 border border-gray-100 hover:border-gray-300 rounded-xl flex justify-between items-center text-sm cursor-pointer"
+                      onClick={() => navigate(`/membres/${p.id}`)}
+                    >
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-gray-900 uppercase">
+                          {p.lastName} <span className="capitalize font-medium text-gray-600">{p.firstName}</span>
+                        </p>
+                        <p className="text-[10px] text-gray-500 uppercase">Inscrit le {new Date(p.dateInscription || p.createdAt).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                      
+                      <div className="text-right">
+                        {p.rabaisReferentApplique ? (
+                          <span className="inline-flex px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] uppercase font-black border border-emerald-200">
+                            Appliqué ✅
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 rounded bg-amber-100 text-amber-850 text-[10px] uppercase font-black border border-amber-200">
+                            À appliquer 🔔 (offert: {p.rabaisReferentPct || 10}%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Vous n'avez pas encore parrainé d'autres athlètes.</p>
+              )}
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
 
-      <Modal isOpen={isEditModalOpen} onClose={() => !isSubmitting && setIsEditModalOpen(false)} title="Modifier le membre" width="lg">
-        <MembreForm initialData={member} onSubmit={handleEditMember} onCancel={() => setIsEditModalOpen(false)} isLoading={isSubmitting} />
+      {/* --- TOUTES LES MODALES --- */}
+
+      {/* MODALE ÉDITION DU PROFIL */}
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="" width="xl">
+        <MembreForm 
+          membre={member} 
+          onSuccess={() => {
+            setIsEditModalOpen(false);
+            fetchMemberData();
+          }} 
+          onCancel={() => setIsEditModalOpen(false)} 
+        />
       </Modal>
 
-      <Modal isOpen={isPaymentModalOpen} onClose={() => !isPaying && setIsPaymentModalOpen(false)} title="Enregistrer un paiement">
-         <PaiementForm amount={activeSub?.amount || 0} onSubmit={handleAddPayment} onCancel={() => setIsPaymentModalOpen(false)} isLoading={isPaying} />
-      </Modal>
-      
+      {/* MODALE EXAM / GRADE */}
       <Modal isOpen={isGradeModalOpen} onClose={() => !isGrading && setIsGradeModalOpen(false)} title="Passage de grade" width="lg">
         {selectedSection && (
           <GradeForm 
@@ -316,6 +614,69 @@ export function MembreDetail() {
             isLoading={isGrading}
             isAdmin={user?.role === 'ADMIN'}
           />
+        )}
+      </Modal>
+
+      {/* MODALE ENCAISSER VERSEMENT */}
+      <Modal isOpen={isPayVersementOpen} onClose={() => !isPayingVersement && setIsPayVersementOpen(false)} title="Encaisser un versement" width="md">
+        {currentVersement && (
+          <form onSubmit={handleSaveVersementPayment} className="space-y-4">
+            <div className="bg-slate-50 border p-3 rounded-lg text-sm text-slate-800 leading-relaxed text-center font-semibold">
+              Versement #{currentVersement.numeroVersement} d'un montant de &nbsp;
+              <span className="text-lg font-black text-slate-900">{currentVersement.montant.toFixed(2)} $</span>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Date réelle de paiement
+              </label>
+              <input
+                type="date"
+                required
+                value={payDate}
+                onChange={e => setPayDate(e.target.value)}
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Mode de versement
+              </label>
+              <select
+                value={payMethod}
+                onChange={e => setPayMethod(e.target.value)}
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white text-sm"
+              >
+                <option value="VIREMENT">Virement Interac / Bancaire</option>
+                <option value="CASH">Argent Comptant</option>
+                <option value="CHEQUE">Chèque</option>
+                <option value="CARTE">Carte de Crédit/Débit</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Note / Commentaire
+              </label>
+              <input
+                type="text"
+                value={payNote}
+                onChange={e => setPayNote(e.target.value)}
+                placeholder="Ex. Reçu #0283, chèque n° 239..."
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white text-sm"
+              />
+            </div>
+
+            <div className="flex gap-4 pt-4 border-t border-gray-100">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setIsPayVersementOpen(false)} disabled={isPayingVersement}>
+                Annuler
+              </Button>
+              <Button type="submit" isLoading={isPayingVersement} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                Confirmer l'encaissement
+              </Button>
+            </div>
+          </form>
         )}
       </Modal>
 

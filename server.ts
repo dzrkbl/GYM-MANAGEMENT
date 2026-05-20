@@ -15,6 +15,7 @@ import gradesRouter from './src/routes/grades';
 import coachsRouter from './src/routes/coachs';
 import rapportsRouter from './src/routes/rapports';
 import planningRouter from './src/routes/planning';
+import versementsRouter from './src/routes/versements';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -34,6 +35,7 @@ app.use('/api/grades', gradesRouter);
 app.use('/api/coachs', coachsRouter);
 app.use('/api/rapports', rapportsRouter);
 app.use('/api/planning', planningRouter);
+app.use('/api/versements', versementsRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {

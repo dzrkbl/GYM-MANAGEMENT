@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -45,18 +45,55 @@ model Member {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
+  // Infos personnelles additionnelles
+  poids                  Float?
+  groupe                 String?     // 'KARATE_GR1', 'KARATE_GR2', 'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3', 'NINJAS_GR1', 'NINJAS_GR2', 'MENSUEL'
+
+  // Contrat
+  dateInscription        DateTime?
+  finContrat             DateTime?
+
+  // Plan tarifaire
+  plan                   String?     // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
+  prixBase               Float?
+  rabaisFamille          Boolean     @default(false)
+  membreFamilleId        String?
+  rabaisCustomPct        Float?
+  raisonRabaisCustom     String?
+  montantFinal           Float?
+
+  // Référencement
+  referePar              String?
+  rabaisReferentPct      Float?
+  rabaisReferentApplique Boolean     @default(false)
+
   // Relations
   sections      MemberSection[]
   subscriptions Subscription[]
   payments      Payment[]
   attendances   Attendance[]
   grades        Grade[]
+  versements    PaymentVersement[]
+}
+
+model PaymentVersement {
+  id              String    @id @default(uuid())
+  membreId        String
+  numeroVersement Int
+  montant         Float
+  datePrevue      DateTime
+  datePaiement    DateTime?
+  methodePaiement String?   // CASH, VIREMENT, CHEQUE, CARTE
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  member          Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
 }
 
 model MemberSection {
   id             String   @id @default(uuid())
   memberId       String
-  section        String   // KARATE, JUDO, U8, TAEKWONDO, KICKBOXING, FITNESS, PRIVATE
+  section        String   // KARATE, JUDO, NINJAS_GR1, NINJAS_GR2, TAEKWONDO, KICKBOXING, FITNESS, PRIVATE
   belt           String?  @default("Blanche")
   enrollmentDate DateTime @default(now())
   

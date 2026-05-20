@@ -40,8 +40,9 @@ async function main() {
     { section: 'JUDO', dayOfWeek: 3, startTime: '17:00', endTime: '20:30' },
     { section: 'JUDO', dayOfWeek: 5, startTime: '17:00', endTime: '20:30' },
     { section: 'JUDO', dayOfWeek: 6, startTime: '09:00', endTime: '11:30' },
-    // U8
-    { section: 'U8', dayOfWeek: 6, startTime: '09:00', endTime: '10:30' }
+    // NINJAS
+    { section: 'NINJAS_GR1', dayOfWeek: 6, startTime: '09:00', endTime: '10:30' },
+    { section: 'NINJAS_GR2', dayOfWeek: 6, startTime: '09:00', endTime: '10:30' }
   ];
 
   for (const c of recurrentCourses) {
