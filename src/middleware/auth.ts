@@ -19,6 +19,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     const token = (authHeader.split(' ')[1] ?? '').trim();
+    console.log('JWT_SECRET à la vérif:', process.env.JWT_SECRET ? 'DÉFINI (' + process.env.JWT_SECRET.length + ' chars)' : 'UNDEFINED');
+    console.log('Token reçu:', token ? token.substring(0, 20) + '...' : 'AUCUN');
     const payload = verifyToken(token);
     
     // Check if user still exists
