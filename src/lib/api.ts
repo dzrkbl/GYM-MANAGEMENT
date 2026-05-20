@@ -2,10 +2,11 @@ const BASE_URL = '/api';
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('cshp_token');
+  const cleanToken = (token ?? '').trim();
   
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(cleanToken ? { Authorization: `Bearer ${cleanToken}` } : {}),
     ...options.headers,
   };
 

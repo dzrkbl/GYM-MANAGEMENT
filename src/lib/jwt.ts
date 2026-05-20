@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-cshp-key-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 export interface JwtPayload {
   userId: string;

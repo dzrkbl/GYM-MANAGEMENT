@@ -18,7 +18,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return sendError(res, 'Non autorisé. Jeton manquant ou invalide.', 401);
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = (authHeader.split(' ')[1] ?? '').trim();
     const payload = verifyToken(token);
     
     // Check if user still exists
