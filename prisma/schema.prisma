@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -36,7 +36,7 @@ model Member {
   phone         String?
   email         String?
   photoUrl      String?
-  status        String          @default("ACTIVE") // ACTIVE, INACTIVE, PENDING
+  status        String          @default("ACTIF") // ACTIF, INACTIF, EN_ATTENTE
   signupDate    DateTime        @default(now())
   notes         String?
   parentName    String?         // Pour les mineurs
@@ -54,7 +54,7 @@ model Member {
   finContrat             DateTime?
 
   // Plan tarifaire
-  plan                   String?     // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
+  plan                   Plan?       // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
   prixBase               Float?
   rabaisFamille          Boolean     @default(false)
   membreFamilleId        String?
@@ -83,7 +83,7 @@ model PaymentVersement {
   montant         Float
   datePrevue      DateTime
   datePaiement    DateTime?
-  methodePaiement String?   // CASH, VIREMENT, CHEQUE, CARTE
+  methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
   note            String?
   createdAt       DateTime  @default(now())
 
@@ -123,7 +123,7 @@ model Payment {
   subscriptionId String?
   memberId       String
   amount         Float
-  method         String?       // CASH, TRANSFER, CARD
+  method         PaymentMethod?       // CASH, TRANSFER, CARD
   dueDate        DateTime
   paidDate       DateTime?
   status         String        @default("PENDING") // PAID, PENDING, OVERDUE
@@ -193,3 +193,23 @@ model Lead {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+enum Plan {
+  MENSUEL
+  TRIMESTRIEL
+  ANNUEL
+}
+
+enum MethodePaiement {
+  CASH
+  VIREMENT
+  CHEQUE
+  CARTE
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+}
+
