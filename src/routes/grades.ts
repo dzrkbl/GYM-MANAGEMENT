@@ -64,7 +64,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER', 'COACH']
     return sendSuccess(res, result, 201);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return sendError(res, 'Données invalides', 400, error.errors);
+      return sendError(res, 'Données invalides', 400, error.issues);
     }
     return sendError(res, 'Erreur de création du passage de grade', 500);
   }

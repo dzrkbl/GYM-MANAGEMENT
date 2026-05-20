@@ -5,7 +5,6 @@ import { apiFetch } from '../lib/api';
 import { formatMontant, formatDate } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
-import { Toast } from '../components/ui/Toast'; // we'll need to create this later or just use window.confirm
 import { Navigate } from 'react-router-dom';
 
 export function Paiements() {

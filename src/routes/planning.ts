@@ -49,7 +49,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     });
     return sendSuccess(res, course, 201);
   } catch (error: any) {
-    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.errors);
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     return sendError(res, 'Erreur de création', 500);
   }
 });
@@ -64,7 +64,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     });
     return sendSuccess(res, course);
   } catch (error: any) {
-    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.errors);
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     return sendError(res, 'Erreur de modification', 500);
   }
 });

@@ -26,8 +26,12 @@ export function BottomNav() {
             }`
           }
         >
-          <item.icon size={22} className={({ isActive }: any) => isActive ? 'stroke-cshp-red' : ''} />
-          <span className="text-[10px] font-medium">{item.label}</span>
+          {({ isActive }) => (
+            <>
+              <item.icon size={22} className={isActive ? 'stroke-cshp-red' : ''} />
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </>
+          )}
         </NavLink>
       ))}
       <button 

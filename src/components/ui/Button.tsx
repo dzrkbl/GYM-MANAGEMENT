@@ -1,9 +1,12 @@
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  children?: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'danger';
   fullWidth?: boolean;
   isLoading?: boolean;
+  className?: string;
+  disabled?: boolean;
 }
 
 export function Button({ 

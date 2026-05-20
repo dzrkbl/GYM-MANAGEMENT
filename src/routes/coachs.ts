@@ -50,7 +50,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     return sendSuccess(res, coachWithoutPass, 201);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return sendError(res, 'Données invalides', 400, error.errors);
+      return sendError(res, 'Données invalides', 400, error.issues);
     }
     return sendError(res, 'Erreur de création du coach', 500);
   }
@@ -107,7 +107,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
     return sendSuccess(res, rest);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return sendError(res, 'Données invalides', 400, error.errors);
+      return sendError(res, 'Données invalides', 400, error.issues);
     }
     return sendError(res, 'Erreur de modification', 500);
   }
