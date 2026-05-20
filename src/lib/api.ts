@@ -10,6 +10,8 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     ...options.headers,
   };
 
+  console.log('Token envoyé:', cleanToken);
+
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers,
