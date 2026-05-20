@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:setup": "prisma db push && prisma db seed"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
