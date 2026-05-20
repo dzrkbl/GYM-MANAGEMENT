@@ -1,6 +1,23 @@
 import { createContext, useState, useEffect, ReactNode } from 'react';
 import { apiFetch } from '../lib/api';
 
+function decodeToken(token: string): any {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
 export interface User {
   id: string;
   email: string;
@@ -28,7 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         try {
           const userData = await apiFetch<User>('/auth/me');
-          setUser(userData);
+          const decoded = decodeToken(token) || {};
+          setUser({
+            ...userData,
+            section: userData.section ?? decoded.section ?? null
+          });
         } catch (error) {
           console.error('Session expirée ou invalide');
           logout();
@@ -46,7 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem('cshp_token', newToken);
     setToken(newToken);
-    setUser(newUser);
+    const decoded = decodeToken(newToken) || {};
+    setUser({
+      ...newUser,
+      section: newUser.section ?? decoded.section ?? null
+    });
   };
 
   const logout = () => {

@@ -23,7 +23,7 @@ export function Membres() {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
   
-  const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? user.section : 'TOUS');
+  const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
   const [statusFilter, setStatusFilter] = useState('ACTIF');
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

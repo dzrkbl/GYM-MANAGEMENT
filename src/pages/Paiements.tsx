@@ -39,7 +39,7 @@ export function Paiements() {
   ];
 
   const [periodFilter, setPeriodFilter] = useState(currentMonthValue);
-  const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? user.section : 'TOUS');
+  const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
   const [statusFilter, setStatusFilter] = useState('TOUS');
   
   const [payments, setPayments] = useState<any[]>([]);
