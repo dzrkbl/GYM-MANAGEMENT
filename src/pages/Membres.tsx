@@ -48,8 +48,8 @@ export function Membres() {
       if (debouncedQuery) {
         const lowerQ = debouncedQuery.toLowerCase();
         data = data.filter(m => 
-          m.firstName.toLowerCase().includes(lowerQ) || 
-          m.lastName.toLowerCase().includes(lowerQ)
+          (m.firstName ?? '').toLowerCase().includes(lowerQ) || 
+          (m.lastName ?? '').toLowerCase().includes(lowerQ)
         );
       }
       
@@ -172,7 +172,7 @@ export function Membres() {
               <div className="flex flex-col h-full justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-bold text-cshp-black">
-                    {member.lastName.toUpperCase()} {member.firstName}
+                    {(member.lastName ?? '').toUpperCase()} {member.firstName ?? ''}
                   </h3>
                   
                   <div className="mt-3 flex flex-wrap gap-2">

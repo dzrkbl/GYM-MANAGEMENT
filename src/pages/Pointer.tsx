@@ -235,7 +235,7 @@ export function Pointer() {
                     onClick={() => handleToggleMember(member.id)}
                   >
                     <div>
-                      <span className="font-medium text-cshp-black block">{member.lastName.toUpperCase()} {member.firstName}</span>
+                      <span className="font-medium text-cshp-black block">{(member.lastName ?? '').toUpperCase()} {member.firstName ?? ''}</span>
                       <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-cshp-gray">
                         {getBeltColor(member, selectedSection)}
                       </span>

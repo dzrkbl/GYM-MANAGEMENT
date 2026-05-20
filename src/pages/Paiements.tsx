@@ -230,7 +230,7 @@ export function Paiements() {
              <button 
                onClick={() => {
                  setPeriodFilter(currentMonthValue);
-                 setSectionFilter(user?.role === 'SECTION_MANAGER' ? user.section : 'TOUS');
+                 setSectionFilter(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
                  setStatusFilter('TOUS'); 
                }}
                className="mt-6 text-cshp-red hover:text-red-700 font-semibold"

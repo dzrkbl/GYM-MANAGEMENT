@@ -17,7 +17,7 @@ export function Badge({ children, variant = 'neutral', className = '', colorHex 
   };
 
   const getBeltColorStyle = (beltName: string) => {
-    const lBelt = beltName.toLowerCase();
+    const lBelt = (beltName || '').toLowerCase();
     if (lBelt.includes('blanche-jaune')) return { background: 'linear-gradient(90deg, #FFFFFF 50%, #FFD700 50%)', border: '1px solid #E5E7EB' };
     if (lBelt.includes('jaune-orange')) return { background: 'linear-gradient(90deg, #FFD700 50%, #FFA500 50%)', border: '1px solid #E5E7EB' };
     if (lBelt.includes('orange-verte')) return { background: 'linear-gradient(90deg, #FFA500 50%, #228B22 50%)', border: '1px solid #E5E7EB' };
@@ -35,7 +35,7 @@ export function Badge({ children, variant = 'neutral', className = '', colorHex 
     return { backgroundColor: '#F3F4F6' }; // default
   };
 
-  const style = variant === 'belt' ? getBeltColorStyle(children as string) : {};
+  const style: React.CSSProperties = variant === 'belt' ? getBeltColorStyle(typeof children === 'string' ? children : String(children || '')) : {};
   if (colorHex) {
     style.backgroundColor = colorHex;
   }

@@ -192,7 +192,9 @@ export function Rapports() {
       if (type === 'PAIEMENTS') {
         csvContent += "ID,Nom,Section,Montant,Statut,Echeance,PayeLe\n";
         resp.forEach(r => {
-          const nom = `${r.member.lastName} ${r.member.firstName}`.replace(/"/g, '""');
+          const lastName = r.member?.lastName ?? '';
+          const firstName = r.member?.firstName ?? '';
+          const nom = `${lastName} ${firstName}`.replace(/"/g, '""');
           const section = r.subscription?.section || '';
           const due = new Date(r.dueDate).toLocaleDateString('fr-CA');
           const paid = r.paidDate ? new Date(r.paidDate).toLocaleDateString('fr-CA') : '';
@@ -201,7 +203,9 @@ export function Rapports() {
       } else if (type === 'PRESENCES') {
         csvContent += "ID,Nom,Section,Date,Statut\n";
         resp.forEach(r => {
-          const nom = `${r.member.lastName} ${r.member.firstName}`.replace(/"/g, '""');
+          const lastName = r.member?.lastName ?? '';
+          const firstName = r.member?.firstName ?? '';
+          const nom = `${lastName} ${firstName}`.replace(/"/g, '""');
           const section = r.course?.section || '';
           const date = new Date(r.date).toLocaleDateString('fr-CA');
           csvContent += `"${r.id}","${nom}","${section}","${date}","${r.status}"\n`;
