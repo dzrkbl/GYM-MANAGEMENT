@@ -173,23 +173,50 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     const masseSalarialeMontant = activeCoachs.reduce((sum, c) => sum + (c.remuneration || 0), 0);
     const pourcentageDuRevenu = encaisse > 0 ? (masseSalarialeMontant / encaisse) * 100 : 0;
 
-    // 4. Liste détaillée des retards
-    const retards = versements
-      .filter(v => !v.datePaiement && v.datePrevue && v.datePrevue < today)
-      .map(v => ({
-        memberId: v.membreId,
-        nom: `${v.member.firstName} ${v.member.lastName}`,
+    // 4. Liste détaillée des retards cumulatifs (sans filtre de date)
+    const allLatePayments = await prisma.paymentVersement.findMany({
+      where: {
+        datePaiement: null,
+        datePrevue: { lt: today }
+      },
+      include: {
+        member: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            sections: { select: { section: true } },
+            groupe: true
+          }
+        }
+      },
+      orderBy: { datePrevue: 'asc' }
+    });
+
+    const retardsMapped = allLatePayments.map(v => {
+      const dateString = v.datePrevue.toISOString();
+      return {
+        id: v.id,
+        membreId: v.membreId,
+        membreNom: `${v.member.lastName || ''} ${v.member.firstName || ''}`.trim(),
+        section: v.member.sections?.[0]?.section || v.member.groupe || '',
         montant: v.montant,
-        section: v.member.sections?.[0]?.section || v.member.groupe || null,
-        depuisLe: v.datePrevue
-      }));
+        date: dateString,
+        joursRetard: Math.max(0, Math.floor((Date.now() - v.datePrevue.getTime()) / 86400000))
+      };
+    });
+
+    const totalRetard = retardsMapped.reduce((sum, r) => sum + r.montant, 0);
+    const nombreDossiersRetard = retardsMapped.length;
 
     return sendSuccess(res, {
       revenus: { encaisse, enAttente, enRetard, total },
       parSection,
       presences: presencesList,
       masseSalariale: { montant: masseSalarialeMontant, pourcentageDuRevenu },
-      retards
+      retards: retardsMapped,
+      totalRetard,
+      nombreDossiersRetard
     });
 
   } catch (error) {

@@ -222,3 +222,16 @@ enum PaymentMethod {
   CARD
 }
 
+model MasseSalariale {
+  id        String   @id @default(uuid())
+  mois      Int      // 1-12
+  annee     Int      // 2024, 2025, 2026
+  montant   Float
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mois, annee])  // un seul enregistrement par mois
+}
+
+

@@ -9,9 +9,11 @@ import { Navigate } from 'react-router-dom';
 import { FileText, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { useSections } from '../hooks/useSections';
 
 export function Rapports() {
   const { user } = useAuth();
+  const { getLabel } = useSections();
   
   if (user?.role !== 'ADMIN') {
     return <Navigate to="/dashboard" replace />;
@@ -26,6 +28,10 @@ export function Rapports() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Saisie et suivi manuel de la masse salariale
+  const [masseSalarialeList, setMasseSalarialeList] = useState<any[]>([]);
+  const [editingKeys, setEditingKeys] = useState<Record<string, { montant: string; note: string }>>({});
 
   useEffect(() => {
     fetchReport();
@@ -71,6 +77,172 @@ export function Rapports() {
       setIsLoading(false);
     }
   }
+
+  // Calculer les mois uniques compris dans la période
+  const monthsOfPeriod = useMemo(() => {
+    const list: { mois: number; annee: number; label: string; key: string }[] = [];
+    const MONTH_LABELS = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+
+    if (periodType === 'MOIS' && month) {
+      const [y, m] = month.split('-').map(Number);
+      if (y && m) {
+        list.push({
+          mois: m,
+          annee: y,
+          label: `${MONTH_LABELS[m - 1]} ${y}`,
+          key: `${y}-${m}`
+        });
+      }
+    } else if (periodType === 'TRIMESTRE') {
+      const now = new Date();
+      const m = now.getMonth();
+      const qStartMonth = m - (m % 3);
+      const year = now.getFullYear();
+      for (let i = 0; i < 3; i++) {
+        const curM = qStartMonth + i;
+        list.push({
+          mois: curM + 1,
+          annee: year,
+          label: `${MONTH_LABELS[curM]} ${year}`,
+          key: `${year}-${curM + 1}`
+        });
+      }
+    } else if (periodType === 'ANNEE') {
+      const now = new Date();
+      const year = now.getFullYear();
+      for (let i = 0; i < 12; i++) {
+        list.push({
+          mois: i + 1,
+          annee: year,
+          label: `${MONTH_LABELS[i]} ${year}`,
+          key: `${year}-${i + 1}`
+        });
+      }
+    } else if (periodType === 'CUSTOM' && customFrom && customTo) {
+      const start = new Date(customFrom);
+      const end = new Date(customTo);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        const current = new Date(start.getFullYear(), start.getMonth(), 1);
+        while (current <= end) {
+          const m = current.getMonth();
+          const y = current.getFullYear();
+          list.push({
+            mois: m + 1,
+            annee: y,
+            label: `${MONTH_LABELS[m]} ${y}`,
+            key: `${y}-${m + 1}`
+          });
+          current.setMonth(current.getMonth() + 1);
+        }
+      }
+    }
+
+    return list;
+  }, [periodType, month, customFrom, customTo]);
+
+  // Charger les masses salariales correspondantes
+  useEffect(() => {
+    if (monthsOfPeriod.length === 0) return;
+    
+    async function loadMasseSalariale() {
+      try {
+        const first = monthsOfPeriod[0];
+        const last = monthsOfPeriod[monthsOfPeriod.length - 1];
+        const data = await apiFetch<any[]>(
+          `/masse-salariale/range?fromMonth=${first.mois}&fromYear=${first.annee}&toMonth=${last.mois}&toYear=${last.annee}`
+        );
+        setMasseSalarialeList(data);
+      } catch (err) {
+        console.error('Erreur de chargement de la masse salariale:', err);
+      }
+    }
+    
+    loadMasseSalariale();
+  }, [monthsOfPeriod]);
+
+  // Associer chaque mois à son enregistrement
+  const masseSalarialeByMonth = useMemo(() => {
+    return monthsOfPeriod.map(m => {
+      const record = masseSalarialeList.find(r => r.mois === m.mois && r.annee === m.annee);
+      return {
+        ...m,
+        id: record?.id || null,
+        montant: record?.montant ?? null,
+        note: record?.note ?? '',
+        createdAt: record?.createdAt || null
+      };
+    });
+  }, [monthsOfPeriod, masseSalarialeList]);
+
+  const totalMasseSalarialeSaisie = useMemo(() => {
+    return masseSalarialeByMonth.reduce((sum, m) => sum + (m.montant || 0), 0);
+  }, [masseSalarialeByMonth]);
+
+  const pourcentageMasseSalariale = useMemo(() => {
+    const encaisse = data?.revenus?.encaisse || 0;
+    return encaisse > 0 ? (totalMasseSalarialeSaisie / encaisse) * 100 : 0;
+  }, [totalMasseSalarialeSaisie, data]);
+
+  const handleStartEdit = (key: string, montant: number | null, note: string) => {
+    setEditingKeys(prev => ({
+      ...prev,
+      [key]: {
+        montant: montant !== null ? montant.toString() : '',
+        note: note || ''
+      }
+    }));
+  };
+
+  const handleSaveMasseSalariale = async (key: string, mois: number, annee: number) => {
+    const editState = editingKeys[key];
+    if (!editState) return;
+
+    const parsedM = parseFloat(editState.montant);
+    if (isNaN(parsedM) || parsedM < 0) {
+      alert("Veuillez saisir un montant de masse salariale positif.");
+      return;
+    }
+
+    try {
+      const savedRecord = await apiFetch<any>('/masse-salariale', {
+        method: 'POST',
+        body: JSON.stringify({
+          mois,
+          annee,
+          montant: parsedM,
+          note: editState.note
+        })
+      });
+
+      setMasseSalarialeList(prev => {
+        const exists = prev.some(r => r.mois === mois && r.annee === annee);
+        if (exists) {
+          return prev.map(r => (r.mois === mois && r.annee === annee) ? savedRecord : r);
+        } else {
+          return [...prev, savedRecord];
+        }
+      });
+
+      setEditingKeys(prev => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    } catch (err: any) {
+      alert("Erreur lors de l'enregistrement de la masse salariale : " + err.message);
+    }
+  };
+
+  const handleCancelEdit = (key: string) => {
+    setEditingKeys(prev => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+  };
 
   const exportPDF = () => {
     if (!data) return;
@@ -131,8 +303,8 @@ export function Rapports() {
     doc.text("3. Masse Salariale", 14, yPos);
     yPos += 8;
     doc.setFontSize(12);
-    doc.text(`Montant : ${formatMontant(data.masseSalariale.montant)}`, 14, yPos); yPos += 6;
-    doc.text(`Représente ${data.masseSalariale.pourcentageDuRevenu.toFixed(1)} % des revenus encaissés.`, 14, yPos);
+    doc.text(`Montant : ${formatMontant(totalMasseSalarialeSaisie)}`, 14, yPos); yPos += 6;
+    doc.text(`Représente ${pourcentageMasseSalariale.toFixed(1)} % des revenus encaissés.`, 14, yPos);
     yPos += 15;
     
     // Check page break
@@ -166,18 +338,19 @@ export function Rapports() {
     if (data.retards.length > 0) {
       (doc as any).autoTable({
         startY: yPos,
-        head: [['Membre', 'Section', 'Montant', 'Échéance']],
+        head: [['Membre', 'Section', 'Montant', 'Échéance', 'Ancienneté']],
         body: data.retards.map((r: any) => [
-          r.nom, 
-          r.section, 
+          r.membreNom, 
+          getLabel(r.section) || r.section, 
           formatMontant(r.montant),
-          new Date(r.depuisLe).toLocaleDateString('fr-CA')
+          new Date(r.date).toLocaleDateString('fr-CA'),
+          `${r.joursRetard} jours`
         ]),
         theme: 'grid'
       });
     } else {
       doc.setFontSize(11);
-      doc.text("Aucun retard signalé pour cette période.", 14, yPos);
+      doc.text("Aucun retard signalé.", 14, yPos);
     }
 
     doc.save(`CSHP_Rapport_${dateRange.from}_au_${dateRange.to}.pdf`);
@@ -343,15 +516,176 @@ export function Rapports() {
           <div className="space-y-4 flex flex-col">
             <Card className="p-6">
               <h3 className="text-sm font-bold text-cshp-gray tracking-wider mb-4 uppercase">Masse Salariale</h3>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-2xl font-bold text-cshp-black">{formatMontant(data.masseSalariale.montant)}</span>
-                <span className="text-sm font-bold bg-gray-100 px-3 py-1 rounded-full text-cshp-gray">
-                  / {formatMontant(data.revenus.total)}
-                </span>
+              
+              {periodType === 'MOIS' ? (
+                // Vue pour un mois unique
+                masseSalarialeByMonth.map(m => {
+                  const key = m.key;
+                  const isEditing = !!editingKeys[key];
+                  return (
+                    <div key={key}>
+                      {!isEditing ? (
+                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                          <div>
+                            <h4 className="text-sm font-semibold text-cshp-black mb-1">
+                              Masse salariale — {m.label}
+                            </h4>
+                            {m.montant !== null ? (
+                              <span className="text-2xl font-bold text-cshp-black">
+                                {formatMontant(m.montant)}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500 italic">Non saisi</span>
+                            )}
+                            {m.note && (
+                              <p className="text-xs text-cshp-gray mt-1">Note : {m.note}</p>
+                            )}
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="h-10 text-sm whitespace-nowrap px-3 min-h-0"
+                            onClick={() => handleStartEdit(key, m.montant, m.note)}
+                          >
+                            ✏️ {m.montant !== null ? 'Modifier' : 'Ajouter'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                          <h4 className="text-sm font-semibold text-cshp-black">
+                            Masse salariale — {m.label}
+                          </h4>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="number"
+                              value={editingKeys[key]?.montant ?? ''}
+                              onChange={(e) => setEditingKeys(prev => ({
+                                ...prev,
+                                [key]: { ...prev[key], montant: e.target.value }
+                              }))}
+                              placeholder="Montant ($)"
+                              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full sm:w-32 focus:outline-none focus:ring-1 focus:ring-cshp-red bg-white"
+                            />
+                            <input
+                              type="text"
+                              value={editingKeys[key]?.note ?? ''}
+                              onChange={(e) => setEditingKeys(prev => ({
+                                ...prev,
+                                [key]: { ...prev[key], note: e.target.value }
+                              }))}
+                              placeholder="Note (optionnelle)"
+                              className="border border-gray-300 rounded px-3 py-1.5 text-sm flex-1 focus:outline-none focus:ring-1 focus:ring-cshp-red bg-white"
+                            />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              variant="outline"
+                              className="h-10 text-sm px-3 min-h-0"
+                              onClick={() => handleCancelEdit(key)}
+                            >
+                              Annuler
+                            </Button>
+                            <Button
+                              className="h-10 text-sm px-3 min-h-0"
+                              onClick={() => handleSaveMasseSalariale(key, m.mois, m.annee)}
+                            >
+                              Sauvegarder
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                // Vue multi-mois (trimestre, année, personnalisé)
+                <div className="space-y-3">
+                  <div className="divide-y divide-gray-100">
+                    {masseSalarialeByMonth.map(m => {
+                      const key = m.key;
+                      const isEditing = !!editingKeys[key];
+                      return (
+                        <div key={key} className="py-2.5">
+                          {!isEditing ? (
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <span className="font-semibold text-sm text-cshp-black mr-2">
+                                  {m.label} :
+                                </span>
+                                {m.montant !== null ? (
+                                  <span className="font-bold text-sm text-cshp-black">
+                                    {formatMontant(m.montant)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-400 italic">Non saisi</span>
+                                )}
+                                {m.note && (
+                                  <span className="text-xs text-cshp-gray ml-2">({m.note})</span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleStartEdit(key, m.montant, m.note)}
+                                className="text-xs font-semibold text-cshp-red hover:underline flex items-center gap-1 min-h-[36px] px-2 rounded hover:bg-gray-50 border border-transparent"
+                                title="Saisir / Modifier"
+                              >
+                                ✏️ {m.montant !== null ? 'Modifier' : 'Saisir'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 py-1">
+                              <span className="text-xs font-bold text-cshp-black">{m.label}</span>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                  type="number"
+                                  value={editingKeys[key]?.montant ?? ''}
+                                  onChange={(e) => setEditingKeys(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], montant: e.target.value }
+                                  }))}
+                                  placeholder="Montant"
+                                  className="border border-gray-300 rounded px-2 py-1 text-sm w-full sm:w-28 focus:outline-none focus:ring-1 focus:ring-cshp-red bg-white"
+                                />
+                                <input
+                                  type="text"
+                                  value={editingKeys[key]?.note ?? ''}
+                                  onChange={(e) => setEditingKeys(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], note: e.target.value }
+                                  }))}
+                                  placeholder="Note"
+                                  className="border border-gray-300 rounded px-2 py-1 text-sm flex-1 focus:outline-none focus:ring-1 focus:ring-cshp-red bg-white"
+                                />
+                                <div className="flex gap-1 justify-end">
+                                  <button
+                                    onClick={() => handleCancelEdit(key)}
+                                    className="px-2.5 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 text-cshp-gray transition-colors"
+                                  >
+                                    Annuler
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveMasseSalariale(key, m.mois, m.annee)}
+                                    className="px-2.5 py-1 text-xs bg-cshp-red text-white font-semibold rounded hover:bg-opacity-90 transition-colors"
+                                  >
+                                    Enregistrer
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-sm text-cshp-black">
+                    <span>Total</span>
+                    <span>{formatMontant(totalMasseSalarialeSaisie)}</span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-4 pt-3 border-t border-gray-100 text-xs text-cshp-gray">
+                Représente <strong className="text-cshp-black">{pourcentageMasseSalariale.toFixed(1)} %</strong> des revenus encaissés.
               </div>
-              <p className="text-cshp-gray text-sm">
-                Représente <strong className="text-cshp-black">{data.masseSalariale.pourcentageDuRevenu.toFixed(1)} %</strong> des revenus encaissés.
-              </p>
             </Card>
 
             <Card className="p-6">
@@ -376,22 +710,58 @@ export function Rapports() {
                   {data.retards.length} dossier(s)
                 </span>
               </div>
+
+              {/* Alerte globale */}
+              <div className={`p-4 rounded-xl border mb-6 font-bold text-sm flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center ${
+                data.totalRetard > 0 
+                  ? 'bg-red-50 text-red-600 border-red-100' 
+                  : 'bg-gray-50 text-gray-500 border-gray-100'
+              }`}>
+                <span>⚠️ {data.nombreDossiersRetard} dossier(s) en retard</span>
+                <span>Total cumulatif : {formatMontant(data.totalRetard)}</span>
+              </div>
               
-              <div className="overflow-y-auto max-h-[250px] pr-2">
+              <div className="overflow-x-auto w-full">
                 {data.retards.length === 0 ? (
-                  <p className="text-sm text-cshp-gray italic text-center py-4">Aucun retard</p>
+                  <p className="text-sm text-cshp-gray italic text-center py-4">Aucun retard signalé.</p>
                 ) : (
-                  <ul className="space-y-2">
-                    {data.retards.map((r: any, idx: number) => (
-                      <li key={idx} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-lg text-sm border border-gray-100">
-                        <div>
-                          <p className="font-bold text-cshp-black">{r.nom}</p>
-                          <p className="text-xs text-cshp-gray">{r.section} - Dû le {new Date(r.depuisLe).toLocaleDateString('fr-CA')}</p>
-                        </div>
-                        <span className="font-bold text-cshp-red">{formatMontant(r.montant)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <table className="w-full text-left text-sm border-collapse min-w-[500px]">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-cshp-gray text-xs uppercase tracking-wider font-semibold">
+                        <th className="pb-3 pr-2">Membre</th>
+                        <th className="pb-3 px-2">Section</th>
+                        <th className="pb-3 px-2">Montant</th>
+                        <th className="pb-3 px-2">Depuis</th>
+                        <th className="pb-3 pl-2">Ancienneté</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {data.retards.map((r: any, idx: number) => {
+                        let colorClass = "text-gray-500";
+                        if (r.joursRetard >= 90) {
+                          colorClass = "text-red-600 font-bold";
+                        } else if (r.joursRetard >= 60) {
+                          colorClass = "text-orange-500 font-semibold";
+                        } else if (r.joursRetard >= 30) {
+                          colorClass = "text-yellow-600";
+                        }
+                        
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-3 pr-2 font-bold text-cshp-black">{r.membreNom}</td>
+                            <td className="py-3 px-2 text-cshp-gray">{getLabel(r.section) || r.section}</td>
+                            <td className="py-3 px-2 font-bold text-cshp-black">{formatMontant(r.montant)}</td>
+                            <td className="py-3 px-2 text-cshp-gray">
+                              {new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className={`py-3 pl-2 ${colorClass}`}>
+                              {r.joursRetard} jours
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </Card>
