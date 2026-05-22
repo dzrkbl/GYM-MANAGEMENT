@@ -184,14 +184,14 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
 router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
-    const { methodePaiement, note } = req.body;
+    const { methodePaiement, note, datePaiement } = req.body;
 
     let methodEnum: any = 'CASH';
     if (methodePaiement) {
       const input = String(methodePaiement).toUpperCase();
       if (input === 'COMPTANT' || input === 'CASH') {
         methodEnum = 'CASH';
-      } else if (input === 'VIREMENT') {
+      } else if (input === 'VIREMENT' || input === 'INTERAC') {
         methodEnum = 'VIREMENT';
       } else if (input === 'CARTE') {
         methodEnum = 'CARTE';
@@ -203,7 +203,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     const updated = await prisma.paymentVersement.update({
       where: { id },
       data: {
-        datePaiement: new Date(),
+        datePaiement: datePaiement ? new Date(datePaiement) : new Date(),
         methodePaiement: methodEnum,
         note: note || ''
       }

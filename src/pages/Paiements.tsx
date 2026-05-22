@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
 import { getGroupeLabel } from '../lib/groupes';
+import { Modal } from '../components/ui/Modal';
 
 export function Paiements() {
   const { user } = useAuth();
@@ -17,7 +18,12 @@ export function Paiements() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const SECTIONS = ["TOUS", "KARATE_GR1", "KARATE_GR2", "JUDO_GR1", "JUDO_GR2", "JUDO_GR3", "NINJAS_GR1", "NINJAS_GR2", "MENSUEL"];
+  const SECTIONS = [
+    "TOUS",
+    "KARATE_GR1", "KARATE_GR2", "KARATE_GR3",
+    "JUDO_GR1", "JUDO_GR2", "JUDO_GR3",
+    "NINJAS_GR1", "NINJAS_GR2", "NINJAS_GR3"
+  ];
   const STATUSES = [
     { value: 'TOUS', label: 'Tous' },
     { value: 'PAYÉ', label: 'Payé' },
@@ -49,6 +55,11 @@ export function Paiements() {
   // TOAST
   const [toastMsg, setToastMsg] = useState('');
 
+  // Modal State
+  const [payModal, setPayModal] = useState<{ open: boolean; versementId: string | null; amount: number }>({ open: false, versementId: null, amount: 0 });
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]); // aujourd'hui par défaut
+  const [payMethod, setPayMethod] = useState('COMPTANT');
+
   useEffect(() => {
     fetchPayments();
   }, [periodFilter, sectionFilter, statusFilter]);
@@ -72,25 +83,40 @@ export function Paiements() {
     }
   }
 
-  const markAsPaid = async (paymentId: string, amount: number) => {
-    if (!window.confirm(`Confirmer le paiement de ${formatMontant(amount)} ?`)) return;
+  const openPayModal = (id: string, amount: number) => {
+    setPayModal({ open: true, versementId: id, amount });
+    setPayDate(new Date().toISOString().split('T')[0]);
+    setPayMethod('COMPTANT');
+  };
 
-    // Optimistic update
+  const handleConfirmPay = async () => {
+    if (!payModal.versementId) return;
+
+    const { versementId, amount } = payModal;
+    
+    setPayModal({ open: false, versementId: null, amount: 0 });
+
     const previousPayments = [...payments];
+    
+    // Optimistic update
     setPayments(prev => prev.map(p => {
-      if (p.id === paymentId) {
-        return { ...p, status: 'PAYÉ', paidDate: new Date().toISOString() };
+      if (p.id === versementId) {
+        return { ...p, status: 'PAYÉ', paidDate: payDate };
       }
       return p;
     }));
 
     try {
-      await apiFetch(`/paiements/${paymentId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: 'PAYÉ', paidDate: new Date().toISOString() })
+      await apiFetch(`/paiements/${versementId}/payer`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          datePaiement: payDate,
+          methodePaiement: payMethod
+        })
       });
       setToastMsg(`Paiement de ${formatMontant(amount)} confirmé`);
       setTimeout(() => setToastMsg(''), 3000);
+      fetchPayments();
     } catch (error: any) {
       alert(error.message || 'Erreur lors de la confirmation');
       setPayments(previousPayments); // rollback
@@ -256,7 +282,7 @@ export function Paiements() {
                     {p.member?.lastName} {p.member?.firstName}
                   </h3>
                   <div className="text-sm text-cshp-gray mt-1">
-                    {getGroupeLabel(p.subscription?.section || p.member?.groupe || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
+                    {getGroupeLabel(p.section || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>
@@ -274,7 +300,7 @@ export function Paiements() {
                 <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {(p.status === 'EN_RETARD' || p.status === 'EN_ATTENTE') && (
                     <button 
-                      onClick={() => markAsPaid(p.id, p.amount)}
+                      onClick={() => openPayModal(p.id, p.amount)}
                       className="bg-cshp-black hover:bg-gray-800 text-white font-medium text-sm py-2 px-4 rounded-lg shadow-sm transition-all active:scale-95"
                     >
                       Marquer comme payé
@@ -293,6 +319,58 @@ export function Paiements() {
           <span>✅</span> {toastMsg}
         </div>
       )}
+
+      {/* Modal de Paiement */}
+      <Modal
+        isOpen={payModal.open}
+        onClose={() => setPayModal({ open: false, versementId: null, amount: 0 })}
+        title="Enregistrer un paiement"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-cshp-gray">
+            Veuillez entrer les détails du paiement de <strong className="text-cshp-black">{formatMontant(payModal.amount)}</strong>.
+          </p>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold uppercase tracking-wider text-cshp-gray block">Date de paiement</label>
+            <input
+              type="date"
+              value={payDate}
+              onChange={(e) => setPayDate(e.target.value)}
+              className="w-full p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cshp-red/20 focus:border-cshp-red bg-white"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold uppercase tracking-wider text-cshp-gray block">Méthode de paiement</label>
+            <select
+              value={payMethod}
+              onChange={(e) => setPayMethod(e.target.value)}
+              className="w-full p-2.5 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-cshp-red/20 focus:border-cshp-red bg-white font-medium"
+            >
+              <option value="COMPTANT">COMPTANT</option>
+              <option value="VIREMENT">VIREMENT</option>
+              <option value="CHEQUE">CHÈQUE</option>
+              <option value="INTERAC">INTERAC</option>
+            </select>
+          </div>
+
+          <div className="flex gap-2 pt-4 justify-end">
+            <button
+              onClick={() => setPayModal({ open: false, versementId: null, amount: 0 })}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={handleConfirmPay}
+              className="px-4 py-2 bg-cshp-black text-white hover:bg-gray-800 rounded-lg text-sm font-semibold shadow-md active:scale-95 transition-all"
+            >
+              Confirmer
+            </button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );
