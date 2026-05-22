@@ -7,6 +7,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { CourseForm } from '../components/forms/CourseForm';
 import { Plus, Edit2, Trash2, CalendarDays } from 'lucide-react';
 import { Card } from '../components/ui/Card';
+import { getGroupeLabel } from '../lib/groupes';
 
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
@@ -121,7 +122,7 @@ export function Planning() {
                     <div key={course.id} className="p-4 flex justify-between items-center">
                       <div>
                         <div className="font-bold text-lg mb-1">{course.startTime} - {course.endTime}</div>
-                        <div className="font-medium text-cshp-red">{course.section}</div>
+                        <div className="font-medium text-cshp-red">{getGroupeLabel(course.section)}</div>
                         <div className="text-sm text-cshp-gray mt-1">
                           Coach {course.coach?.firstName || 'Non assigné'}
                         </div>
@@ -158,7 +159,7 @@ export function Planning() {
                   {d.items.map(course => (
                     <Card key={course.id} className="p-3 text-sm relative group">
                       <div className="font-bold text-cshp-black">{course.startTime} - {course.endTime}</div>
-                      <div className="font-medium text-cshp-red my-1">{course.section}</div>
+                      <div className="font-medium text-cshp-red my-1">{getGroupeLabel(course.section)}</div>
                       <div className="text-xs text-cshp-gray">
                         {course.coach ? `${course.coach.firstName} ${course.coach.lastName}` : 'Sans coach'}
                       </div>

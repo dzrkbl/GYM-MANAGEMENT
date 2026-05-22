@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { getGroupeLabel } from '../../lib/groupes';
 
 interface CourseFormProps {
   initialData?: any;
@@ -16,7 +17,7 @@ export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: Cours
   const isAdmin = user?.role === 'ADMIN';
 
   const [formData, setFormData] = useState({
-    section: initialData?.section || (isAdmin ? 'KARATE' : user?.section) || '',
+    section: initialData?.section || (isAdmin ? 'KARATE_GR1' : user?.section) || '',
     dayOfWeek: initialData?.dayOfWeek !== undefined ? initialData.dayOfWeek : 1,
     startTime: initialData?.startTime || '17:00',
     endTime: initialData?.endTime || '18:00',
@@ -55,7 +56,11 @@ export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: Cours
     onSubmit(payload);
   };
 
-  const SECTIONS = ["KARATE", "JUDO", "U8", "TAEKWONDO", "KICKBOXING"];
+  const SECTIONS = [
+    'KARATE_GR1', 'KARATE_GR2', 'KARATE_GR3',
+    'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3',
+    'NINJAS_GR1', 'NINJAS_GR2', 'NINJAS_GR3',
+  ];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -72,12 +77,12 @@ export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: Cours
               required
             >
               {SECTIONS.map(s => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{getGroupeLabel(s)}</option>
               ))}
             </select>
           ) : (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-cshp-black font-medium">
-              {formData.section}
+              {getGroupeLabel(formData.section)}
             </div>
           )}
         </div>
