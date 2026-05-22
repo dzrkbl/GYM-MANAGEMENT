@@ -9,6 +9,7 @@ interface Course {
   section: string;
   startTime: string;
   endTime: string;
+  coach?: { firstName: string; lastName: string } | null;
 }
 
 interface Member {
@@ -171,12 +172,12 @@ export function Pointer() {
       {!successMessage && (
         <>
           {/* Section Selector */}
-          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto whitespace-nowrap scrollbar-none">
+          <div className="flex flex-nowrap gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto whitespace-nowrap scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {sections.map(section => (
               <button
                 key={section}
                 onClick={() => setSelectedSection(section)}
-                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] shrink-0 ${
+                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] shrink-0 ${
                   selectedSection === section 
                     ? 'bg-white text-cshp-black shadow-sm font-semibold' 
                     : 'text-cshp-gray hover:text-cshp-black'
@@ -206,7 +207,7 @@ export function Pointer() {
               >
                 {courses.filter(c => c.section === selectedSection).map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.startTime} - {c.endTime}
+                    {c.startTime} - {c.endTime} · {c.coach ? `Coach ${c.coach.firstName}` : 'Sans coach'}
                   </option>
                 ))}
               </select>

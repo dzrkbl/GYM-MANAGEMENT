@@ -140,15 +140,14 @@ model Payment {
 model Course {
   id        String   @id @default(uuid())
   section   String
-  date      DateTime? // Si null -> template récurrent. Si renseigné -> instance spécifique.
-  dayOfWeek Int      // 0 = Dimanche, 1 = Lundi, etc.
-  startTime String   // "16:30"
-  endTime   String   // "18:00"
-  capacity  Int?
-  coachId   String?  // Assigner le cours à un coach
+  startTime String   // "17:00"
+  endTime   String   // "18:30"
+  coachId   String?
+  jours     String[] // ["LUN", "MER", "VEN"]
   actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
 
-  coach     User?    @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  coach       User?        @relation(fields: [coachId], references: [id], onDelete: SetNull)
   attendances Attendance[]
 }
 

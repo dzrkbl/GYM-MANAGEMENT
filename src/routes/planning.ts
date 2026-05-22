@@ -10,25 +10,29 @@ const router = Router();
 router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const courses = await prisma.course.findMany({
-      where: { date: null }, // Only recurrent courses
-      include: { coach: { select: { firstName: true, lastName: true } } },
+      where: { actif: true },
+      include: { coach: { select: { id: true, firstName: true, lastName: true } } },
       orderBy: [
-        { dayOfWeek: 'asc' },
         { startTime: 'asc' }
       ]
     });
     return sendSuccess(res, courses);
   } catch (error) {
+    console.error('Error fetching planning:', error);
     return sendError(res, 'Erreur de récupération du planning', 500);
   }
 });
 
+const DAYS_VALID = ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'];
+
 const courseSchema = z.object({
   section: z.string(),
-  dayOfWeek: z.number().int().min(0).max(6),
   startTime: z.string(),
   endTime: z.string(),
   coachId: z.string().optional().nullable(),
+  jours: z.array(z.string()).refine(val => val.length > 0 && val.every(v => DAYS_VALID.includes(v.toUpperCase())), {
+    message: "jours doit être un tableau non vide contenant LUN, MAR, MER, JEU, VEN, SAM ou DIM"
+  }),
   actif: z.boolean().default(true)
 });
 
@@ -39,17 +43,18 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     const course = await prisma.course.create({
       data: {
         section: data.section,
-        dayOfWeek: data.dayOfWeek,
         startTime: data.startTime,
         endTime: data.endTime,
-        coachId: data.coachId,
-        actif: data.actif,
-        date: null // This is a recurrent template
-      }
+        coachId: data.coachId || null,
+        jours: data.jours.map(j => j.toUpperCase()),
+        actif: data.actif
+      },
+      include: { coach: { select: { id: true, firstName: true, lastName: true } } }
     });
     return sendSuccess(res, course, 201);
   } catch (error: any) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Error creating planning:', error);
     return sendError(res, 'Erreur de création', 500);
   }
 });
@@ -58,18 +63,26 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
 router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
     const data = courseSchema.partial().parse(req.body);
+    
+    const updateData: any = { ...data };
+    if (data.jours) {
+      updateData.jours = data.jours.map(j => j.toUpperCase());
+    }
+
     const course = await prisma.course.update({
       where: { id: req.params.id },
-      data
+      data: updateData,
+      include: { coach: { select: { id: true, firstName: true, lastName: true } } }
     });
     return sendSuccess(res, course);
   } catch (error: any) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Error updating planning:', error);
     return sendError(res, 'Erreur de modification', 500);
   }
 });
 
-// DELETE /api/planning/:id (Soft delete or hard delete if no dependencies? Soft delete by setting actif=false is requested)
+// DELETE /api/planning/:id (Soft delete)
 router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
     await prisma.course.update({
@@ -78,6 +91,7 @@ router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), a
     });
     return sendSuccess(res, { message: 'Cours désactivé' });
   } catch (error) {
+    console.error('Error deleting planning:', error);
     return sendError(res, 'Erreur de suppression', 500);
   }
 });
@@ -86,15 +100,15 @@ router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), a
 router.get('/semaine', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const courses = await prisma.course.findMany({
-      where: { date: null, actif: true },
-      include: { coach: { select: { firstName: true, lastName: true } } },
+      where: { actif: true },
+      include: { coach: { select: { id: true, firstName: true, lastName: true } } },
       orderBy: [
-        { dayOfWeek: 'asc' },
         { startTime: 'asc' }
       ]
     });
     return sendSuccess(res, courses);
   } catch (error) {
+    console.error('Error fetching planning weekly:', error);
     return sendError(res, 'Erreur de récupération', 500);
   }
 });
