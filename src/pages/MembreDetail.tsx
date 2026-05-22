@@ -147,11 +147,13 @@ export function MembreDetail() {
     switch (g) {
       case 'KARATE_GR1': return 'Karaté Gr. 1';
       case 'KARATE_GR2': return 'Karaté Gr. 2';
+      case 'KARATE_GR3': return 'Karaté Gr. 3';
       case 'JUDO_GR1': return 'Judo Gr. 1';
       case 'JUDO_GR2': return 'Judo Gr. 2';
       case 'JUDO_GR3': return 'Judo Gr. 3';
       case 'NINJAS_GR1': return 'Ninjas Gr. 1';
       case 'NINJAS_GR2': return 'Ninjas Gr. 2';
+      case 'NINJAS_GR3': return 'Ninjas Gr. 3';
       case 'MENSUEL': return 'Mensuel';
       default: return g || '-';
     }

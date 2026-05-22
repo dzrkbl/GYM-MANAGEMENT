@@ -3,7 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
-import { getGroupeLabel } from '../../lib/groupes';
+import { useSections } from '../../hooks/useSections';
 
 interface CourseFormProps {
   initialData?: any;
@@ -15,9 +15,10 @@ interface CourseFormProps {
 export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: CourseFormProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const { sections, getLabel } = useSections();
 
   const [formData, setFormData] = useState({
-    section: initialData?.section || (isAdmin ? 'KARATE_GR1' : user?.section) || '',
+    section: initialData?.section || (isAdmin ? '' : user?.section) || '',
     dayOfWeek: initialData?.dayOfWeek !== undefined ? initialData.dayOfWeek : 1,
     startTime: initialData?.startTime || '17:00',
     endTime: initialData?.endTime || '18:00',
@@ -56,12 +57,6 @@ export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: Cours
     onSubmit(payload);
   };
 
-  const SECTIONS = [
-    'KARATE_GR1', 'KARATE_GR2', 'KARATE_GR3',
-    'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3',
-    'NINJAS_GR1', 'NINJAS_GR2', 'NINJAS_GR3',
-  ];
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       
@@ -76,13 +71,14 @@ export function CourseForm({ initialData, onSubmit, onCancel, isLoading }: Cours
               className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
               required
             >
-              {SECTIONS.map(s => (
-                <option key={s} value={s}>{getGroupeLabel(s)}</option>
+              <option value="">-- Choisir une section --</option>
+              {sections.map(s => (
+                <option key={s.id} value={s.code}>{s.label}</option>
               ))}
             </select>
           ) : (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-cshp-black font-medium">
-              {getGroupeLabel(formData.section)}
+              {getLabel(formData.section)}
             </div>
           )}
         </div>

@@ -194,6 +194,16 @@ model Lead {
   updatedAt   DateTime @updatedAt
 }
 
+model Section {
+  id        String   @id @default(uuid())
+  code      String   @unique  // ex: "KARATE_GR1"
+  label     String            // ex: "Karaté Gr. 1"
+  sport     String            // ex: "KARATE", "JUDO", "NINJAS"
+  ordre     Int      @default(0)
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 enum Plan {
   MENSUEL
   TRIMESTRIEL

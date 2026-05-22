@@ -8,6 +8,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
 import { getGroupeLabel } from '../lib/groupes';
 import { Modal } from '../components/ui/Modal';
+import { useSections } from '../hooks/useSections';
 
 export function Paiements() {
   const { user } = useAuth();
@@ -18,12 +19,8 @@ export function Paiements() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const SECTIONS = [
-    "TOUS",
-    "KARATE_GR1", "KARATE_GR2", "KARATE_GR3",
-    "JUDO_GR1", "JUDO_GR2", "JUDO_GR3",
-    "NINJAS_GR1", "NINJAS_GR2", "NINJAS_GR3"
-  ];
+  const { codes, getLabel } = useSections();
+  const SECTIONS = ["TOUS", ...codes];
   const STATUSES = [
     { value: 'TOUS', label: 'Tous' },
     { value: 'PAYÉ', label: 'Payé' },
@@ -195,7 +192,7 @@ export function Paiements() {
                       : 'bg-gray-100 text-cshp-gray hover:bg-gray-200'
                   }`}
                 >
-                  {getGroupeLabel(sec)}
+                  {sec === 'TOUS' ? 'Tous' : getLabel(sec)}
                 </button>
               ))}
             </div>
@@ -282,7 +279,7 @@ export function Paiements() {
                     {p.member?.lastName} {p.member?.firstName}
                   </h3>
                   <div className="text-sm text-cshp-gray mt-1">
-                    {getGroupeLabel(p.section || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
+                    {getLabel(p.section || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>

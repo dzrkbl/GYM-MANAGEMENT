@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
-import { getGroupeLabel } from '../lib/groupes';
+import { useSections } from '../hooks/useSections';
 import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
 
 export function Membres() {
@@ -63,7 +63,15 @@ export function Membres() {
     }
   }
 
-  const SECTIONS = ["TOUS", "KARATE_GR1", "KARATE_GR2", "JUDO_GR1", "JUDO_GR2", "JUDO_GR3", "NINJAS_GR1", "NINJAS_GR2", "MENSUEL"];
+  const { codes, getLabel } = useSections();
+  const SECTIONS = useMemo(() => {
+    const list = ["TOUS", ...codes];
+    if (!list.includes("MENSUEL")) {
+      list.push("MENSUEL");
+    }
+    return list;
+  }, [codes]);
+
   const STATUSES = [
     { value: 'ACTIF', label: 'Actif' },
     { value: 'INACTIF', label: 'Inactif' },
@@ -179,7 +187,7 @@ export function Membres() {
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      {getGroupeLabel(sec)}
+                      {sec === 'TOUS' ? 'Tous' : getLabel(sec)}
                     </button>
                   ))}
                 </div>
@@ -259,7 +267,7 @@ export function Membres() {
                       </td>
                       <td className="py-3.5 px-4">
                         <Badge variant="neutral" className="bg-slate-100 text-slate-800 border-none px-2.5 py-1 text-xs">
-                          {getGroupeLabel(member.groupe)}
+                          {getLabel(member.groupe)}
                         </Badge>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-xs text-gray-600 uppercase">

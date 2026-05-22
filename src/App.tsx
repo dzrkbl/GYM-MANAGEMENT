@@ -10,6 +10,7 @@ import { Paiements } from './pages/Paiements';
 import { Coachs } from './pages/Coachs';
 import { Rapports } from './pages/Rapports';
 import { Planning } from './pages/Planning';
+import { Sections } from './pages/Sections';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/coachs" element={<Coachs />} />
             <Route path="/rapports" element={<Rapports />} />
             <Route path="/planning" element={<Planning />} />
+            <Route path="/sections" element={<Sections />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

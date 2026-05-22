@@ -93,6 +93,27 @@ async function main() {
     }
   }
 
+  // Seeding sections 
+  const sectionsData = [
+    { code: 'KARATE_GR1', label: 'Karaté Gr. 1', sport: 'KARATE', ordre: 1 },
+    { code: 'KARATE_GR2', label: 'Karaté Gr. 2', sport: 'KARATE', ordre: 2 },
+    { code: 'KARATE_GR3', label: 'Karaté Gr. 3', sport: 'KARATE', ordre: 3 },
+    { code: 'JUDO_GR1',   label: 'Judo Gr. 1',   sport: 'JUDO',   ordre: 4 },
+    { code: 'JUDO_GR2',   label: 'Judo Gr. 2',   sport: 'JUDO',   ordre: 5 },
+    { code: 'JUDO_GR3',   label: 'Judo Gr. 3',   sport: 'JUDO',   ordre: 6 },
+    { code: 'NINJAS_GR1', label: 'Ninjas Gr. 1', sport: 'NINJAS', ordre: 7 },
+    { code: 'NINJAS_GR2', label: 'Ninjas Gr. 2', sport: 'NINJAS', ordre: 8 },
+    { code: 'NINJAS_GR3', label: 'Ninjas Gr. 3', sport: 'NINJAS', ordre: 9 },
+  ];
+
+  for (const s of sectionsData) {
+    await prisma.section.upsert({
+      where: { code: s.code },
+      update: { label: s.label, sport: s.sport, ordre: s.ordre },
+      create: s
+    });
+  }
+
   console.log('Seed terminé avec succès.');
 }
 

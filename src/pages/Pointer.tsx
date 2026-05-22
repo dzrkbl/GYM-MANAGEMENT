@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
-import { getGroupeLabel } from '../lib/groupes';
+import { useSections } from '../hooks/useSections';
 
 interface Course {
   id: string;
@@ -20,8 +20,8 @@ interface Member {
 }
 
 export function Pointer() {
-  const sections = ['KARATE_GR1', 'KARATE_GR2', 'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3', 'NINJAS_GR1', 'NINJAS_GR2'];
-  const [selectedSection, setSelectedSection] = useState<string>(sections[0]);
+  const { codes: sections, getLabel } = useSections();
+  const [selectedSection, setSelectedSection] = useState<string>('');
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   
@@ -52,7 +52,13 @@ export function Pointer() {
     fetchTodayCourses();
   }, []);
 
-  // Update selected course when section or courses change
+  // Update selected course when sections or courses change
+  useEffect(() => {
+    if (sections.length > 0 && !selectedSection) {
+      setSelectedSection(sections[0]);
+    }
+  }, [sections, selectedSection]);
+
   useEffect(() => {
     const sectionCourses = courses.filter(c => c.section === selectedSection);
     if (sectionCourses.length > 0) {
@@ -165,18 +171,18 @@ export function Pointer() {
       {!successMessage && (
         <>
           {/* Section Selector */}
-          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto whitespace-nowrap scrollbar-none">
             {sections.map(section => (
               <button
                 key={section}
                 onClick={() => setSelectedSection(section)}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] ${
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] shrink-0 ${
                   selectedSection === section 
-                    ? 'bg-white text-cshp-black shadow-sm' 
+                    ? 'bg-white text-cshp-black shadow-sm font-semibold' 
                     : 'text-cshp-gray hover:text-cshp-black'
                 }`}
               >
-                {getGroupeLabel(section)}
+                {getLabel(section)}
               </button>
             ))}
           </div>
@@ -190,7 +196,7 @@ export function Pointer() {
               </div>
             ) : courses.filter(c => c.section === selectedSection).length === 0 ? (
               <div className="h-11 bg-gray-50 border border-gray-200 rounded-lg flex items-center px-4">
-                <span className="text-sm text-red-500">Aucun cours trouvé aujourd'hui pour {getGroupeLabel(selectedSection)}</span>
+                <span className="text-sm text-red-500">Aucun cours trouvé aujourd'hui pour {getLabel(selectedSection)}</span>
               </div>
             ) : (
               <select
@@ -225,7 +231,7 @@ export function Pointer() {
               <Spinner />
             ) : members.length === 0 ? (
               <div className="p-8 text-center text-cshp-gray text-sm">
-                Aucun membre actif trouvé dans {getGroupeLabel(selectedSection)}.
+                Aucun membre actif trouvé dans {getLabel(selectedSection)}.
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">

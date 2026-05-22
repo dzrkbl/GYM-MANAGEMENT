@@ -6,23 +6,13 @@ import { Badge } from '../ui/Badge';
 import { createMembre, updateMembre, apiFetch } from '../../lib/api';
 import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../../lib/tarifs';
 import { User, CreditCard, ChevronRight, ChevronLeft, Plus, Trash, Search, Check, AlertCircle } from 'lucide-react';
+import { useSections } from '../../hooks/useSections';
 
 interface MembreFormProps {
   membre?: any; // Si fourni, on est en mode édition
   onSuccess: () => void;
   onCancel: () => void;
 }
-
-const GROUPES = [
-  { value: 'KARATE_GR1', label: 'Karaté Gr. 1' },
-  { value: 'KARATE_GR2', label: 'Karaté Gr. 2' },
-  { value: 'JUDO_GR1', label: 'Judo Gr. 1' },
-  { value: 'JUDO_GR2', label: 'Judo Gr. 2' },
-  { value: 'JUDO_GR3', label: 'Judo Gr. 3' },
-  { value: 'NINJAS_GR1', label: 'Ninjas Gr. 1' },
-  { value: 'NINJAS_GR2', label: 'Ninjas Gr. 2' },
-  { value: 'MENSUEL', label: 'Mensuel' },
-];
 
 const CEINTURES_LIST = [
   "Blanche",
@@ -43,6 +33,15 @@ const CEINTURES_LIST = [
 
 export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const isEditing = !!membre;
+  const { sections, getLabel } = useSections();
+
+  const GROUPES = useMemo(() => {
+    const list = sections.map(s => ({ value: s.code, label: s.label }));
+    if (!list.some(item => item.value === 'MENSUEL')) {
+      list.push({ value: 'MENSUEL', label: 'Mensuel' });
+    }
+    return list;
+  }, [sections]);
 
   // Étape courante (1 à 4)
   const [currentStep, setCurrentStep] = useState(1);
@@ -73,7 +72,13 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [phone, setPhone] = useState(membre?.phone || '');
   const [dob, setDob] = useState(membre?.dateOfBirth ? membre.dateOfBirth.split('T')[0] : '');
   const [poids, setPoids] = useState<number | ''>(membre?.poids !== undefined && membre?.poids !== null ? membre.poids : '');
-  const [groupe, setGroupe] = useState(membre?.groupe || 'KARATE_GR1');
+  const [groupe, setGroupe] = useState(membre?.groupe || '');
+
+  useEffect(() => {
+    if (GROUPES.length > 0 && !groupe) {
+      setGroupe(GROUPES[0].value);
+    }
+  }, [GROUPES, groupe]);
   const [belt, setBelt] = useState(membre?.sections?.[0]?.belt || 'Blanche');
   const [tailleBelt, setTailleBelt] = useState(membre?.sections?.[0]?.beltSize || '');
   const [status, setStatus] = useState<any>(membre?.status || 'ACTIF');
@@ -867,7 +872,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
               <h4 className="text-xs font-bold text-gray-700 uppercase">Récapitulatif</h4>
               <div className="text-xs text-gray-600 space-y-1">
                 <p>• Membre : <strong className="text-gray-900">{firstName} {lastName}</strong></p>
-                <p>• Groupe : <strong className="text-gray-900">{groupe}</strong> (Ceinture : {belt})</p>
+                <p>• Groupe : <strong className="text-gray-900">{getLabel(groupe) || groupe}</strong> (Ceinture : {belt})</p>
                 <p>• Plan : <strong className="text-gray-900">{plan}</strong> ({montantFinalCalculated.toFixed(2)} $)</p>
                 <p>• Échéances : <strong className="text-slate-800">{versements.length} versement(s)</strong></p>
                 <p>• Fin de contrat : <strong className="text-gray-900">{finContratCalculated.toLocaleDateString('fr-FR')}</strong></p>

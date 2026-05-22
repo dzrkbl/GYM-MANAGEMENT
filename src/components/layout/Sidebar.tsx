@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag } from 'lucide-react';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
@@ -13,6 +13,7 @@ export function Sidebar() {
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Paiements' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/rapports', icon: FileText, label: 'Rapports' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/coachs', icon: UserCog, label: 'Coachs' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/sections', icon: Tag, label: 'Sections' }] : []),
   ];
 
   return (
