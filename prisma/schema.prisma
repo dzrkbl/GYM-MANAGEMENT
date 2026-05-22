@@ -243,5 +243,40 @@ model CoachSalaire {
   updatedAt DateTime @updatedAt
 }
 
+// Config de base pour les charges avec hausse automatique annuelle
+model DepenseConfig {
+  id            String   @id @default(uuid())
+  code          String   @unique   // ex: "LOYER"
+  label         String             // ex: "Loyer"
+  montantBase   Float              // montant de référence
+  anneeBase     Int                // année du montantBase (ex: 2024)
+  tauxHaussePct Float    @default(0) // ex: 2.0 pour +2%/an automatique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Charges mensuelles ou annuelles, fixes ou variables
+model Depense {
+  id          String          @id @default(uuid())
+  label       String
+  montant     Float
+  mois        Int?            // 1-12 = mois précis | null = tous les mois de l'année
+  annee       Int
+  categorie   CategorieDepense @default(FIXE)
+  note        String?
+  isOverride  Boolean         @default(false) // true si saisie manuelle sur config auto
+  configCode  String?         // référence à DepenseConfig.code si override
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+enum CategorieDepense {
+  FIXE
+  VARIABLE
+  SALARIALE
+  AUTRE
+}
+
+
 
 

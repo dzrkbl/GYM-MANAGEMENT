@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { getRevenusperiode, getChargesPeriode } from '../lib/finances';
+
+const DIVISEUR_TAXES = 1.14975;
 
 const router = Router();
 
@@ -273,6 +276,41 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
 
   } catch (error) {
     return sendError(res, 'Erreur de génération du rapport', 500);
+  }
+});
+
+// GET /api/rapports/financier?mois=5&annee=2026
+router.get('/financier', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const mois  = parseInt(req.query.mois as string, 10) || new Date().getMonth() + 1;
+    const annee = parseInt(req.query.annee as string, 10) || new Date().getFullYear();
+
+    const [revenus, charges] = await Promise.all([
+      getRevenusperiode(mois, annee),
+      getChargesPeriode(mois, annee),
+    ]);
+
+    const revenusAvantTaxes = Math.round((revenus.encaisse / DIVISEUR_TAXES) * 100) / 100;
+    const margeNette = Math.round((revenusAvantTaxes - charges.totalCharges) * 100) / 100;
+    const margeNettePct = revenusAvantTaxes > 0
+      ? Math.round((margeNette / revenusAvantTaxes) * 10000) / 100
+      : 0;
+
+    return sendSuccess(res, {
+      periode: { mois, annee },
+      revenus,
+      charges,
+      resultat: {
+        revenusAvantTaxes,
+        totalCharges: charges.totalCharges,
+        margeNette,
+        margeNettePct,
+        statut: margeNette >= 0 ? 'POSITIF' : 'DEFICIT',
+      }
+    });
+  } catch (error) {
+    console.error('Error in GET /api/rapports/financier:', error);
+    return sendError(res, 'Erreur de génération du rapport financier', 500);
   }
 });
 

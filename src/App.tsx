@@ -11,6 +11,7 @@ import { Coachs } from './pages/Coachs';
 import { Rapports } from './pages/Rapports';
 import { Planning } from './pages/Planning';
 import { Sections } from './pages/Sections';
+import { Finances } from './pages/admin/Finances';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/membres/:id" element={<MembreDetail />} />
             <Route path="/pointer" element={<Pointer />} />
             <Route path="/paiements" element={<Paiements />} />
+            <Route path="/admin/finances" element={<Finances />} />
             <Route path="/coachs" element={<Coachs />} />
             <Route path="/rapports" element={<Rapports />} />
             <Route path="/planning" element={<Planning />} />

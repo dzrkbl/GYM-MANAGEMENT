@@ -19,6 +19,8 @@ import versementsRouter from './src/routes/versements';
 import sectionsRouter from './src/routes/sections';
 import masseSalarialeRouter from './src/routes/masseSalariale';
 import coachSalaireRouter from './src/routes/coachSalaire';
+import depensesRouter from './src/routes/depenses';
+import depenseConfigsRouter from './src/routes/depenseConfigs';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -42,6 +44,8 @@ app.use('/api/versements', versementsRouter);
 app.use('/api/sections', sectionsRouter);
 app.use('/api/masse-salariale', masseSalarialeRouter);
 app.use('/api/coach-salaire', coachSalaireRouter);
+app.use('/api/depenses', depensesRouter);
+app.use('/api/depense-configs', depenseConfigsRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {

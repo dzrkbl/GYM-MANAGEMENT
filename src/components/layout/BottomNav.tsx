@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins } from 'lucide-react';
 
 export function BottomNav() {
   const { user, logout } = useAuth();
@@ -11,6 +11,7 @@ export function BottomNav() {
     { to: '/membres', icon: Users, label: 'Membres' },
     { to: '/pointer', icon: CheckSquare, label: 'Pointer' },
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Argent' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/finances', icon: Coins, label: 'Finances' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/sections', icon: Tag, label: 'Sections' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/rapports', icon: FileText, label: 'Stats' }] : []),
   ];

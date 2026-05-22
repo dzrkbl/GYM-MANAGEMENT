@@ -92,6 +92,47 @@ async function main() {
     });
   }
 
+  // --- DepenseConfig : loyer avec hausse automatique de 2%/an ---
+  await prisma.depenseConfig.upsert({
+    where: { code: 'LOYER' },
+    update: {},
+    create: {
+      code: 'LOYER',
+      label: 'Loyer (taxes incluses)',
+      montantBase: 5589,
+      anneeBase: 2024,
+      tauxHaussePct: 2,
+    }
+  });
+
+  // --- Charges fixes mensuelles (toute l'année 2026) ---
+  const anneeRef = 2026;
+  const chargesFixes = [
+    { label: 'Location automobile', montant: 608,  categorie: 'FIXE' },
+    { label: 'Cellulaires',         montant: 254,  categorie: 'FIXE' },
+    { label: 'Assurance auto',      montant: 160,  categorie: 'FIXE' },
+    { label: 'Assurance gym',       montant: 222,  categorie: 'FIXE' },
+    { label: 'Hydro-Québec',        montant: 250,  categorie: 'VARIABLE' },
+  ];
+
+  for (const charge of chargesFixes) {
+    // Vérifie si elle existe déjà pour éviter les doublons au re-seed
+    const existe = await prisma.depense.findFirst({
+      where: { label: charge.label, annee: anneeRef, mois: null }
+    });
+    if (!existe) {
+      await prisma.depense.create({
+        data: {
+          label: charge.label,
+          montant: charge.montant,
+          mois: null,
+          annee: anneeRef,
+          categorie: charge.categorie as any,
+        }
+      });
+    }
+  }
+
   console.log('Seed terminé avec succès.');
 }
 
