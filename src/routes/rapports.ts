@@ -85,10 +85,39 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
 
 router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { from, to } = req.query;
+    const { from, to, mois, annee } = req.query;
+    
+    if (!from && !to && (mois || annee)) {
+      const parsedMois  = parseInt(mois as string, 10) || new Date().getMonth() + 1;
+      const parsedAnnee = parseInt(annee as string, 10) || new Date().getFullYear();
+
+      const [revenus, charges] = await Promise.all([
+        getRevenusperiode(parsedMois, parsedAnnee),
+        getChargesPeriode(parsedMois, parsedAnnee),
+      ]);
+
+      const revenusAvantTaxes = Math.round((revenus.encaisse / DIVISEUR_TAXES) * 100) / 100;
+      const margeNette = Math.round((revenusAvantTaxes - charges.totalCharges) * 100) / 100;
+      const margeNettePct = revenusAvantTaxes > 0
+        ? Math.round((margeNette / revenusAvantTaxes) * 10000) / 100
+        : 0;
+
+      return sendSuccess(res, {
+        periode: { mois: parsedMois, annee: parsedAnnee },
+        revenus,
+        charges,
+        resultat: {
+          revenusAvantTaxes,
+          totalCharges: charges.totalCharges,
+          margeNette,
+          margeNettePct,
+          statut: margeNette >= 0 ? 'POSITIF' : 'DEFICIT',
+        }
+      });
+    }
     
     if (!from || !to) {
-      return sendError(res, 'Les dates from et to sont requises', 400);
+      return sendError(res, 'Les dates from et to (ou mois et annee) sont requises', 400);
     }
     
     const startDate = new Date(from as string);
@@ -276,41 +305,6 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
 
   } catch (error) {
     return sendError(res, 'Erreur de génération du rapport', 500);
-  }
-});
-
-// GET /api/rapports/financier?mois=5&annee=2026
-router.get('/financier', authenticate, async (req: Request, res: Response): Promise<any> => {
-  try {
-    const mois  = parseInt(req.query.mois as string, 10) || new Date().getMonth() + 1;
-    const annee = parseInt(req.query.annee as string, 10) || new Date().getFullYear();
-
-    const [revenus, charges] = await Promise.all([
-      getRevenusperiode(mois, annee),
-      getChargesPeriode(mois, annee),
-    ]);
-
-    const revenusAvantTaxes = Math.round((revenus.encaisse / DIVISEUR_TAXES) * 100) / 100;
-    const margeNette = Math.round((revenusAvantTaxes - charges.totalCharges) * 100) / 100;
-    const margeNettePct = revenusAvantTaxes > 0
-      ? Math.round((margeNette / revenusAvantTaxes) * 10000) / 100
-      : 0;
-
-    return sendSuccess(res, {
-      periode: { mois, annee },
-      revenus,
-      charges,
-      resultat: {
-        revenusAvantTaxes,
-        totalCharges: charges.totalCharges,
-        margeNette,
-        margeNettePct,
-        statut: margeNette >= 0 ? 'POSITIF' : 'DEFICIT',
-      }
-    });
-  } catch (error) {
-    console.error('Error in GET /api/rapports/financier:', error);
-    return sendError(res, 'Erreur de génération du rapport financier', 500);
   }
 });
 
