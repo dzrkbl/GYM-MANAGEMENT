@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
+import { getGroupeLabel } from '../lib/groupes';
 
 interface Course {
   id: string;
@@ -19,7 +20,7 @@ interface Member {
 }
 
 export function Pointer() {
-  const sections = ['KARATE', 'JUDO', 'U8'];
+  const sections = ['KARATE_GR1', 'KARATE_GR2', 'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3', 'NINJAS_GR1', 'NINJAS_GR2'];
   const [selectedSection, setSelectedSection] = useState<string>(sections[0]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
@@ -175,7 +176,7 @@ export function Pointer() {
                     : 'text-cshp-gray hover:text-cshp-black'
                 }`}
               >
-                {section}
+                {getGroupeLabel(section)}
               </button>
             ))}
           </div>
@@ -189,7 +190,7 @@ export function Pointer() {
               </div>
             ) : courses.filter(c => c.section === selectedSection).length === 0 ? (
               <div className="h-11 bg-gray-50 border border-gray-200 rounded-lg flex items-center px-4">
-                <span className="text-sm text-red-500">Aucun cours trouvé aujourd'hui pour {selectedSection}</span>
+                <span className="text-sm text-red-500">Aucun cours trouvé aujourd'hui pour {getGroupeLabel(selectedSection)}</span>
               </div>
             ) : (
               <select
@@ -224,7 +225,7 @@ export function Pointer() {
               <Spinner />
             ) : members.length === 0 ? (
               <div className="p-8 text-center text-cshp-gray text-sm">
-                Aucun membre actif trouvé dans {selectedSection}.
+                Aucun membre actif trouvé dans {getGroupeLabel(selectedSection)}.
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">

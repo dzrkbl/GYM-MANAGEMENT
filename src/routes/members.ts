@@ -102,6 +102,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         plan: data.plan,
         rabaisFamille: !!data.rabaisFamille,
         rabaisCustomPct: data.rabaisCustomPct,
+        prixBase: prixBase,
       });
     }
 
@@ -214,6 +215,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
           plan,
           rabaisFamille: !!rabaisFamille,
           rabaisCustomPct,
+          prixBase: updateData.prixBase,
         });
       }
     }

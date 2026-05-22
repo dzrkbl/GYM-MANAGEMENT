@@ -9,8 +9,11 @@ export function calculerMontantFinal(params: {
   plan: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
   rabaisFamille: boolean;
   rabaisCustomPct?: number | null;
+  prixBase?: number | null;
 }): number {
-  let prix = TARIFS[params.plan]?.base ?? 0;
+  let prix = (params.plan === 'MENSUEL' && params.prixBase !== undefined && params.prixBase !== null)
+    ? params.prixBase
+    : (TARIFS[params.plan]?.base ?? 0);
   if (params.rabaisFamille) {
     prix = prix * 0.90; // -10%
   }

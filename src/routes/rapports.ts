@@ -110,7 +110,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
       }
     });
 
-    const sectionsPres = ['KARATE', 'JUDO', 'U8', 'TAEKWONDO', 'KICKBOXING'];
+    const sectionsPres = ['KARATE_GR1', 'KARATE_GR2', 'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3', 'NINJAS_GR1', 'NINJAS_GR2'];
     const presencesList = sectionsPres.map(sec => {
       const secAtts = attendances.filter(a => a.course?.section === sec);
       const totalAtts = secAtts.length;

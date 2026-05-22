@@ -5,34 +5,34 @@ import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 
-// Help function for revenues
-const getRevenusForMonth = async (year: number, month: number, section?: string) => {
+// Help function for revenues using paymentVersement
+const getRevenusForMonth = async (year: number, month: number) => {
   const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0); // last day of month
-  
-  let whereClause: any = {
-    status: 'PAYÉ',
-    paidDate: { gte: startDate, lte: endDate }
-  };
+  const endDate = new Date(year, month + 1, 0, 23, 59, 59);
 
-  if (section) {
-    whereClause.subscription = { section };
-  }
-
-  const payments = await prisma.payment.findMany({
-    where: whereClause,
-    select: { amount: true, subscription: { select: { section: true } } }
+  const versements = await prisma.paymentVersement.findMany({
+    where: {
+      datePaiement: { gte: startDate, lte: endDate }
+    },
+    select: {
+      montant: true,
+      member: {
+        select: {
+          sections: { select: { section: true } }
+        }
+      }
+    }
   });
 
-  const total = payments.reduce((sum, p) => sum + p.amount, 0);
+  const total = versements.reduce((sum, v) => sum + v.montant, 0);
 
-  const bySection = payments.reduce((acc, p) => {
-    const s = p.subscription?.section || 'INCONNU';
-    acc[s] = (acc[s] || 0) + p.amount;
+  const bySection = versements.reduce((acc, v) => {
+    const s = v.member?.sections?.[0]?.section || 'INCONNU';
+    acc[s] = (acc[s] || 0) + v.montant;
     return acc;
   }, {} as Record<string, number>);
 
-  return { total, section: bySection };
+  return { total, section: bySection, bySection };
 };
 
 // GET /api/dashboard/revenus

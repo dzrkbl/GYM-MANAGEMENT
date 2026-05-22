@@ -6,6 +6,7 @@ import { formatMontant, formatDate } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
+import { getGroupeLabel } from '../lib/groupes';
 
 export function Paiements() {
   const { user } = useAuth();
@@ -16,7 +17,7 @@ export function Paiements() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const SECTIONS = ["TOUS", "KARATE", "JUDO", "U8", "TAEKWONDO", "KICKBOXING"];
+  const SECTIONS = ["TOUS", "KARATE_GR1", "KARATE_GR2", "JUDO_GR1", "JUDO_GR2", "JUDO_GR3", "NINJAS_GR1", "NINJAS_GR2", "MENSUEL"];
   const STATUSES = [
     { value: 'TOUS', label: 'Tous' },
     { value: 'PAYÉ', label: 'Payé' },
@@ -168,7 +169,7 @@ export function Paiements() {
                       : 'bg-gray-100 text-cshp-gray hover:bg-gray-200'
                   }`}
                 >
-                  {sec}
+                  {getGroupeLabel(sec)}
                 </button>
               ))}
             </div>
@@ -255,7 +256,7 @@ export function Paiements() {
                     {p.member?.lastName} {p.member?.firstName}
                   </h3>
                   <div className="text-sm text-cshp-gray mt-1">
-                    {p.subscription?.section} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
+                    {getGroupeLabel(p.subscription?.section || p.member?.groupe || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>

@@ -90,7 +90,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         memberId: data.memberId,
         subscriptionId: data.subscriptionId,
         amount: data.amount,
-        method: data.method,
+        method: data.method === 'COMPTANT' ? 'CASH' : data.method === 'VIREMENT' ? 'TRANSFER' : data.method === 'CARTE' ? 'CARD' : null,
         dueDate: finalDueDate,
         paidDate: data.paidDate ? new Date(data.paidDate) : null,
         status: data.status,

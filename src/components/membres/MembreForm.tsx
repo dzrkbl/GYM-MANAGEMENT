@@ -84,6 +84,16 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
     membre?.dateInscription ? membre.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]
   );
   const [plan, setPlan] = useState<'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL'>(membre?.plan || 'TRIMESTRIEL');
+  const [montantCustom, setMontantCustom] = useState<number | ''>(
+    membre?.plan === 'MENSUEL' ? (membre.prixBase || '') : ''
+  );
+
+  useEffect(() => {
+    if (plan !== 'MENSUEL') {
+      setMontantCustom('');
+    }
+  }, [plan]);
+
   const [rabaisFamille, setRabaisFamille] = useState(membre?.rabaisFamille || false);
   const [membreFamilleId, setMembreFamilleId] = useState(membre?.membreFamilleId || '');
   const [rabaisCustomPct, setRabaisCustomPct] = useState<number | ''>(membre?.rabaisCustomPct || '');
@@ -131,8 +141,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
   // Prix de base
   const prixBase = useMemo(() => {
+    if (plan === 'MENSUEL') return typeof montantCustom === 'number' ? montantCustom : 0;
     return TARIFS[plan]?.base ?? 0;
-  }, [plan]);
+  }, [plan, montantCustom]);
 
   // Montant final calculé en temps réel
   const montantFinalCalculated = useMemo(() => {
@@ -143,8 +154,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       plan,
       rabaisFamille,
       rabaisCustomPct: pct && pct > 0 ? pct : null,
+      prixBase,
     });
-  }, [plan, rabaisFamille, rabaisCustomPct]);
+  }, [plan, rabaisFamille, rabaisCustomPct, prixBase]);
 
   // Fin du contrat calculée automatiquement
   const finContratCalculated = useMemo(() => {
@@ -559,6 +571,17 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 ))}
               </div>
             </div>
+
+            {plan === 'MENSUEL' && (
+              <Input
+                label="Montant personnalisé ($) *"
+                type="number"
+                value={montantCustom}
+                onChange={e => setMontantCustom(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="Ex. 120"
+                required
+              />
+            )}
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-3">

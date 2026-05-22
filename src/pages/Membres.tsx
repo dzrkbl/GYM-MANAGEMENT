@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
+import { getGroupeLabel } from '../lib/groupes';
 import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
 
 export function Membres() {
@@ -38,11 +39,12 @@ export function Membres() {
     setError('');
     try {
       let url = `/membres?status=${statusFilter}`;
-      if (sectionFilter && sectionFilter !== 'TOUS') {
-        url += `&section=${sectionFilter}`;
-      }
-      
       let data = await apiFetch<any[]>(url);
+      
+      // Filter by section (groupe) in client to match exactly member.groupe
+      if (sectionFilter && sectionFilter !== 'TOUS') {
+        data = data.filter(m => m.groupe === sectionFilter);
+      }
       
       // Client-side search filtering
       if (debouncedQuery) {
@@ -61,8 +63,7 @@ export function Membres() {
     }
   }
 
-  // Remplacement global U8 -> NINJAS_GR1 / NINJAS_GR2
-  const SECTIONS = ["TOUS", "KARATE", "JUDO", "NINJAS_GR1", "NINJAS_GR2", "TAEKWONDO", "KICKBOXING"];
+  const SECTIONS = ["TOUS", "KARATE_GR1", "KARATE_GR2", "JUDO_GR1", "JUDO_GR2", "JUDO_GR3", "NINJAS_GR1", "NINJAS_GR2", "MENSUEL"];
   const STATUSES = [
     { value: 'ACTIF', label: 'Actif' },
     { value: 'INACTIF', label: 'Inactif' },
@@ -134,20 +135,6 @@ export function Membres() {
     };
   };
 
-  const getGroupLabel = (groupeKey: string) => {
-    switch (groupeKey) {
-      case 'KARATE_GR1': return 'Karaté Gr. 1';
-      case 'KARATE_GR2': return 'Karaté Gr. 2';
-      case 'JUDO_GR1': return 'Judo Gr. 1';
-      case 'JUDO_GR2': return 'Judo Gr. 2';
-      case 'JUDO_GR3': return 'Judo Gr. 3';
-      case 'NINJAS_GR1': return 'Ninjas Gr. 1';
-      case 'NINJAS_GR2': return 'Ninjas Gr. 2';
-      case 'MENSUEL': return 'Mensuel';
-      default: return groupeKey || '-';
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -192,7 +179,7 @@ export function Membres() {
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      {getGroupLabel(sec)}
+                      {getGroupeLabel(sec)}
                     </button>
                   ))}
                 </div>
@@ -272,7 +259,7 @@ export function Membres() {
                       </td>
                       <td className="py-3.5 px-4">
                         <Badge variant="neutral" className="bg-slate-100 text-slate-800 border-none px-2.5 py-1 text-xs">
-                          {getGroupLabel(member.groupe)}
+                          {getGroupeLabel(member.groupe)}
                         </Badge>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-xs text-gray-600 uppercase">
