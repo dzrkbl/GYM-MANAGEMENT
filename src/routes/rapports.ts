@@ -16,20 +16,52 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
     endDate.setHours(23, 59, 59, 999);
 
     if (type === 'PAIEMENTS') {
-      const payments = await prisma.payment.findMany({
+      const versements = await prisma.paymentVersement.findMany({
         where: {
           OR: [
-            { paidDate: { gte: startDate, lte: endDate }, status: 'PAYÉ' },
-            { dueDate: { gte: startDate, lte: endDate }, status: { in: ['EN_ATTENTE', 'EN_RETARD'] } }
+            { datePaiement: { gte: startDate, lte: endDate } },
+            { datePrevue: { gte: startDate, lte: endDate } }
           ]
         },
         include: {
-          member: { select: { firstName: true, lastName: true } },
-          subscription: { select: { section: true } }
+          member: {
+            select: {
+              firstName: true,
+              lastName: true,
+              sections: { select: { section: true } },
+              groupe: true
+            }
+          }
         },
-        orderBy: { dueDate: 'asc' }
+        orderBy: { datePrevue: 'asc' }
       });
-      return sendSuccess(res, payments);
+
+      const today = new Date();
+      // Mapper les versements pour simuler l'ancien format attendu par l'export CSV ou le front
+      const mapped = versements.map(v => {
+        let computedStatus: string;
+        if (v.datePaiement) {
+          computedStatus = 'PAYÉ';
+        } else if (v.datePrevue && v.datePrevue < today) {
+          computedStatus = 'EN_RETARD';
+        } else {
+          computedStatus = 'EN_ATTENTE';
+        }
+
+        return {
+          id: v.id,
+          amount: v.montant,
+          status: computedStatus,
+          dueDate: v.datePrevue,
+          paidDate: v.datePaiement,
+          member: v.member,
+          subscription: {
+            section: v.member.sections?.[0]?.section || v.member.groupe || 'INCONNU'
+          }
+        };
+      });
+
+      return sendSuccess(res, mapped);
     } 
     
     if (type === 'PRESENCES') {
@@ -47,6 +79,7 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
     return sendError(res, 'Erreur lors de l\'export', 500);
   }
 });
+
 router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const { from, to } = req.query;
@@ -58,38 +91,44 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     const startDate = new Date(from as string);
     const endDate = new Date(to as string);
     endDate.setHours(23, 59, 59, 999);
+    const today = new Date();
 
-    // 1. Revenus : Encaisse, En Attente, En Retard (ceux dû ou payé ou en attente)
-    const payments = await prisma.payment.findMany({
+    // 1. Revenus : Encaisse, En Attente, En Retard (ceux dû ou payé ou en attente) depuis PaymentVersement
+    const versements = await prisma.paymentVersement.findMany({
       where: {
         OR: [
-          {
-            paidDate: { gte: startDate, lte: endDate },
-            status: 'PAYÉ'
-          },
-          {
-            dueDate: { gte: startDate, lte: endDate },
-            status: { in: ['EN_ATTENTE', 'EN_RETARD'] }
-          }
+          { datePaiement: { gte: startDate, lte: endDate } },
+          { datePrevue: { gte: startDate, lte: endDate } }
         ]
       },
       include: {
-        member: { select: { firstName: true, lastName: true } },
-        subscription: { select: { section: true } }
+        member: {
+          select: {
+            firstName: true,
+            lastName: true,
+            sections: { select: { section: true } },
+            groupe: true
+          }
+        }
       }
     });
 
     let encaisse = 0, enAttente = 0, enRetard = 0;
     const sectionTotals: Record<string, number> = {};
 
-    payments.forEach(p => {
-      if (p.status === 'PAYÉ') {
-        encaisse += p.amount;
-        const s = p.subscription?.section || 'INCONNU';
-        sectionTotals[s] = (sectionTotals[s] || 0) + p.amount;
+    versements.forEach(v => {
+      const s = v.member.sections?.[0]?.section || v.member.groupe || 'INCONNU';
+      const isPaid = !!v.datePaiement;
+      const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < today;
+
+      if (isPaid) {
+        encaisse += v.montant;
+        sectionTotals[s] = (sectionTotals[s] || 0) + v.montant;
+      } else if (isLate) {
+        enRetard += v.montant;
+      } else {
+        enAttente += v.montant;
       }
-      else if (p.status === 'EN_ATTENTE') enAttente += p.amount;
-      else if (p.status === 'EN_RETARD') enRetard += p.amount;
     });
 
     const total = encaisse + enAttente + enRetard;
@@ -135,13 +174,15 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     const pourcentageDuRevenu = encaisse > 0 ? (masseSalarialeMontant / encaisse) * 100 : 0;
 
     // 4. Liste détaillée des retards
-    const retards = payments.filter(p => p.status === 'EN_RETARD').map(p => ({
-      memberId: p.memberId,
-      nom: `${p.member.firstName} ${p.member.lastName}`,
-      montant: p.amount,
-      section: p.subscription?.section,
-      depuisLe: p.dueDate
-    }));
+    const retards = versements
+      .filter(v => !v.datePaiement && v.datePrevue && v.datePrevue < today)
+      .map(v => ({
+        memberId: v.membreId,
+        nom: `${v.member.firstName} ${v.member.lastName}`,
+        montant: v.montant,
+        section: v.member.sections?.[0]?.section || v.member.groupe || null,
+        depuisLe: v.datePrevue
+      }));
 
     return sendSuccess(res, {
       revenus: { encaisse, enAttente, enRetard, total },
