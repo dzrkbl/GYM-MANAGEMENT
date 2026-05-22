@@ -234,4 +234,14 @@ model MasseSalariale {
   @@unique([mois, annee])  // un seul enregistrement par mois
 }
 
+model CoachSalaire {
+  id        String   @id @default(uuid())
+  nom       String
+  montant   Float
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
 

@@ -8,8 +8,48 @@ import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
 import { FileText, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { useSections } from '../hooks/useSections';
+import { SectionPieChart } from '../components/rapports/SectionPieChart';
+
+const SectionCard = ({ s }: { s: any }) => (
+  <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-3">
+    <div className="flex justify-between items-start">
+      <span className="font-bold text-cshp-black">{s.label || s.section}</span>
+      <div className="text-right">
+        <span className="font-bold text-cshp-black">{formatMontant(s.montantTotal)}</span>
+        <span className="text-xs text-cshp-gray ml-2">· {s.nbMembres} mbr</span>
+      </div>
+    </div>
+
+    {/* Part globale */}
+    <div>
+      <div className="flex justify-between text-xs text-cshp-gray mb-1">
+        <span>Part des revenus</span>
+        <span className="font-bold text-cshp-black">{s.pourcentage.toFixed(0)}%</span>
+      </div>
+      <div className="w-full bg-gray-200 h-1.5 rounded-full">
+        <div className="bg-cshp-red h-full rounded-full" style={{ width: `${s.pourcentage}%` }} />
+      </div>
+    </div>
+
+    {/* Jauge tricolore */}
+    {s.montantTotal > 0 && (
+      <div>
+        <div className="flex h-3 rounded-full overflow-hidden w-full">
+          <div className="bg-green-500"  style={{ width: `${(s.encaisse  / s.montantTotal) * 100}%` }} />
+          <div className="bg-yellow-400" style={{ width: `${(s.enAttente / s.montantTotal) * 100}%` }} />
+          <div className="bg-red-500"    style={{ width: `${(s.enRetard  / s.montantTotal) * 100}%` }} />
+        </div>
+        <div className="flex justify-between text-xs mt-1">
+          <span className="text-green-600  font-semibold">🟢 {((s.encaisse  / s.montantTotal)*100).toFixed(0)}% · {formatMontant(s.encaisse)}</span>
+          <span className="text-yellow-600 font-semibold">🟡 {((s.enAttente / s.montantTotal)*100).toFixed(0)}% · {formatMontant(s.enAttente)}</span>
+          <span className="text-red-600    font-semibold">🔴 {((s.enRetard  / s.montantTotal)*100).toFixed(0)}% · {formatMontant(s.enRetard)}</span>
+        </div>
+      </div>
+    )}
+  </div>
+);
 
 export function Rapports() {
   const { user } = useAuth();
@@ -32,6 +72,22 @@ export function Rapports() {
   // Saisie et suivi manuel de la masse salariale
   const [masseSalarialeList, setMasseSalarialeList] = useState<any[]>([]);
   const [editingKeys, setEditingKeys] = useState<Record<string, { montant: string; note: string }>>({});
+
+  // Saisie et suivi manuel des salaires fixes des coachs (Masse Salariale A+B)
+  const [coachs, setCoachs] = useState<{ id: string; nom: string; montant: number }[]>([]);
+  const [showCoachConfig, setShowCoachConfig] = useState(false);
+  const [editingCoach, setEditingCoach] = useState<Record<string, string>>({});
+  const [newCoach, setNewCoach] = useState({ nom: '', montant: '' });
+
+  useEffect(() => {
+    apiFetch<any[]>('/coach-salaire')
+      .then(setCoachs)
+      .catch(console.error);
+  }, []);
+
+  const totalDefaut = useMemo(() => {
+    return coachs.reduce((s, c) => s + c.montant, 0);
+  }, [coachs]);
 
   useEffect(() => {
     fetchReport();
@@ -178,8 +234,10 @@ export function Rapports() {
   }, [monthsOfPeriod, masseSalarialeList]);
 
   const totalMasseSalarialeSaisie = useMemo(() => {
-    return masseSalarialeByMonth.reduce((sum, m) => sum + (m.montant || 0), 0);
-  }, [masseSalarialeByMonth]);
+    return masseSalarialeByMonth.reduce(
+      (sum, m) => sum + (m.montant !== null ? m.montant : totalDefaut), 0
+    );
+  }, [masseSalarialeByMonth, totalDefaut]);
 
   const pourcentageMasseSalariale = useMemo(() => {
     const encaisse = data?.revenus?.encaisse || 0;
@@ -247,7 +305,7 @@ export function Rapports() {
   const exportPDF = () => {
     if (!data) return;
     
-    const doc = new (jsPDF as any)();
+    const doc = new jsPDF();
     
     // Header
     doc.setFontSize(22);
@@ -264,7 +322,7 @@ export function Rapports() {
     doc.text("1. Résumé Financier", 14, yPos);
     yPos += 8;
     
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Métrique', 'Montant']],
       body: [
@@ -283,12 +341,15 @@ export function Rapports() {
     doc.text("2. Revenus par Section", 14, yPos);
     yPos += 8;
     
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: yPos,
-      head: [['Section', 'Montant', 'Part %']],
+      head: [['Section', 'Montant Total', 'Encaissé', 'En attente', 'En retard', 'Part %']],
       body: data.parSection.map((s: any) => [
-        s.section, 
-        formatMontant(s.montant), 
+        s.label || s.section, 
+        formatMontant(s.montantTotal), 
+        formatMontant(s.encaisse),
+        formatMontant(s.enAttente),
+        formatMontant(s.enRetard),
         `${s.pourcentage.toFixed(1)} %`
       ]),
       theme: 'striped',
@@ -315,11 +376,11 @@ export function Rapports() {
     doc.text("4. Taux de Présence par Section", 14, yPos);
     yPos += 8;
     
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Section', 'Taux de présence', 'Présences / Total']],
       body: data.presences.map((p: any) => [
-        p.section, 
+        getLabel(p.section) || p.section, 
         `${p.taux.toFixed(1)} %`,
         `${p.presents} / ${p.total}`
       ]),
@@ -336,7 +397,7 @@ export function Rapports() {
     yPos += 8;
     
     if (data.retards.length > 0) {
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: yPos,
         head: [['Membre', 'Section', 'Montant', 'Échéance', 'Ancienneté']],
         body: data.retards.map((r: any) => [
@@ -397,6 +458,57 @@ export function Rapports() {
       alert("Erreur export : " + err.message);
     }
   };
+
+  const [filtreSection, setFiltreSection] = useState<string>('TOUTES');
+
+  const retardsFiltres = useMemo(() => {
+    if (filtreSection === 'TOUTES') return data?.retards ?? [];
+    return (data?.retards ?? []).filter((r: any) => r.section === filtreSection);
+  }, [data, filtreSection]);
+
+  function exportRetardsPDF(retards: any[]) {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('CSHP — Retards de paiement', 14, 20);
+    doc.setFontSize(10);
+    const sectionLabel = filtreSection === 'TOUTES'
+      ? 'Toutes les sections'
+      : (data.parSection.find((s: any) => s.section === filtreSection)?.label || filtreSection);
+    doc.text(`Section : ${sectionLabel}`, 14, 28);
+    doc.text(`Édité le : ${new Date().toLocaleDateString('fr-CA')}`, 14, 34);
+    doc.text(`${retards.length} dossier(s) · Total : ${formatMontant(retards.reduce((s, r) => s + r.montant, 0))}`, 14, 40);
+    
+    autoTable(doc, {
+      startY: 48,
+      head: [['Membre', 'Section', 'Montant', 'Depuis', 'Ancienneté']],
+      body: retards.map(r => [
+        r.membreNom,
+        getLabel(r.section) || r.section,
+        formatMontant(r.montant),
+        new Date(r.date).toLocaleDateString('fr-CA'),
+        `${r.joursRetard} jours`
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [225, 29, 72] }
+    });
+    doc.save(`CSHP_Retards_${sectionLabel}_${dateRange.from}.pdf`);
+  }
+
+  function exportRetardsCSV(retards: any[]) {
+    let csv = '\uFEFF';
+    csv += 'Membre,Section,Montant,Depuis,Ancienneté (jours)\n';
+    retards.forEach(r => {
+      csv += `"${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${new Date(r.date).toLocaleDateString('fr-CA')}","${r.joursRetard}"\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `CSHP_Retards_${filtreSection}_${dateRange.from}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -469,7 +581,8 @@ export function Rapports() {
       ) : error ? (
         <div className="p-4 bg-red-50 text-red-600 rounded-lg">{error}</div>
       ) : data ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           
           <Card className="p-6">
             <h3 className="text-sm font-bold text-cshp-gray tracking-wider mb-4 uppercase">Revenus</h3>
@@ -491,22 +604,42 @@ export function Rapports() {
                 <span className="text-2xl font-bold text-cshp-black">{formatMontant(data.revenus.total)}</span>
               </div>
 
-              <div className="pt-4 border-t border-gray-100 mt-4">
-                <h4 className="text-xs font-bold text-cshp-gray mb-3">PAR SECTION</h4>
-                <div className="space-y-2">
-                  {data.parSection.map((s: any) => (
-                    <div key={s.section} className="flex flex-col">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-cshp-black">{s.section}</span>
-                        <div className="flex gap-4">
-                          <span className="text-cshp-black font-bold">{formatMontant(s.montant)}</span>
-                          <span className="text-cshp-gray w-12 text-right">{s.pourcentage.toFixed(0)}%</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-cshp-red h-full rounded-full" style={{ width: `${s.pourcentage}%` }}></div>
-                      </div>
+              {(() => {
+                const tauxRecouvrement = data.revenus.total > 0
+                  ? (data.revenus.encaisse / data.revenus.total) * 100
+                  : 0;
+
+                const recouvrementColor =
+                  tauxRecouvrement >= 90 ? { text: 'text-green-600', bg: 'bg-green-500' } :
+                  tauxRecouvrement >= 70 ? { text: 'text-yellow-600', bg: 'bg-yellow-400' } :
+                                           { text: 'text-red-600',    bg: 'bg-red-500'   };
+
+                return (
+                  <div className="pt-4 border-t border-gray-100">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-cshp-gray font-medium">Taux de recouvrement</span>
+                      <span className={`font-bold text-lg ${recouvrementColor.text}`}>
+                        {tauxRecouvrement.toFixed(1)}%
+                      </span>
                     </div>
+                    <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                      <div
+                        className={`${recouvrementColor.bg} h-full rounded-full transition-all`}
+                        style={{ width: `${Math.min(tauxRecouvrement, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-cshp-gray mt-1">
+                      Encaissé / Total prévu × 100
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="pt-4 border-t border-gray-100 mt-4">
+                <h4 className="text-xs font-bold text-cshp-gray mb-3 uppercase tracking-wider">Détails par Section</h4>
+                <div className="grid grid-cols-1 gap-3">
+                  {data.parSection.map((s: any) => (
+                    <SectionCard key={s.section} s={s} />
                   ))}
                 </div>
               </div>
@@ -515,7 +648,122 @@ export function Rapports() {
 
           <div className="space-y-4 flex flex-col">
             <Card className="p-6">
-              <h3 className="text-sm font-bold text-cshp-gray tracking-wider mb-4 uppercase">Masse Salariale</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-cshp-gray tracking-wider uppercase">Masse Salariale</h3>
+                <Button
+                  variant="outline"
+                  className="h-8 text-xs px-2.5 min-h-0"
+                  onClick={() => setShowCoachConfig(!showCoachConfig)}
+                >
+                  {showCoachConfig ? 'Close' : '⚙️ Gérer les coachs'}
+                </Button>
+              </div>
+
+              {showCoachConfig && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                  <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-2">Salaire fixe par coach</div>
+                  {coachs.length === 0 ? (
+                    <p className="text-xs text-cshp-gray italic">Aucun coach fixe enregistré.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {coachs.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm justify-between bg-white p-2 rounded-lg border border-gray-100">
+                          <span className="font-semibold text-cshp-black">👤 {c.nom}</span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={editingCoach[c.id] ?? c.montant}
+                              onChange={e => setEditingCoach(prev => ({ ...prev, [c.id]: e.target.value }))}
+                              className="w-20 border border-gray-300 rounded px-1.5 py-1 text-xs text-right bg-white focus:outline-none focus:ring-1 focus:ring-cshp-red"
+                            />
+                            <span className="text-cshp-gray text-xs mr-2">$/m</span>
+                            <button
+                              onClick={async () => {
+                                const mVal = editingCoach[c.id] === undefined ? c.montant : parseFloat(editingCoach[c.id]);
+                                if (isNaN(mVal) || mVal < 0) return;
+                                try {
+                                  await apiFetch(`/coach-salaire/${c.id}`, {
+                                    method: 'PUT',
+                                    body: JSON.stringify({ montant: mVal })
+                                  });
+                                  setCoachs(prev => prev.map(x => x.id === c.id ? { ...x, montant: mVal } : x));
+                                  setEditingCoach(prev => { const copy = { ...prev }; delete copy[c.id]; return copy; });
+                                } catch (e: any) {
+                                  alert(e.message);
+                                }
+                              }}
+                              className="text-xs bg-green-500 text-white rounded p-1 hover:bg-opacity-90"
+                              title="Valider"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Supprimer le coach ${c.nom} ?`)) return;
+                                try {
+                                  await apiFetch(`/coach-salaire/${c.id}`, { method: 'DELETE' });
+                                  setCoachs(prev => prev.filter(x => x.id !== c.id));
+                                } catch (e: any) {
+                                  alert(e.message);
+                                }
+                              }}
+                              className="text-xs bg-red-500 text-white rounded p-1 hover:bg-opacity-90"
+                              title="Supprimer"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Formulaire ajout */}
+                  <div className="flex gap-2 pt-2 border-t border-gray-200">
+                    <input
+                      type="text"
+                      placeholder="Nom coach"
+                      value={newCoach.nom}
+                      onChange={e => setNewCoach(p => ({ ...p, nom: e.target.value }))}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-cshp-red"
+                    />
+                    <input
+                      type="number"
+                      placeholder="$/m"
+                      value={newCoach.montant}
+                      onChange={e => setNewCoach(p => ({ ...p, montant: e.target.value }))}
+                      className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-right bg-white focus:outline-none focus:ring-1 focus:ring-cshp-red"
+                    />
+                    <button
+                      onClick={async () => {
+                        const mVal = parseFloat(newCoach.montant);
+                        if (!newCoach.nom || isNaN(mVal) || mVal < 0) {
+                          alert('Champs invalides');
+                          return;
+                        }
+                        try {
+                          const created = await apiFetch<any>('/coach-salaire', {
+                            method: 'POST',
+                            body: JSON.stringify({ nom: newCoach.nom, montant: mVal })
+                          });
+                          setCoachs(prev => [...prev, created]);
+                          setNewCoach({ nom: '', montant: '' });
+                        } catch (e: any) {
+                          alert(e.message);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-cshp-red text-white text-xs font-bold rounded hover:bg-opacity-90"
+                    >
+                      + Ajouter
+                    </button>
+                  </div>
+
+                  <div className="pt-2 text-xs font-bold text-cshp-black border-t border-gray-200 flex justify-between">
+                    <span>Total fixe de référence :</span>
+                    <span>{formatMontant(totalDefaut)}</span>
+                  </div>
+                </div>
+              )}
               
               {periodType === 'MOIS' ? (
                 // Vue pour un mois unique
@@ -535,7 +783,12 @@ export function Rapports() {
                                 {formatMontant(m.montant)}
                               </span>
                             ) : (
-                              <span className="text-sm text-gray-500 italic">Non saisi</span>
+                              <div className="flex flex-col">
+                                <span className="text-2xl font-bold text-gray-500">
+                                  {formatMontant(totalDefaut)}
+                                </span>
+                                <span className="text-[10px] text-green-600 font-semibold">(Par défaut)</span>
+                              </div>
                             )}
                             {m.note && (
                               <p className="text-xs text-cshp-gray mt-1">Note : {m.note}</p>
@@ -546,7 +799,7 @@ export function Rapports() {
                             className="h-10 text-sm whitespace-nowrap px-3 min-h-0"
                             onClick={() => handleStartEdit(key, m.montant, m.note)}
                           >
-                            ✏️ {m.montant !== null ? 'Modifier' : 'Ajouter'}
+                            ✏️ {m.montant !== null ? 'Modifier' : 'Spécifier'}
                           </Button>
                         </div>
                       ) : (
@@ -616,7 +869,9 @@ export function Rapports() {
                                     {formatMontant(m.montant)}
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-gray-400 italic">Non saisi</span>
+                                  <span className="font-semibold text-sm text-gray-500 cursor-help" title="Calculé par d'après les salaires fixes des coachs">
+                                    {formatMontant(totalDefaut)} <span className="text-xs text-green-600 font-semibold">(défaut)</span>
+                                  </span>
                                 )}
                                 {m.note && (
                                   <span className="text-xs text-cshp-gray ml-2">({m.note})</span>
@@ -627,7 +882,7 @@ export function Rapports() {
                                 className="text-xs font-semibold text-cshp-red hover:underline flex items-center gap-1 min-h-[36px] px-2 rounded hover:bg-gray-50 border border-transparent"
                                 title="Saisir / Modifier"
                               >
-                                ✏️ {m.montant !== null ? 'Modifier' : 'Saisir'}
+                                ✏️ {m.montant !== null ? 'Modifier' : 'Spécifier'}
                               </button>
                             </div>
                           ) : (
@@ -703,71 +958,117 @@ export function Rapports() {
               </div>
             </Card>
 
-            <Card className="p-6 flex-1">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-bold text-cshp-gray tracking-wider uppercase">Liste des retards</h3>
-                <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded-full bg-opacity-50">
-                  {data.retards.length} dossier(s)
-                </span>
-              </div>
-
-              {/* Alerte globale */}
-              <div className={`p-4 rounded-xl border mb-6 font-bold text-sm flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center ${
-                data.totalRetard > 0 
-                  ? 'bg-red-50 text-red-600 border-red-100' 
-                  : 'bg-gray-50 text-gray-500 border-gray-100'
-              }`}>
-                <span>⚠️ {data.nombreDossiersRetard} dossier(s) en retard</span>
-                <span>Total cumulatif : {formatMontant(data.totalRetard)}</span>
-              </div>
-              
-              <div className="overflow-x-auto w-full">
-                {data.retards.length === 0 ? (
-                  <p className="text-sm text-cshp-gray italic text-center py-4">Aucun retard signalé.</p>
-                ) : (
-                  <table className="w-full text-left text-sm border-collapse min-w-[500px]">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-cshp-gray text-xs uppercase tracking-wider font-semibold">
-                        <th className="pb-3 pr-2">Membre</th>
-                        <th className="pb-3 px-2">Section</th>
-                        <th className="pb-3 px-2">Montant</th>
-                        <th className="pb-3 px-2">Depuis</th>
-                        <th className="pb-3 pl-2">Ancienneté</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.retards.map((r: any, idx: number) => {
-                        let colorClass = "text-gray-500";
-                        if (r.joursRetard >= 90) {
-                          colorClass = "text-red-600 font-bold";
-                        } else if (r.joursRetard >= 60) {
-                          colorClass = "text-orange-500 font-semibold";
-                        } else if (r.joursRetard >= 30) {
-                          colorClass = "text-yellow-600";
-                        }
-                        
-                        return (
-                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                            <td className="py-3 pr-2 font-bold text-cshp-black">{r.membreNom}</td>
-                            <td className="py-3 px-2 text-cshp-gray">{getLabel(r.section) || r.section}</td>
-                            <td className="py-3 px-2 font-bold text-cshp-black">{formatMontant(r.montant)}</td>
-                            <td className="py-3 px-2 text-cshp-gray">
-                              {new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td className={`py-3 pl-2 ${colorClass}`}>
-                              {r.joursRetard} jours
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </Card>
           </div>
           
         </div>
+
+        {/* Section Donut Chart et Liste des retards en pleine largeur */}
+        <div className="space-y-6 mt-6">
+          <Card className="p-6">
+            <h3 className="text-sm font-bold text-cshp-gray tracking-wider mb-4 uppercase">
+              Répartition des revenus par section
+            </h3>
+            <div className="h-[350px] w-full">
+              <SectionPieChart sections={data.parSection} total={data.revenus.total} />
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-cshp-gray tracking-wider uppercase">Liste des retards</h3>
+                <p className="text-xs text-cshp-gray">Paiements de membres en statut retard cumulatif</p>
+              </div>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+                <select
+                  value={filtreSection}
+                  onChange={(e) => setFiltreSection(e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-cshp-red"
+                >
+                  <option value="TOUTES">Toutes les sections</option>
+                  {data.parSection.map((s: any) => (
+                    <option key={s.section} value={s.section}>
+                      {s.label || s.section}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  onClick={() => exportRetardsPDF(retardsFiltres)}
+                  variant="outline"
+                  className="h-8 text-xs px-2.5 min-h-0"
+                  disabled={retardsFiltres.length === 0}
+                  title="Télécharger PDF des retards visibles"
+                >
+                  PDF Retards
+                </Button>
+                <Button
+                  onClick={() => exportRetardsCSV(retardsFiltres)}
+                  variant="outline"
+                  className="h-8 text-xs px-2.5 min-h-0"
+                  disabled={retardsFiltres.length === 0}
+                  title="Exporter CSV des retards visibles"
+                >
+                  CSV Retards
+                </Button>
+              </div>
+            </div>
+
+            {/* Alerte globale sur les retards affichés */}
+            <div className={`p-4 rounded-xl border mb-6 font-bold text-sm flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center ${
+              retardsFiltres.length > 0 
+                ? 'bg-red-50 text-red-600 border-red-100' 
+                : 'bg-gray-50 text-gray-500 border-gray-100'
+            }`}>
+              <span>⚠️ {retardsFiltres.length} dossier(s) en retard affiché(s)</span>
+              <span>Total : {formatMontant(retardsFiltres.reduce((s, r) => s + r.montant, 0))}</span>
+            </div>
+            
+            <div className="overflow-x-auto w-full">
+              {retardsFiltres.length === 0 ? (
+                <p className="text-sm text-cshp-gray italic text-center py-4">Aucun retard signalé pour cette section.</p>
+              ) : (
+                <table className="w-full text-left text-sm border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-cshp-gray text-xs uppercase tracking-wider font-semibold">
+                      <th className="pb-3 pr-2">Membre</th>
+                      <th className="pb-3 px-2">Section</th>
+                      <th className="pb-3 px-2">Montant</th>
+                      <th className="pb-3 px-2">Depuis</th>
+                      <th className="pb-3 pl-2">Ancienneté</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {retardsFiltres.map((r: any, idx: number) => {
+                      let colorClass = "text-gray-500";
+                      if (r.joursRetard >= 90) {
+                        colorClass = "text-red-600 font-bold";
+                      } else if (r.joursRetard >= 60) {
+                        colorClass = "text-orange-500 font-semibold";
+                      } else if (r.joursRetard >= 30) {
+                        colorClass = "text-yellow-600";
+                      }
+                      
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-3 pr-2 font-bold text-cshp-black">{r.membreNom}</td>
+                          <td className="py-3 px-2 text-cshp-gray">{getLabel(r.section) || r.section}</td>
+                          <td className="py-3 px-2 font-bold text-cshp-black">{formatMontant(r.montant)}</td>
+                          <td className="py-3 px-2 text-cshp-gray">
+                            {new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td className={`py-3 pl-2 ${colorClass}`}>
+                            {r.joursRetard} jours
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </Card>
+        </div>
+      </>
       ) : null}
 
     </div>

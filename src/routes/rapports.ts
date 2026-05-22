@@ -104,6 +104,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
       include: {
         member: {
           select: {
+            id: true,
             firstName: true,
             lastName: true,
             sections: { select: { section: true } },
@@ -114,30 +115,81 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     });
 
     let encaisse = 0, enAttente = 0, enRetard = 0;
-    const sectionTotals: Record<string, number> = {};
+    const sectionStats: Record<string, {
+      encaisse: number;
+      enAttente: number;
+      enRetard: number;
+      membres: Set<string>;
+    }> = {};
 
     versements.forEach(v => {
       const s = v.member.sections?.[0]?.section || v.member.groupe || 'INCONNU';
       const isPaid = !!v.datePaiement;
       const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < today;
 
+      if (!sectionStats[s]) {
+        sectionStats[s] = {
+          encaisse: 0,
+          enAttente: 0,
+          enRetard: 0,
+          membres: new Set<string>()
+        };
+      }
+
+      if (v.member.id) {
+        sectionStats[s].membres.add(v.member.id);
+      }
+
       if (isPaid) {
         encaisse += v.montant;
-        sectionTotals[s] = (sectionTotals[s] || 0) + v.montant;
+        sectionStats[s].encaisse += v.montant;
       } else if (isLate) {
         enRetard += v.montant;
+        sectionStats[s].enRetard += v.montant;
       } else {
         enAttente += v.montant;
+        sectionStats[s].enAttente += v.montant;
       }
     });
 
     const total = encaisse + enAttente + enRetard;
     
-    const parSection = Object.entries(sectionTotals).map(([section, montant]) => ({
-      section,
-      montant,
-      pourcentage: total > 0 ? (montant / total) * 100 : 0
-    }));
+    // Récupérer les libellés de section réels depuis la base de données
+    const dbSections = await prisma.section.findMany({
+      where: { actif: true }
+    });
+    
+    const sectionLabels: Record<string, string> = {};
+    dbSections.forEach(s => {
+      sectionLabels[s.code] = s.label;
+    });
+
+    const defaultLabels: Record<string, string> = {
+      'KARATE_GR1': 'Karaté Gr. 1',
+      'KARATE_GR2': 'Karaté Gr. 2',
+      'KARATE_GR3': 'Karaté Gr. 3',
+      'JUDO_GR1': 'Judo Gr. 1',
+      'JUDO_GR2': 'Judo Gr. 2',
+      'JUDO_GR3': 'Judo Gr. 3',
+      'NINJAS_GR1': 'Ninjas Gr. 1',
+      'NINJAS_GR2': 'Ninjas Gr. 2',
+      'NINJAS_GR3': 'Ninjas Gr. 3',
+    };
+
+    const parSection = Object.entries(sectionStats).map(([section, stats]) => {
+      const label = sectionLabels[section] || defaultLabels[section] || section;
+      const montantTotal = stats.encaisse + stats.enAttente + stats.enRetard;
+      return {
+        section,
+        label,
+        montantTotal,
+        encaisse: stats.encaisse,
+        enAttente: stats.enAttente,
+        enRetard: stats.enRetard,
+        pourcentage: total > 0 ? (montantTotal / total) * 100 : 0,
+        nbMembres: stats.membres.size
+      };
+    });
 
     // 2. Présences
     const attendances = await prisma.attendance.findMany({
