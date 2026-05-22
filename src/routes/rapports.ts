@@ -90,9 +90,10 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     if (!from && !to && (mois || annee)) {
       const parsedMois  = parseInt(mois as string, 10) || new Date().getMonth() + 1;
       const parsedAnnee = parseInt(annee as string, 10) || new Date().getFullYear();
+      const modeCumulatif = req.query.cumul === 'true';
 
       const [revenus, charges] = await Promise.all([
-        getRevenusperiode(parsedMois, parsedAnnee),
+        getRevenusperiode(parsedMois, parsedAnnee, modeCumulatif),
         getChargesPeriode(parsedMois, parsedAnnee),
       ]);
 

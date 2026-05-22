@@ -63,6 +63,7 @@ interface FinancierData {
 export function Finances() {
   const [mois, setMois] = useState<number>(new Date().getMonth() + 1);
   const [annee, setAnnee] = useState<number>(new Date().getFullYear());
+  const [modeCumulatif, setModeCumulatif] = useState<boolean>(false);
   const [data, setData] = useState<FinancierData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +106,7 @@ export function Finances() {
     try {
       setLoading(true);
       setError(null);
-      const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}`);
+      const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}&cumul=${modeCumulatif}`);
       setData(res);
     } catch (err: any) {
       console.error(err);
@@ -117,7 +118,7 @@ export function Finances() {
 
   useEffect(() => {
     fetchFinancialReport();
-  }, [mois, annee]);
+  }, [mois, annee, modeCumulatif]);
 
   const openAddDepense = () => {
     setEditingDepense(null);
@@ -282,6 +283,33 @@ export function Finances() {
         </div>
       ) : data ? (
         <>
+          {/* Toggle for Cumulative view */}
+          <div className="flex items-center gap-3 mb-6 bg-white p-3 rounded-xl border border-gray-100 shadow-sm w-fit">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vue des impayés :</span>
+            <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-100">
+              <button
+                onClick={() => setModeCumulatif(false)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  !modeCumulatif
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-950 hover:bg-gray-100'
+                }`}
+              >
+                📅 Période seulement
+              </button>
+              <button
+                onClick={() => setModeCumulatif(true)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  modeCumulatif
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-950 hover:bg-gray-100'
+                }`}
+              >
+                📊 Cumul des impayés
+              </button>
+            </div>
+          </div>
+
           {/* Main Grid: Card 1, 2, 3, 4 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
@@ -307,6 +335,12 @@ export function Finances() {
                   <div className="bg-red-50/50 p-4 rounded-xl border border-red-100/50">
                     <span className="text-xs text-red-700 font-semibold block mb-1">⚠️ En retard</span>
                     <span className="text-lg md:text-xl font-bold text-red-800">{formatMontant(data.revenus.enRetard)}</span>
+                    <p className="text-[10px] text-gray-400 mt-1 lines-clamp-2">
+                      {modeCumulatif
+                        ? `Tous les impayés jusqu'au 31 ${months.find(m => m.value === mois)?.label || ''}`
+                        : `Impayés prévus en ${months.find(m => m.value === mois)?.label || ''} seulement`
+                      }
+                    </p>
                   </div>
                 </div>
               </div>

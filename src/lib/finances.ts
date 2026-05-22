@@ -56,47 +56,67 @@ export async function getChargesPeriode(mois: number, annee: number) {
 }
 
 // Revenus de la période depuis PaymentVersement
-export async function getRevenusperiode(mois: number, annee: number) {
+export async function getRevenusperiode(
+  mois: number,
+  annee: number,
+  modeCumulatif: boolean = false
+) {
   const debut = new Date(annee, mois - 1, 1);
   const fin   = new Date(annee, mois, 0, 23, 59, 59);
 
-  // Encaissé = datePaiement dans la période
+  // Encaissé = datePaiement dans la période (identique dans les 2 vues)
   const versementsEncaisses = await prisma.paymentVersement.findMany({
     where: { datePaiement: { gte: debut, lte: fin } },
     include: { member: { include: { sections: true } } }
   });
 
-  // En attente = datePrevue dans la période, sans datePaiement
+  // En attente = datePrevue dans la période, sans datePaiement (identique dans les 2 vues)
   const versementsAttente = await prisma.paymentVersement.findMany({
-    where: { datePrevue: { gte: debut, lte: fin }, datePaiement: null }
+    where: {
+      datePrevue: { gte: debut, lte: fin },
+      datePaiement: null
+    }
   });
 
-  // En retard = datePrevue passée, sans datePaiement
+  // En retard — ici la logique bifurque selon le mode
   const versementsRetard = await prisma.paymentVersement.findMany({
-    where: { datePrevue: { lt: new Date() }, datePaiement: null }
+    where: {
+      datePrevue: modeCumulatif
+        ? { lte: fin }          // Option B : tout ce qui est dû jusqu'à la fin de la période
+        : { gte: debut, lte: fin }, // Option A : seulement la période en cours
+      datePaiement: null,
+      // Exclure ceux déjà comptés dans "en attente"
+      // (en attente = datePrevue dans la période → chevauchement possible en Option B)
+    }
   });
 
-  const encaisse = versementsEncaisses.reduce((a, v) => a + v.montant, 0);
-  const enAttente = versementsAttente.reduce((a, v) => a + v.montant, 0);
-  const enRetard  = versementsRetard.reduce((a, v) => a + v.montant, 0);
-  const brut = encaisse + enAttente;
+  // En mode cumulatif, les retards incluent les versements de la période actuelle non payés
+  // → on déduplique : un versement est soit "en attente" soit "en retard", pas les deux
+  const idsAttente = new Set(versementsAttente.map(v => v.id));
+  const retardsFiltres = versementsRetard.filter(v => !idsAttente.has(v.id));
 
-  const tpsPercue  = encaisse / DIVISEUR_TAXES * TPS_RATE;
-  const tvqPercue  = encaisse / DIVISEUR_TAXES * TVQ_RATE;
+  const encaisse  = versementsEncaisses.reduce((a, v) => a + v.montant, 0);
+  const enAttente = versementsAttente.reduce((a, v) => a + v.montant, 0);
+  const enRetard  = retardsFiltres.reduce((a, v) => a + v.montant, 0);
+  const brut      = encaisse + enAttente;
+
+  const tpsPercue = encaisse / DIVISEUR_TAXES * TPS_RATE;
+  const tvqPercue = encaisse / DIVISEUR_TAXES * TVQ_RATE;
 
   return {
-    brut:               Math.round(brut * 100) / 100,
-    encaisse:           Math.round(encaisse * 100) / 100,
-    enAttente:          Math.round(enAttente * 100) / 100,
-    enRetard:           Math.round(enRetard * 100) / 100,
-    tauxRecouvrement:   brut > 0 ? Math.round((encaisse / brut) * 10000) / 100 : 0,
+    modeCumulatif,
+    brut:             Math.round(brut * 100) / 100,
+    encaisse:         Math.round(encaisse * 100) / 100,
+    enAttente:        Math.round(enAttente * 100) / 100,
+    enRetard:         Math.round(enRetard * 100) / 100,
+    tauxRecouvrement: brut > 0 ? Math.round((encaisse / brut) * 10000) / 100 : 0,
     taxes: {
-      tpsPercue:        Math.round(tpsPercue * 100) / 100,
-      tvqPercue:        Math.round(tvqPercue * 100) / 100,
-      totalPercues:     Math.round((tpsPercue + tvqPercue) * 100) / 100,
-      tpsAPayer:        Math.round(tpsPercue * 100) / 100,
-      tvqAPayer:        Math.round(tvqPercue * 100) / 100,
-      totalAPayer:      Math.round((tpsPercue + tvqPercue) * 100) / 100,
+      tpsPercue:    Math.round(tpsPercue * 100) / 100,
+      tvqPercue:    Math.round(tvqPercue * 100) / 100,
+      totalPercues: Math.round((tpsPercue + tvqPercue) * 100) / 100,
+      tpsAPayer:    Math.round(tpsPercue * 100) / 100,
+      tvqAPayer:    Math.round(tvqPercue * 100) / 100,
+      totalAPayer:  Math.round((tpsPercue + tvqPercue) * 100) / 100,
     },
     detail: versementsEncaisses
   };
