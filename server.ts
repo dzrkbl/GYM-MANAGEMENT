@@ -207,7 +207,7 @@ Alice,Nacib,2015-07-21,F,,aitlynda1@gmail.com,,514 894-5560,samirnacib@gmail.com
 Chiraz,Nehal,2010-12-07,F,,,,514 702-1983,kerbouadallel@gmail.com,INACTIF,KARATE_GR2,TRIMESTRIEL,250.00,false,,,,250.00,2026-03-26,2026-06-26,Orange,,,
 Jaysen Karl,Pierre Saint,,M,,,,514 358-2663,annethergine@hotmail.com,EN_ATTENTE,KARATE_GR1,ANNUEL,790.00,false,,,,790.00,2025-10-07,2026-10-07,Blanche,,,
 Philippe,Potlog,2017-11-11,M,,,,514-467-3482,apotlog@icloud.com,EN_ATTENTE,KARATE_GR1,ANNUEL,790.00,false,,,,790.00,2025-10-03,2026-10-03,Blanche,,,
-Léa,Rachedi,2013-01-29,F,,,,,514 586-3027,fadialgani@gmail.com,ACTIF,KARATE_GR2,ANNUEL,790.00,false,,,,740.00,2026-02-07,2027-02-07,Bleue,,,
+Léa,Rachedi,2013-01-29,F,,,,514 586-3027,fadialgani@gmail.com,ACTIF,,ANNUEL,790,false,,,,790,2025-02-07,2026-02-07,Bleue,,,
 Alice,Rahmani,2017-04-29,F,,,,514 559-2399,haddou.katia@yahoo.com,INACTIF,KARATE_GR1,TRIMESTRIEL,250.00,false,,,,250.00,2026-04-29,2026-07-29,Jaune,RETRAIT 10$ pour prochain paiement 29-04-2026,,
 Rafael,Ribeiro,2018-01-12,M,,,,514 688-1460,paolaasencio.e@gmail.com,INACTIF,KARATE_GR1,ANNUEL,790.00,false,,,,790.00,2025-09-28,2026-09-28,Blanche,,,
 Robert,Rosca,2019-03-26,M,,,,438 990-1388,sasha.ro@gmail.com,EN_ATTENTE,KARATE_GR1,ANNUEL,790.00,false,,,,790.00,2025-09-15,2026-09-15,Blanche,,,
