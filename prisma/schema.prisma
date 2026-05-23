@@ -41,6 +41,7 @@ model Member {
   notes         String?
   parentName    String?         // Pour les mineurs
   parentPhone   String?         // Pour les mineurs
+  parentEmail    String?         // Courriel du parent pour les mineurs
   currentBelt   String?         @default("BLANCHE")
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
