@@ -80,6 +80,19 @@ app.get('/api/email-test', async (req, res) => {
   }
 });
 
+app.get('/api/test-email', async (req, res) => {
+  try {
+    await sendEmail({
+      to: 'payements@centresportifhp.com',
+      subject: 'Test SMTP CSHP ✅',
+      html: '<p>Le système de courriel fonctionne correctement.</p>',
+    });
+    res.json({ success: true, message: 'Courriel envoyé ✅' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/cron/reminders', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
