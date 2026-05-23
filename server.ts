@@ -128,11 +128,23 @@ app.get('/api/seed-karate', async (req, res) => {
     const examinatorId = adminUser.id;
 
     // Stat tracking objects
-    let stats = {
-      members: { inserted: 0, skipped: 0, errors: 0 },
-      memberSections: { inserted: 0, skipped: 0, errors: 0 },
-      grades: { inserted: 0, skipped: 0, errors: 0 },
-      payments: { inserted: 0, skipped: 0, errors: 0 }
+    interface StatDetail {
+      inserted: number;
+      skipped: number;
+      errors: number;
+      errorDetails: Array<{ name: string; error: string }>;
+    }
+
+    let stats: {
+      members: StatDetail;
+      memberSections: StatDetail;
+      grades: StatDetail;
+      payments: StatDetail;
+    } = {
+      members: { inserted: 0, skipped: 0, errors: 0, errorDetails: [] },
+      memberSections: { inserted: 0, skipped: 0, errors: 0, errorDetails: [] },
+      grades: { inserted: 0, skipped: 0, errors: 0, errorDetails: [] },
+      payments: { inserted: 0, skipped: 0, errors: 0, errorDetails: [] }
     };
 
     const MEMBERS_CSV = `Massil,Abbout,2018-08-20,M,,lynda.younsi3@gmail.com,,438 506-1592,mohammed_abbout_2023@outlook.com,ACTIF,KARATE_GR1,ANNUEL,790.00,false,Axil Abbout,,,790.00,2025-12-14,2026-12-14,Blanche,,,
@@ -542,9 +554,13 @@ Ethan Vince Jared Zerbo,1,250.00,2026-07-09,2026-07-09,,`;
 
         memberIdMap.set(keyName, created.id);
         stats.members.inserted++;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error member:', keyName, err);
         stats.members.errors++;
+        stats.members.errorDetails.push({
+          name: keyName,
+          error: err?.message || String(err)
+        });
       }
     }
 
@@ -584,9 +600,13 @@ Ethan Vince Jared Zerbo,1,250.00,2026-07-09,2026-07-09,,`;
           }
         });
         stats.memberSections.inserted++;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error section:', fullName, err);
         stats.memberSections.errors++;
+        stats.memberSections.errorDetails.push({
+          name: fullName,
+          error: err?.message || String(err)
+        });
       }
     }
 
@@ -636,9 +656,13 @@ Ethan Vince Jared Zerbo,1,250.00,2026-07-09,2026-07-09,,`;
           }
         });
         stats.grades.inserted++;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error grade:', fullName, err);
         stats.grades.errors++;
+        stats.grades.errorDetails.push({
+          name: fullName,
+          error: err?.message || String(err)
+        });
       }
     }
 
@@ -694,9 +718,13 @@ Ethan Vince Jared Zerbo,1,250.00,2026-07-09,2026-07-09,,`;
         });
 
         stats.payments.inserted++;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error versement:', fullName, err);
         stats.payments.errors++;
+        stats.payments.errorDetails.push({
+          name: fullName,
+          error: err?.message || String(err)
+        });
       }
     }
 
