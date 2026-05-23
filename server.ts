@@ -107,6 +107,23 @@ app.get('/api/reset-db', async (req, res) => {
   }
 });
 
+app.get('/api/fix-status', async (req, res) => {
+  try {
+    const output = await prisma.member.updateMany({
+      data: { status: 'ACTIF' }
+    });
+    res.json({
+      success: true,
+      updatedCount: output.count
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/seed-karate', async (req, res) => {
   try {
     // 1. Get or create Examiner
@@ -506,7 +523,7 @@ Ethan Vince Jared Zerbo,1,250.00,2026-07-09,2026-07-09,,`;
         const parentName = parts[6]?.trim() || null;
         const parentPhone = parts[7]?.trim() || null;
         const parentEmail = parts[8]?.trim() || null;
-        const status = parts[9]?.trim() || 'ACTIF';
+        const status = 'ACTIF';
         const groupe = parts[10]?.trim() || null;
         const planStr = parts[11]?.trim();
         const plan = (planStr === 'ANNUEL' || planStr === 'TRIMESTRIEL' || planStr === 'MENSUEL') ? planStr : null;
