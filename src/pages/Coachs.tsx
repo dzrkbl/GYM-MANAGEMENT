@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant } from '../lib/format';
+import { formatMontant, formatDateLocal } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
@@ -132,7 +132,7 @@ export function Coachs() {
               <div className="flex justify-between items-end border-t border-gray-100 pt-3 mt-2">
                 {c.actif ? <Badge variant="success">✅ Actif</Badge> : <Badge variant="danger">Inactif</Badge>}
                 <span className="text-xs text-cshp-gray">
-                  Depuis {new Date(c.dateDebut).toLocaleDateString('fr-CA')}
+                  Depuis {formatDateLocal(c.dateDebut)}
                 </span>
               </div>
             </Card>

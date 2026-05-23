@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant } from '../lib/format';
+import { formatMontant, formatDateLocal } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
@@ -313,7 +313,7 @@ export function Rapports() {
     
     doc.setFontSize(11);
     doc.text(`Période : Du ${dateRange.from} au ${dateRange.to}`, 14, 28);
-    doc.text(`Édité le : ${new Date().toLocaleDateString('fr-CA')}`, 14, 34);
+    doc.text(`Édité le : ${formatDateLocal(new Date())}`, 14, 34);
     
     let yPos = 45;
 
@@ -404,7 +404,7 @@ export function Rapports() {
           r.membreNom, 
           getLabel(r.section) || r.section, 
           formatMontant(r.montant),
-          new Date(r.date).toLocaleDateString('fr-CA'),
+          formatDateLocal(r.date),
           `${r.joursRetard} jours`
         ]),
         theme: 'grid'
@@ -430,8 +430,8 @@ export function Rapports() {
           const firstName = r.member?.firstName ?? '';
           const nom = `${lastName} ${firstName}`.replace(/"/g, '""');
           const section = r.subscription?.section || '';
-          const due = new Date(r.dueDate).toLocaleDateString('fr-CA');
-          const paid = r.paidDate ? new Date(r.paidDate).toLocaleDateString('fr-CA') : '';
+          const due = formatDateLocal(r.dueDate);
+          const paid = r.paidDate ? formatDateLocal(r.paidDate) : '';
           csvContent += `"${r.id}","${nom}","${section}","${r.amount}","${r.status}","${due}","${paid}"\n`;
         });
       } else if (type === 'PRESENCES') {
@@ -441,7 +441,7 @@ export function Rapports() {
           const firstName = r.member?.firstName ?? '';
           const nom = `${lastName} ${firstName}`.replace(/"/g, '""');
           const section = r.course?.section || '';
-          const date = new Date(r.date).toLocaleDateString('fr-CA');
+          const date = formatDateLocal(r.date);
           csvContent += `"${r.id}","${nom}","${section}","${date}","${r.status}"\n`;
         });
       }
@@ -475,7 +475,7 @@ export function Rapports() {
       ? 'Toutes les sections'
       : (data.parSection.find((s: any) => s.section === filtreSection)?.label || filtreSection);
     doc.text(`Section : ${sectionLabel}`, 14, 28);
-    doc.text(`Édité le : ${new Date().toLocaleDateString('fr-CA')}`, 14, 34);
+    doc.text(`Édité le : ${formatDateLocal(new Date())}`, 14, 34);
     doc.text(`${retards.length} dossier(s) · Total : ${formatMontant(retards.reduce((s, r) => s + r.montant, 0))}`, 14, 40);
     
     autoTable(doc, {
@@ -485,7 +485,7 @@ export function Rapports() {
         r.membreNom,
         getLabel(r.section) || r.section,
         formatMontant(r.montant),
-        new Date(r.date).toLocaleDateString('fr-CA'),
+        formatDateLocal(r.date),
         `${r.joursRetard} jours`
       ]),
       theme: 'grid',
@@ -498,7 +498,7 @@ export function Rapports() {
     let csv = '\uFEFF';
     csv += 'Membre,Section,Montant,Depuis,Ancienneté (jours)\n';
     retards.forEach(r => {
-      csv += `"${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${new Date(r.date).toLocaleDateString('fr-CA')}","${r.joursRetard}"\n`;
+      csv += `"${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${formatDateLocal(r.date)}","${r.joursRetard}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1054,7 +1054,7 @@ export function Rapports() {
                           <td className="py-3 px-2 text-cshp-gray">{getLabel(r.section) || r.section}</td>
                           <td className="py-3 px-2 font-bold text-cshp-black">{formatMontant(r.montant)}</td>
                           <td className="py-3 px-2 text-cshp-gray">
-                            {new Date(r.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {formatDateLocal(r.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                           </td>
                           <td className={`py-3 pl-2 ${colorClass}`}>
                             {r.joursRetard} jours

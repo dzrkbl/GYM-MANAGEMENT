@@ -11,6 +11,7 @@ import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
 import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
+import { formatDateLocal } from '../lib/format';
 
 export function Membres() {
   const { user } = useAuth();
@@ -233,6 +234,7 @@ export function Membres() {
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">
+                  <th className="py-3 px-4 w-16">#</th>
                   <th className="py-3 px-4">Nom</th>
                   <th className="py-3 px-4">Prénom</th>
                   <th className="py-3 px-4">Groupe</th>
@@ -246,7 +248,7 @@ export function Membres() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {members.map(member => {
+                {members.map((member, index) => {
                   const paiement = getPaiementStatus(member);
                   const totalPaid = (member.versements || [])
                     .filter((v: any) => v.datePaiement)
@@ -259,6 +261,9 @@ export function Membres() {
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
                       onClick={() => navigate(`/membres/${member.id}`)}
                     >
+                      <td className="py-3.5 px-4 font-mono text-gray-500 font-semibold">
+                        {String(index + 1).padStart(3, '0')}
+                      </td>
                       <td className="py-3.5 px-4 font-bold text-gray-900 uppercase">
                         {member.lastName}
                       </td>
@@ -288,7 +293,7 @@ export function Membres() {
                       </td>
                       <td className="py-3.5 px-4 text-xs font-semibold text-gray-600">
                         {member.finContrat 
-                          ? new Date(member.finContrat).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+                          ? formatDateLocal(member.finContrat)
                           : '-'
                         }
                       </td>

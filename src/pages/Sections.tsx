@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { Plus, Edit3, Archive, ArrowUpDown } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
+import { formatDateLocal } from '../lib/format';
 
 interface Section {
   id: string;
@@ -188,7 +189,7 @@ export function Sections() {
               <div className="flex justify-between items-center border-t border-gray-100 pt-3">
                 <Badge variant="success">✅ Active</Badge>
                 <span className="text-[10px] text-cshp-gray">
-                  Créée le {new Date(s.createdAt).toLocaleDateString('fr-CA')}
+                  Créée le {formatDateLocal(s.createdAt)}
                 </span>
               </div>
             </Card>

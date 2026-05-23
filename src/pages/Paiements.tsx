@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant, formatDate } from '../lib/format';
+import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
@@ -283,7 +283,7 @@ export function Paiements() {
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>
-                    {p.status === 'PAYÉ' && <Badge variant="success">✅ Payé le {new Date(p.paidDate || p.dueDate).toLocaleDateString('fr-CA')}</Badge>}
+                    {p.status === 'PAYÉ' && <Badge variant="success">✅ Payé le {formatDateLocal(p.paidDate || p.dueDate)}</Badge>}
                     {p.status === 'EN_ATTENTE' && <Badge variant="warning">⏳ En attente</Badge>}
                     {p.status === 'EN_RETARD' && <Badge variant="danger">🔴 En retard</Badge>}
                   </div>

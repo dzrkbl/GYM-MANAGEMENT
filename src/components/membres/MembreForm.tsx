@@ -7,6 +7,7 @@ import { createMembre, updateMembre, apiFetch } from '../../lib/api';
 import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../../lib/tarifs';
 import { User, CreditCard, ChevronRight, ChevronLeft, Plus, Trash, Search, Check, AlertCircle } from 'lucide-react';
 import { useSections } from '../../hooks/useSections';
+import { formatDateLocal } from '../../lib/format';
 
 interface MembreFormProps {
   membre?: any; // Si fourni, on est en mode édition
@@ -549,7 +550,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
               <div>
                 <label className="block text-sm font-medium text-cshp-black mb-1">Date fin de contrat auto</label>
                 <div className="w-full min-h-[44px] border border-gray-200 bg-gray-50 rounded-lg px-3 flex items-center text-gray-700 text-sm font-medium">
-                  {finContratCalculated.toLocaleDateString('fr-FR')}
+                  {formatDateLocal(finContratCalculated)}
                 </div>
               </div>
             </div>
@@ -875,7 +876,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 <p>• Groupe : <strong className="text-gray-900">{getLabel(groupe) || groupe}</strong> (Ceinture : {belt})</p>
                 <p>• Plan : <strong className="text-gray-900">{plan}</strong> ({montantFinalCalculated.toFixed(2)} $)</p>
                 <p>• Échéances : <strong className="text-slate-800">{versements.length} versement(s)</strong></p>
-                <p>• Fin de contrat : <strong className="text-gray-900">{finContratCalculated.toLocaleDateString('fr-FR')}</strong></p>
+                <p>• Fin de contrat : <strong className="text-gray-900">{formatDateLocal(finContratCalculated)}</strong></p>
               </div>
             </div>
           </div>

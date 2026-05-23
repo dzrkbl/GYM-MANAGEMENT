@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch, payerVersement } from '../lib/api';
-import { formatMontant, formatDate } from '../lib/format';
+import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -293,13 +293,13 @@ export function MembreDetail() {
               <div className="space-y-1">
                 <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de début</span>
                 <span className="text-gray-800 font-semibold text-sm">
-                  {member.dateInscription ? new Date(member.dateInscription).toLocaleDateString('fr-FR') : '-'}
+                  {member.dateInscription ? formatDateLocal(member.dateInscription) : '-'}
                 </span>
               </div>
               <div className="space-y-1">
                 <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de fin d'adhésion</span>
                 <span className="text-gray-800 font-bold text-cshp-red text-sm">
-                  {member.finContrat ? new Date(member.finContrat).toLocaleDateString('fr-FR') : 'Indéfinie'}
+                  {member.finContrat ? formatDateLocal(member.finContrat) : 'Indéfinie'}
                 </span>
               </div>
             </div>
@@ -344,7 +344,7 @@ export function MembreDetail() {
                       {g.note && <p className="text-xs italic text-gray-600 mt-1">"{g.note}"</p>}
                     </div>
                     <span className="text-xs font-semibold text-gray-400 shrink-0">
-                      {new Date(g.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {formatDateLocal(g.date, { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
                 ))}
@@ -421,10 +421,10 @@ export function MembreDetail() {
                         </div>
 
                         <div className="text-xs text-gray-500 space-y-1">
-                          <p>Échéance prévue : <strong>{new Date(v.datePrevue).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
+                          <p>Échéance prévue : <strong>{formatDateLocal(v.datePrevue, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
                           {isPaid && (
                             <div className="bg-slate-100/60 text-slate-700 p-2 rounded-lg mt-2 text-[11px] font-medium border border-slate-200/50">
-                              Paid on {new Date(v.datePaiement).toLocaleDateString('fr-FR')} via <span className="uppercase font-bold">{v.methodePaiement}</span>
+                              Paid on {formatDateLocal(v.datePaiement) || '-'} via <span className="uppercase font-bold">{v.methodePaiement}</span>
                               {v.note && <span className="block mt-0.5 text-gray-500 italic">"Note: {v.note}"</span>}
                             </div>
                           )}
@@ -479,7 +479,7 @@ export function MembreDetail() {
                     .map((a, i) => (
                       <div key={i} className="text-xs sm:text-sm bg-white border rounded-lg p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
                         <span className="font-bold text-gray-800">
-                          {new Date(a.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                          {formatDateLocal(a.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </span>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.groupe}</span>
@@ -565,7 +565,7 @@ export function MembreDetail() {
                         <p className="font-bold text-gray-900 uppercase">
                           {p.lastName} <span className="capitalize font-medium text-gray-600">{p.firstName}</span>
                         </p>
-                        <p className="text-[10px] text-gray-500 uppercase">Inscrit le {new Date(p.dateInscription || p.createdAt).toLocaleDateString('fr-FR')}</p>
+                        <p className="text-[10px] text-gray-500 uppercase">Inscrit le {formatDateLocal(p.dateInscription || p.createdAt)}</p>
                       </div>
                       
                       <div className="text-right">
