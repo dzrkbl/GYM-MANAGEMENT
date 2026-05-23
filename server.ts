@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { exec } from 'child_process';
 
 // Routers
 import authRouter from './src/routes/auth';
@@ -59,6 +60,50 @@ app.get('/api/debug-coaches', async (req, res) => {
     res.json(coaches);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/reset-db', async (req, res) => {
+  try {
+    // 1. Delete PaymentVersement
+    const deletedPaymentVersements = await prisma.paymentVersement.deleteMany();
+    
+    // 2. Delete Grade
+    const deletedGrades = await prisma.grade.deleteMany();
+    
+    // 3. Delete MemberSection
+    const deletedMemberSections = await prisma.memberSection.deleteMany();
+    
+    // 4. Delete Payment
+    const deletedPayments = await prisma.payment.deleteMany();
+    
+    // 5. Delete Subscription
+    const deletedSubscriptions = await prisma.subscription.deleteMany();
+    
+    // 6. Delete Attendance
+    const deletedAttendances = await prisma.attendance.deleteMany();
+    
+    // 7. Delete Member
+    const deletedMembers = await prisma.member.deleteMany();
+
+    res.json({
+      success: true,
+      message: 'Base de données réinitialisée avec succès.',
+      deleted: {
+        PaymentVersement: deletedPaymentVersements.count,
+        Grade: deletedGrades.count,
+        MemberSection: deletedMemberSections.count,
+         Payment: deletedPayments.count,
+        Subscription: deletedSubscriptions.count,
+        Attendance: deletedAttendances.count,
+        Member: deletedMembers.count
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
@@ -194,6 +239,21 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server is running on port ${PORT}`);
+
+    // Run database migrations in the background so they don't block port-binding/health checks
+    if (process.env.DATABASE_URL) {
+      console.log('⏳ Running database migrations in the background...');
+      exec('npx prisma migrate deploy', (error, stdout, stderr) => {
+        if (error) {
+          console.error(`❌ Migration error: ${error.message}`);
+          return;
+        }
+        if (stderr) {
+          console.warn(`⚠️ Migration stderr: ${stderr}`);
+        }
+        console.log(`✅ Migrations completed successfully:\n${stdout}`);
+      });
+    }
   });
 }
 
