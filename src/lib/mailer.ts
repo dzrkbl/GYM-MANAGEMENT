@@ -1,29 +1,17 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  requireTLS: true,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function sendEmail({
-  to,
-  subject,
-  html,
-}: {
+export async function sendEmail({ to, subject, html }: {
   to: string;
   subject: string;
   html: string;
 }) {
-  return transporter.sendMail({
-    from: process.env.SMTP_FROM,
+  const { error } = await resend.emails.send({
+    from: 'CSHP <payements@centresportifhp.com>',
     to,
     subject,
     html,
   });
+  if (error) throw new Error(error.message);
 }
