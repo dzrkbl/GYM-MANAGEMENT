@@ -124,6 +124,69 @@ app.get('/api/fix-status', async (req, res) => {
   }
 });
 
+app.get('/api/debug-sections', async (req, res) => {
+  try {
+    const totalMembers = await prisma.member.count();
+    
+    // 1. Members with at least one MemberSection relation
+    const countWithAtLeastOneSection = await prisma.member.count({
+      where: {
+        sections: { some: {} }
+      }
+    });
+    
+    // Group by MemberSection relation
+    const memberSectionsGrouped = await prisma.memberSection.groupBy({
+      by: ['section'],
+      _count: {
+        memberId: true
+      }
+    });
+    
+    // 2. Members with the direct 'groupe' field populated
+    const countWithGroupeField = await prisma.member.count({
+      where: {
+        groupe: { not: null }
+      }
+    });
+    
+    // Group by Member.groupe field
+    const memberGroupeGrouped = await prisma.member.groupBy({
+      by: ['groupe'],
+      _count: {
+        id: true
+      },
+      where: {
+        groupe: { not: null }
+      }
+    });
+
+    res.json({
+      success: true,
+      totalMembers,
+      memberSections: {
+        count: countWithAtLeastOneSection,
+        grouped: memberSectionsGrouped.map((g: any) => ({
+          section: g.section,
+          count: g._count.memberId
+        }))
+      },
+      memberGroupeField: {
+        count: countWithGroupeField,
+        grouped: memberGroupeGrouped.map((g: any) => ({
+          groupe: g.groupe,
+          count: g._count.id
+        }))
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/seed-karate', async (req, res) => {
   try {
     // 1. Get or create Examiner

@@ -70,7 +70,12 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const members = await prisma.member.findMany({
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIVE' } }),
-        ...(filterSection ? { sections: { some: { section: filterSection } } } : {}),
+        ...(filterSection ? {
+          OR: [
+            { groupe: filterSection },
+            { sections: { some: { section: filterSection } } }
+          ]
+        } : {}),
       },
       include: { sections: true, versements: true },
       orderBy: { lastName: 'asc' },

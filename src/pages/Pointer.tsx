@@ -41,7 +41,8 @@ export function Pointer() {
       setIsLoadingCourses(true);
       setError('');
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
         const fetchedCourses = await apiFetch<Course[]>(`/cours?date=${todayStr}`);
         setCourses(fetchedCourses);
       } catch (err: any) {
@@ -126,7 +127,8 @@ export function Pointer() {
     setSuccessMessage('');
 
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const res = await apiFetch<{ pointed: number; skipped: number }>('/presences/pointer', {
         method: 'POST',
         body: JSON.stringify({

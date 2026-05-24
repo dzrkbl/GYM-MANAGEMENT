@@ -22,4 +22,3 @@ export function formatDateLocal(
 export function formatDate(dateString: string | Date | null | undefined): string {
   return formatDateLocal(dateString);
 }
-
