@@ -39,8 +39,7 @@ export function GradeForm({ memberId, memberSection, currentBelt, onSubmit, onCa
     async function loadCoachs() {
       try {
         const data = await apiFetch<any[]>('/coachs');
-        const sectionCoachs = data.filter(c => c.section === 'TOUS' || c.section === memberSection);
-        setCoachs(sectionCoachs);
+        setCoachs(data || []);
       } catch (err) {
         console.error("Erreur coachs", err);
       } finally {

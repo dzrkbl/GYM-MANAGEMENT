@@ -10,9 +10,11 @@ import { Badge } from '../components/ui/Badge';
 import { CoachForm } from '../components/forms/CoachForm';
 import { Plus, UserCircle, Edit3 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
+import { useSections } from '../hooks/useSections';
 
 export function Coachs() {
   const { user } = useAuth();
+  const { getLabel } = useSections();
   
   if (user?.role !== 'ADMIN') {
     return <Navigate to="/dashboard" replace />;
@@ -105,7 +107,9 @@ export function Coachs() {
                         {c.lastName} {c.firstName}
                       </h3>
                       <p className="text-sm text-cshp-gray">
-                        {c.section || 'Toutes sections'} · {c.role === 'SECTION_MANAGER' ? 'Section Manager' : 'Coach'}
+                        {c.section 
+                          ? c.section.split(',').map((s: string) => s.trim() === 'U8' ? 'Ninjas' : getLabel(s.trim())).join(', ') 
+                          : 'Toutes sections'} · {c.role === 'SECTION_MANAGER' ? 'Section Manager' : 'Coach'}
                       </p>
                     </div>
                   </div>

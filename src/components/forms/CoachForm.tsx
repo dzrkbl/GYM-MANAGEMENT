@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { useSections } from '../../hooks/useSections';
 
 interface CoachFormProps {
   initialData?: any;
@@ -10,17 +11,24 @@ interface CoachFormProps {
 }
 
 export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachFormProps) {
+  const { sections, isLoading: sectionsLoading } = useSections();
+
   const [formData, setFormData] = useState({
     firstName: initialData?.firstName || '',
     lastName: initialData?.lastName || '',
     email: initialData?.email || '',
     phone: initialData?.phone || '',
     role: initialData?.role || 'COACH',
-    section: initialData?.section || 'TOUS',
     remuneration: initialData?.remuneration || 0,
     actif: initialData?.actif ?? true,
     dateDebut: initialData?.dateDebut ? initialData.dateDebut.split('T')[0] : new Date().toISOString().split('T')[0],
     note: initialData?.note || ''
+  });
+
+  const [selectedSections, setSelectedSections] = useState<string[]>(() => {
+    if (!initialData?.section) return [];
+    if (initialData.section === 'TOUS') return [];
+    return initialData.section.split(',').map((s: string) => s.trim()).filter(Boolean);
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -33,9 +41,20 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
     setFormData(prev => ({ ...prev, [name]: parsedValue }));
   };
 
+  const handleSectionToggle = (sectionCode: string) => {
+    setSelectedSections(prev => {
+      if (prev.includes(sectionCode)) {
+        return prev.filter(s => s !== sectionCode);
+      } else {
+        return [...prev, sectionCode];
+      }
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { ...formData, section: formData.section === 'TOUS' ? null : formData.section };
+    const sectionVal = selectedSections.length > 0 ? selectedSections.join(',') : null;
+    const payload = { ...formData, section: sectionVal };
     await onSubmit(payload);
   };
 
@@ -65,20 +84,34 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
           </select>
         </div>
         <div>
-          <label className="block mb-1 text-sm font-medium text-cshp-black">Section</label>
-          <select 
-            name="section" 
-            value={formData.section} 
-            onChange={handleChange}
-            className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
-          >
-            <option value="TOUS">Toutes sections</option>
-            <option value="KARATE">Karaté</option>
-            <option value="JUDO">Judo</option>
-            <option value="U8">U8</option>
-            <option value="TAEKWONDO">Taekwondo</option>
-            <option value="KICKBOXING">Kickboxing</option>
-          </select>
+          <label className="block mb-1 text-sm font-medium text-cshp-black">Sections (Multi-sélection) *</label>
+          <div className="flex flex-wrap gap-2 border border-gray-300 p-3 rounded-lg bg-white min-h-[44px]">
+            {sectionsLoading ? (
+              <span className="text-sm text-gray-500">Chargement...</span>
+            ) : sections.length === 0 ? (
+              <span className="text-sm text-gray-500">Aucune section</span>
+            ) : (
+              sections.map(s => {
+                const isSelected = selectedSections.includes(s.code);
+                const displayLabel = s.code === 'U8' ? 'Ninjas' : s.label;
+                return (
+                  <button
+                    type="button"
+                    key={s.code}
+                    onClick={() => handleSectionToggle(s.code)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      isSelected
+                        ? 'bg-cshp-red text-white border-cshp-red'
+                        : 'bg-white text-cshp-gray border-gray-300 hover:bg-gray-100'
+                    }`}
+                  >
+                    {displayLabel}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <p className="text-xs text-cshp-gray mt-1">Sélectionnez une ou plusieurs sections.</p>
         </div>
       </div>
 

@@ -35,8 +35,12 @@ export function useSections() {
     };
   }, []);
 
-  const getLabel = (code: string) =>
-    sections.find(s => s.code === code)?.label || code;
+  const getLabel = (code: string) => {
+    if (code === 'U8') return 'Ninjas';
+    const s = sections.find(s => s.code === code);
+    if (s?.code === 'U8' || s?.label === 'U8') return 'Ninjas';
+    return s?.label || code;
+  };
 
   const codes = sections.map(s => s.code);
 

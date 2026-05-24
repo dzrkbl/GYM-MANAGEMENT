@@ -157,7 +157,7 @@ export function MembreForm({ initialData, onSubmit, onCancel, isLoading }: Membr
                   : 'bg-white text-cshp-gray border-gray-300 hover:bg-gray-100'
               }`}
             >
-              {sec}
+              {sec === 'U8' ? 'Ninjas' : sec}
             </button>
           ))}
         </div>
@@ -166,7 +166,7 @@ export function MembreForm({ initialData, onSubmit, onCancel, isLoading }: Membr
           <div className="pt-3 space-y-3 border-t border-gray-200 mt-3">
             {Object.keys(selectedSections).map(sec => (
               <div key={sec} className="flex gap-4 items-center">
-                <span className="w-24 text-sm font-medium text-cshp-black">{sec}</span>
+                <span className="w-24 text-sm font-medium text-cshp-black">{sec === 'U8' ? 'Ninjas' : sec}</span>
                 <select
                   value={selectedSections[sec]}
                   onChange={(e) => handleBeltChange(sec, e.target.value)}
