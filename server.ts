@@ -187,6 +187,56 @@ app.get('/api/debug-sections', async (req, res) => {
   }
 });
 
+app.get('/api/fix-member-sections', async (req, res) => {
+  try {
+    const members = await prisma.member.findMany({
+      where: {
+        groupe: { not: null }
+      }
+    });
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const member of members) {
+      const sectionName = member.groupe!;
+      const existing = await prisma.memberSection.findUnique({
+        where: {
+          memberId_section: {
+            memberId: member.id,
+            section: sectionName
+          }
+        }
+      });
+
+      if (!existing) {
+        await prisma.memberSection.create({
+          data: {
+            memberId: member.id,
+            section: sectionName,
+            belt: member.currentBelt || "Blanche"
+          }
+        });
+        created++;
+      } else {
+        skipped++;
+      }
+    }
+
+    res.json({
+      success: true,
+      created,
+      skipped,
+      total: members.length
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.get('/api/seed-karate', async (req, res) => {
   try {
     // 1. Get or create Examiner
