@@ -330,7 +330,13 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
     }));
     const versementsData = schema.parse(req.body);
 
-    await prisma.paymentVersement.deleteMany({ where: { membreId: id } });
+    // Supprimer seulement les versements NON payés
+    await prisma.paymentVersement.deleteMany({
+      where: {
+        membreId: id,
+        datePaiement: null  // ← protège les versements déjà encaissés
+      }
+    });
     const created = await prisma.member.update({
       where: { id },
       data: {

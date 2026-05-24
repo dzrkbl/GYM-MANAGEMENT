@@ -18,6 +18,7 @@ const getRevenusForMonth = async (year: number, month: number) => {
       montant: true,
       member: {
         select: {
+          groupe: true,
           sections: { select: { section: true } }
         }
       }
@@ -27,7 +28,7 @@ const getRevenusForMonth = async (year: number, month: number) => {
   const total = versements.reduce((sum, v) => sum + v.montant, 0);
 
   const bySection = versements.reduce((acc, v) => {
-    const s = v.member?.sections?.[0]?.section || 'INCONNU';
+    const s = v.member?.groupe || v.member?.sections?.[0]?.section || 'INCONNU';
     acc[s] = (acc[s] || 0) + v.montant;
     return acc;
   }, {} as Record<string, number>);

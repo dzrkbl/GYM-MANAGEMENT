@@ -78,6 +78,8 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
       });
       return sendSuccess(res, attendances);
     }
+
+    return res.status(400).json({ error: 'Type de rapport inconnu' });
   } catch (error) {
     return sendError(res, 'Erreur lors de l\'export', 500);
   }

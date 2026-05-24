@@ -49,6 +49,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
             id: true,
             firstName: true,
             lastName: true,
+            groupe: true,
             sections: { select: { section: true } }
           }
         }
@@ -82,7 +83,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
         createdAt: v.createdAt,
         member: v.member,
         memberId: v.membreId,
-        section: v.member.sections?.[0]?.section || null
+        section: v.member.groupe || v.member.sections?.[0]?.section || null
       };
     });
 
