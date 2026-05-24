@@ -111,50 +111,68 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       });
     }
 
-    const newMember = await prisma.member.create({
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        dateOfBirth: data.dob ? new Date(data.dob) : null,
-        gender: data.gender,
-        phone: data.phone,
-        email: data.email,
-        parentName: data.parentName,
-        parentPhone: data.parentPhone,
-        notes: data.notes,
-        currentBelt: data.currentBelt,
-        status: data.status,
-        sections: {
-          create: data.sections.map((sec: any) => 
-            typeof sec === 'string' ? { section: sec } : { section: sec.section, belt: sec.belt || "Blanche" }
-          )
+    const newMember = await prisma.$transaction(async (tx) => {
+      const member = await tx.member.create({
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          dateOfBirth: data.dob ? new Date(data.dob) : null,
+          gender: data.gender,
+          phone: data.phone,
+          email: data.email,
+          parentName: data.parentName,
+          parentPhone: data.parentPhone,
+          notes: data.notes,
+          currentBelt: data.currentBelt,
+          status: data.status,
+          sections: {
+            create: data.sections.map((sec: any) => 
+              typeof sec === 'string' ? { section: sec } : { section: sec.section, belt: sec.belt || "Blanche" }
+            )
+          },
+          poids: data.poids,
+          groupe: data.groupe,
+          dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
+          finContrat: finContrat,
+          plan: data.plan,
+          prixBase: prixBase,
+          rabaisFamille: data.rabaisFamille,
+          membreFamilleId: data.membreFamilleId,
+          rabaisCustomPct: data.rabaisCustomPct,
+          raisonRabaisCustom: data.raisonRabaisCustom,
+          montantFinal: montantFinal,
+          referePar: data.referePar,
+          rabaisReferentPct: data.rabaisReferentPct,
+          rabaisReferentApplique: data.rabaisReferentApplique,
+          versements: data.versements ? {
+            create: data.versements.map((v: any) => ({
+              numeroVersement: v.numeroVersement,
+              montant: v.montant,
+              datePrevue: new Date(v.datePrevue),
+              datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
+              methodePaiement: v.methodePaiement,
+              note: v.note,
+            }))
+          } : undefined
         },
-        poids: data.poids,
-        groupe: data.groupe,
-        dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
-        finContrat: finContrat,
-        plan: data.plan,
-        prixBase: prixBase,
-        rabaisFamille: data.rabaisFamille,
-        membreFamilleId: data.membreFamilleId,
-        rabaisCustomPct: data.rabaisCustomPct,
-        raisonRabaisCustom: data.raisonRabaisCustom,
-        montantFinal: montantFinal,
-        referePar: data.referePar,
-        rabaisReferentPct: data.rabaisReferentPct,
-        rabaisReferentApplique: data.rabaisReferentApplique,
-        versements: data.versements ? {
-          create: data.versements.map((v: any) => ({
-            numeroVersement: v.numeroVersement,
-            montant: v.montant,
-            datePrevue: new Date(v.datePrevue),
-            datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
-            methodePaiement: v.methodePaiement,
-            note: v.note,
-          }))
-        } : undefined
-      },
-      include: { sections: true, versements: true }
+        include: { sections: true, versements: true }
+      });
+
+      if (data.groupe) {
+        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
+        if (!alreadyExists) {
+          const newSec = await tx.memberSection.create({
+            data: {
+              memberId: member.id,
+              section: data.groupe,
+              belt: data.currentBelt || "Blanche"
+            }
+          });
+          member.sections.push(newSec);
+        }
+      }
+
+      return member;
     });
 
     return sendSuccess(res, newMember, 201);
@@ -267,10 +285,28 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       };
     }
 
-    const updatedMember = await prisma.member.update({
-      where: { id: req.params.id },
-      data: updateData,
-      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
+    const updatedMember = await prisma.$transaction(async (tx) => {
+      const member = await tx.member.update({
+        where: { id: req.params.id },
+        data: updateData,
+        include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
+      });
+
+      if (data.groupe) {
+        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
+        if (!alreadyExists) {
+          const newSec = await tx.memberSection.create({
+            data: {
+              memberId: member.id,
+              section: data.groupe,
+              belt: member.currentBelt || "Blanche"
+            }
+          });
+          member.sections.push(newSec);
+        }
+      }
+
+      return member;
     });
 
     return sendSuccess(res, updatedMember);

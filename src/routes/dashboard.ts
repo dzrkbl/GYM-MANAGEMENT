@@ -79,15 +79,16 @@ router.get('/revenus/section', authenticate, requireRole(['ADMIN']), async (req:
 // GET /api/dashboard/retards
 router.get('/retards', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const overdues = await prisma.payment.findMany({
+    const now = new Date();
+    const overdues = await prisma.paymentVersement.findMany({
       where: {
-        status: { in: ['EN_ATTENTE', 'EN_RETARD'] },
-        dueDate: { lt: new Date() }
+        datePaiement: null,
+        datePrevue: { lt: now }
       }
     });
 
     const count = overdues.length;
-    const montantTotal = overdues.reduce((sum, p) => sum + p.amount, 0);
+    const montantTotal = overdues.reduce((sum, p) => sum + p.montant, 0);
 
     return sendSuccess(res, { count, montantTotal });
 
@@ -132,14 +133,14 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
     const moisPrecedent = await getRevenusForMonth(prevYear, prevMonthIndex);
     
     // Retards
-    const overdues = await prisma.payment.findMany({
+    const overdues = await prisma.paymentVersement.findMany({
       where: {
-        status: { in: ['EN_ATTENTE', 'EN_RETARD'] },
-        dueDate: { lt: now }
+        datePaiement: null,
+        datePrevue: { lt: now }
       }
     });
     const retardsCount = overdues.length;
-    const retardsMontant = overdues.reduce((sum, p) => sum + p.amount, 0);
+    const retardsMontant = overdues.reduce((sum, p) => sum + p.montant, 0);
 
     // Membres
     const membres = await prisma.member.findMany({

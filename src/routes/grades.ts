@@ -22,16 +22,17 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER', 'COACH']
     const data = gradeSchema.parse(req.body);
     
     // Check if member exists in this section
-    const memberSection = await prisma.memberSection.findUnique({
+    const isMember = await prisma.member.findFirst({
       where: {
-        memberId_section: {
-          memberId: data.memberId,
-          section: data.section
-        }
+        id: data.memberId,
+        OR: [
+          { groupe: data.section },
+          { sections: { some: { section: data.section } } }
+        ]
       }
     });
 
-    if (!memberSection) {
+    if (!isMember) {
       return sendError(res, "Le membre n'est pas inscrit dans cette section", 404);
     }
 
@@ -53,9 +54,21 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER', 'COACH']
       });
 
       // Update belt in MemberSection
-      await tx.memberSection.update({
-        where: { id: memberSection.id },
-        data: { belt: data.ceintureMontante }
+      await tx.memberSection.upsert({
+        where: {
+          memberId_section: {
+            memberId: data.memberId,
+            section: data.section
+          }
+        },
+        create: {
+          memberId: data.memberId,
+          section: data.section,
+          belt: data.ceintureMontante
+        },
+        update: {
+          belt: data.ceintureMontante
+        }
       });
 
       return grade;
