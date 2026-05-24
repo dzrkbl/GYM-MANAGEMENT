@@ -57,10 +57,10 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 });
 
 // GET /api/coachs
-router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const coachs = await prisma.user.findMany({
-      where: { role: { in: ['COACH', 'SECTION_MANAGER'] } },
+      where: { role: { in: ['ADMIN', 'COACH', 'SECTION_MANAGER'] } },
       orderBy: { lastName: 'asc' }
     });
     
