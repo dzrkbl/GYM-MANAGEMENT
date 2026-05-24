@@ -59,7 +59,7 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
           paidDate: v.datePaiement,
           member: v.member,
           subscription: {
-            section: v.member.sections?.[0]?.section || v.member.groupe || 'INCONNU'
+            section: v.member.groupe || v.member.sections?.[0]?.section || 'INCONNU'
           }
         };
       });
@@ -156,7 +156,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     }> = {};
 
     versements.forEach(v => {
-      const s = v.member.sections?.[0]?.section || v.member.groupe || 'INCONNU';
+      const s = v.member.groupe || v.member.sections?.[0]?.section || 'INCONNU';
       const isPaid = !!v.datePaiement;
       const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < today;
 
@@ -284,7 +284,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
         id: v.id,
         membreId: v.membreId,
         membreNom: `${v.member.lastName || ''} ${v.member.firstName || ''}`.trim(),
-        section: v.member.sections?.[0]?.section || v.member.groupe || '',
+        section: v.member.groupe || v.member.sections?.[0]?.section || '',
         montant: v.montant,
         date: dateString,
         joursRetard: Math.max(0, Math.floor((Date.now() - v.datePrevue.getTime()) / 86400000))

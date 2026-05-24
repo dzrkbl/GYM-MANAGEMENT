@@ -109,8 +109,9 @@ router.get('/membres', authenticate, requireRole(['ADMIN']), async (req: Request
      const parSection: Record<string, number> = {};
 
      for (const m of membres) {
-       for (const s of m.sections) {
-         parSection[s.section] = (parSection[s.section] || 0) + 1;
+       const sectionName = m.groupe || m.sections[0]?.section;
+       if (sectionName) {
+         parSection[sectionName] = (parSection[sectionName] || 0) + 1;
        }
      }
 
@@ -149,13 +150,9 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
     });
     const parSection: Record<string, number> = {};
     for (const m of membres) {
-       const memberSections = new Set<string>();
-       if (m.groupe) memberSections.add(m.groupe);
-       for (const s of m.sections) {
-         memberSections.add(s.section);
-       }
-       for (const sec of memberSections) {
-         parSection[sec] = (parSection[sec] || 0) + 1;
+       const sectionName = m.groupe || m.sections[0]?.section;
+       if (sectionName) {
+         parSection[sectionName] = (parSection[sectionName] || 0) + 1;
        }
     }
 

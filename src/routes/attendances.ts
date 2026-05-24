@@ -129,10 +129,13 @@ router.get('/stats', authenticate, async (req: Request, res: Response): Promise<
     // Approximated tauxMoyen... we'd need total members in the section to calculate precisely,
     // let's just do (totalPresences / (totalCours * section_members)) * 100
     // Fetch member count in section
-    const activeSectionMembers = await prisma.memberSection.count({
+    const activeSectionMembers = await prisma.member.count({
       where: {
-        section: section as string,
-        member: { status: 'ACTIF' }
+        status: 'ACTIF',
+        OR: [
+          { groupe: section as string },
+          { sections: { some: { section: section as string } } }
+        ]
       }
     });
 

@@ -31,10 +31,13 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       whereClause.datePrevue = { gte: startDate, lte: endDate };
     }
 
-    // Filtre par section (via member.sections)
+    // Filtre par section (via member OR member.sections)
     if (section && section !== 'TOUS') {
       whereClause.member = {
-        sections: { some: { section: section as string } }
+        OR: [
+          { groupe: section as string },
+          { sections: { some: { section: section as string } } }
+        ]
       };
     }
 
