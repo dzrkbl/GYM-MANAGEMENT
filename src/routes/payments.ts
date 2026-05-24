@@ -130,6 +130,13 @@ router.get('/retards', authenticate, async (req: Request, res: Response): Promis
   }
 });
 
+/**
+ * SOURCE OF TRUTH CLARIFICATION:
+ * The `PaymentVersement` table is the active, single source of truth for all payment, installment, and late tracking operations.
+ * The legacy `Payment` table is deprecated. All write routes (POST, PUT, PATCH) and read routes now point to `PaymentVersement`
+ * to maintain consistent states, using the enum values of `MethodePaiement`: CASH, VIREMENT, CHEQUE, CARTE.
+ */
+
 // POST /api/paiements
 router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
@@ -142,15 +149,32 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       finalDueDate = new Date(data.paidDate);
     }
 
-    const payment = await prisma.payment.create({
+    // Determine the next installment number for this member
+    const currentCount = await prisma.paymentVersement.count({
+      where: { membreId: data.memberId }
+    });
+
+    let methodEnum: any = null;
+    if (data.method) {
+      const input = data.method.toUpperCase();
+      if (input === 'COMPTANT' || input === 'CASH') {
+        methodEnum = 'CASH';
+      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
+        methodEnum = 'VIREMENT';
+      } else if (input === 'CARTE') {
+        methodEnum = 'CARTE';
+      }
+    }
+
+    const payment = await prisma.paymentVersement.create({
       data: {
-        memberId: data.memberId,
-        subscriptionId: data.subscriptionId,
-        amount: data.amount,
-        method: data.method === 'COMPTANT' ? 'CASH' : data.method === 'VIREMENT' ? 'TRANSFER' : data.method === 'CARTE' ? 'CARD' : null,
-        dueDate: finalDueDate,
-        paidDate: data.paidDate ? new Date(data.paidDate) : null,
-        status: data.status,
+        membreId: data.memberId,
+        numeroVersement: currentCount + 1,
+        montant: data.amount,
+        datePrevue: finalDueDate,
+        datePaiement: data.paidDate ? new Date(data.paidDate) : (data.status === 'PAYÉ' ? new Date() : null),
+        methodePaiement: methodEnum,
+        note: '',
       }
     });
 
@@ -165,14 +189,35 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
 router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
-    const { status, paidDate, method } = req.body;
+    const { status, paidDate, method, amount, note, dueDate } = req.body;
 
     let updateData: any = {};
-    if (status) updateData.status = status;
-    if (paidDate) updateData.paidDate = new Date(paidDate);
-    if (method) updateData.method = method;
+    if (amount !== undefined) updateData.montant = amount;
+    if (note !== undefined) updateData.note = note;
+    if (dueDate) updateData.datePrevue = new Date(dueDate);
 
-    const payment = await prisma.payment.update({
+    if (paidDate !== undefined) {
+      updateData.datePaiement = paidDate ? new Date(paidDate) : null;
+    } else if (status === 'PAYÉ') {
+      updateData.datePaiement = new Date();
+    } else if (status === 'EN_ATTENTE' || status === 'EN_RETARD') {
+      updateData.datePaiement = null;
+    }
+
+    if (method) {
+      const input = String(method).toUpperCase();
+      if (input === 'COMPTANT' || input === 'CASH') {
+        updateData.methodePaiement = 'CASH';
+      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
+        updateData.methodePaiement = 'VIREMENT';
+      } else if (input === 'CARTE') {
+        updateData.methodePaiement = 'CARTE';
+      } else if (input === 'CHEQUE' || input === 'CHÈQUE') {
+        updateData.methodePaiement = 'CHEQUE';
+      }
+    }
+
+    const payment = await prisma.paymentVersement.update({
       where: { id },
       data: updateData
     });

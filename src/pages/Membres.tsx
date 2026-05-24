@@ -40,12 +40,10 @@ export function Membres() {
     setError('');
     try {
       let url = `/membres?status=${statusFilter}`;
-      let data = await apiFetch<any[]>(url);
-      
-      // Filter by section (groupe) in client to match exactly member.groupe
       if (sectionFilter && sectionFilter !== 'TOUS') {
-        data = data.filter(m => m.groupe === sectionFilter);
+        url += `&section=${sectionFilter}`;
       }
+      let data = await apiFetch<any[]>(url);
       
       // Client-side search filtering
       if (debouncedQuery) {

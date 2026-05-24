@@ -16,7 +16,7 @@ const pointerSchema = z.object({
 router.post('/pointer', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = pointerSchema.parse(req.body);
-    const date = new Date(data.date);
+    const date = new Date((data.date as string) + 'T12:00:00');
     
     // Normalize memberIds to an array
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [data.memberIds];
@@ -70,7 +70,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const attendances = await prisma.attendance.findMany({
       where: {
         courseId: courseId as string,
-        date: new Date(date as string)
+        date: new Date((date as string) + 'T12:00:00')
       },
       include: {
         member: { select: { firstName: true, lastName: true } }

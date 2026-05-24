@@ -11,13 +11,13 @@ export function calculerMontantFinal(params: {
   rabaisCustomPct?: number | null;
   prixBase?: number | null;
 }): number {
-  let prix = (params.plan === 'MENSUEL' && params.prixBase !== undefined && params.prixBase !== null)
-    ? params.prixBase
-    : (TARIFS[params.plan]?.base ?? 0);
-
-  if (prix === 0 && (params.prixBase === undefined || params.prixBase === null)) {
-    throw new Error("Prix de base explicite requis pour calculer le montant final d'un plan sans tarif de base fixe");
+  if (params.plan === 'MENSUEL' && (params.prixBase === undefined || params.prixBase === null)) {
+    throw new Error("Prix de base explicite requis pour calculer le montant final d'un plan MENSUEL");
   }
+
+  let prix = params.plan === 'MENSUEL'
+    ? params.prixBase!
+    : (TARIFS[params.plan]?.base ?? 0);
 
   if (params.rabaisFamille) {
     prix = prix * 0.90; // -10%
