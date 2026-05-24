@@ -97,9 +97,9 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     let montantFinal = data.montantFinal;
 
     if (data.plan) {
-      prixBase = (TARIFS[data.plan].base !== null && TARIFS[data.plan].base !== undefined && TARIFS[data.plan].base !== 0) 
-        ? TARIFS[data.plan].base 
-        : (data.prixBase ?? 0);
+      prixBase = (data.prixBase !== null && data.prixBase !== undefined && data.prixBase !== 0)
+        ? data.prixBase
+        : (TARIFS[data.plan]?.base ?? 0);
       if (data.dateInscription) {
         finContrat = calculerFinContrat(new Date(data.dateInscription), data.plan);
       }
@@ -159,8 +159,11 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       });
 
       if (data.groupe) {
+        const alreadyInSections = data.sections?.some((sec: any) => 
+          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
+        );
         const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists) {
+        if (!alreadyExists && !alreadyInSections) {
           const newSec = await tx.memberSection.create({
             data: {
               memberId: member.id,
@@ -226,9 +229,11 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       const rabaisCustomPct = data.rabaisCustomPct !== undefined ? data.rabaisCustomPct : existingMember.rabaisCustomPct;
 
       if (plan) {
-        updateData.prixBase = (TARIFS[plan].base !== null && TARIFS[plan].base !== undefined && TARIFS[plan].base !== 0) 
-          ? TARIFS[plan].base 
-          : (data.prixBase !== undefined ? data.prixBase : existingMember.prixBase ?? 0);
+        updateData.prixBase = (data.prixBase !== null && data.prixBase !== undefined && data.prixBase !== 0) 
+          ? data.prixBase 
+          : (existingMember.prixBase !== null && existingMember.prixBase !== undefined && existingMember.prixBase !== 0
+              ? existingMember.prixBase
+              : (TARIFS[plan]?.base ?? 0));
         
         if (dateInscriptionStr) {
           updateData.finContrat = calculerFinContrat(new Date(dateInscriptionStr), plan);
@@ -286,15 +291,35 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     const updatedMember = await prisma.$transaction(async (tx) => {
+      const oldMember = await tx.member.findUnique({
+        where: { id: req.params.id },
+        select: { groupe: true }
+      });
+      const previousGroupe = oldMember?.groupe;
+
       const member = await tx.member.update({
         where: { id: req.params.id },
         data: updateData,
         include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
       });
 
+      if (data.groupe === null && previousGroupe) {
+        // supprimer l'entrée MemberSection correspondante à l'ancien groupe (ne pas laisser un MemberSection orphelin)
+        await tx.memberSection.deleteMany({
+          where: {
+            memberId: member.id,
+            section: previousGroupe
+          }
+        });
+        member.sections = member.sections.filter((s: any) => s.section !== previousGroupe);
+      }
+
       if (data.groupe) {
+        const alreadyInSections = data.sections?.some((sec: any) => 
+          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
+        );
         const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists) {
+        if (!alreadyExists && !alreadyInSections) {
           const newSec = await tx.memberSection.create({
             data: {
               memberId: member.id,

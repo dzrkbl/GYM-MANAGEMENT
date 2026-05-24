@@ -78,20 +78,16 @@ export async function getRevenusperiode(
     }
   });
 
-  // En retard — ici la logique bifurque selon le mode
+  // En retard — basé sur datePaiement: null et dateEcheance < aujourd'hui
+  const aujourdhui = new Date();
   const versementsRetard = await prisma.paymentVersement.findMany({
     where: {
-      datePrevue: modeCumulatif
-        ? { lte: fin }          // Option B : tout ce qui est dû jusqu'à la fin de la période
-        : { gte: debut, lte: fin }, // Option A : seulement la période en cours
+      datePrevue: { lt: aujourdhui },
       datePaiement: null,
-      // Exclure ceux déjà comptés dans "en attente"
-      // (en attente = datePrevue dans la période → chevauchement possible en Option B)
     }
   });
 
-  // En mode cumulatif, les retards incluent les versements de la période actuelle non payés
-  // → on déduplique : un versement est soit "en attente" soit "en retard", pas les deux
+  // Dédupliquer : un versement est soit "en attente" soit "en retard", pas les deux
   const idsAttente = new Set(versementsAttente.map(v => v.id));
   const retardsFiltres = versementsRetard.filter(v => !idsAttente.has(v.id));
 

@@ -109,8 +109,9 @@ router.get('/stats', authenticate, async (req: Request, res: Response): Promise<
       return sendError(res, 'section et month sont requis (ex: month=2026-06)', 400);
     }
 
-    const startDate = new Date(`${month}-01`);
-    const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+    const [year, m] = (month as string).split('-').map(Number);
+    const startDate = new Date(year, m - 1, 1, 12, 0, 0);
+    const endDate = new Date(year, m, 0, 12, 0, 0);
 
     // Get all completed courses for this section in the month that have attendees
     // A course session exists explicitly or via attedance links
