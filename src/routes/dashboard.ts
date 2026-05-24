@@ -148,8 +148,13 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
     });
     const parSection: Record<string, number> = {};
     for (const m of membres) {
+       const memberSections = new Set<string>();
+       if (m.groupe) memberSections.add(m.groupe);
        for (const s of m.sections) {
-         parSection[s.section] = (parSection[s.section] || 0) + 1;
+         memberSections.add(s.section);
+       }
+       for (const sec of memberSections) {
+         parSection[sec] = (parSection[sec] || 0) + 1;
        }
     }
 
@@ -160,21 +165,38 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
     weekEnd.setDate(weekStart.getDate() + 6); // Sunday
 
     const attendances = await prisma.attendance.findMany({
-      where: { date: { gte: weekStart, lte: weekEnd } }
+      where: { date: { gte: weekStart, lte: weekEnd } },
+      include: { course: true }
     });
     
-    // basic approximation logic: get distinct courses this week
-    const uniqueCourses = new Set(attendances.map(a => `${a.courseId}_${a.date.toISOString()}`));
-    
-    // Active members
-    const activeMembersCount = membres.length;
-    
+    // Group weekly attendances by session (courseId + date) to calculate rates per section
+    const sessionsMap = new Map<string, { courseId: string; dateStr: string; sectionName: string; attendCount: number }>();
+    for (const a of attendances) {
+      const dateKey = a.date instanceof Date ? a.date.toISOString().split('T')[0] : new Date(a.date).toISOString().split('T')[0];
+      const sessionKey = `${a.courseId}_${dateKey}`;
+      const existingSession = sessionsMap.get(sessionKey);
+      if (existingSession) {
+        existingSession.attendCount += 1;
+      } else {
+        sessionsMap.set(sessionKey, {
+          courseId: a.courseId,
+          dateStr: dateKey,
+          sectionName: a.course?.section || '',
+          attendCount: 1
+        });
+      }
+    }
+
+    let totalPossibleAttendances = 0;
+    for (const session of sessionsMap.values()) {
+      const secCount = parSection[session.sectionName] || 0;
+      totalPossibleAttendances += secCount || 1;
+    }
+
     let tauxCetteSemaine = 0;
-    if (uniqueCourses.size > 0 && activeMembersCount > 0) {
-      // Just a very rough approximation since one member may attend multiple disciplines
-       tauxCetteSemaine = Math.round((attendances.length / (uniqueCourses.size * activeMembersCount)) * 100);
-       // cap to 100% just in case
-       if (tauxCetteSemaine > 100) tauxCetteSemaine = 100;
+    if (totalPossibleAttendances > 0) {
+      tauxCetteSemaine = Math.round((attendances.length / totalPossibleAttendances) * 100);
+      if (tauxCetteSemaine > 100) tauxCetteSemaine = 100;
     }
 
     // Masse Salariale

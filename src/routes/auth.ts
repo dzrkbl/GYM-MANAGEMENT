@@ -28,9 +28,6 @@ router.post('/login', async (req: Request, res: Response): Promise<any> => {
       section: user.section,
     });
 
-    console.log('JWT_SECRET au login:', process.env.JWT_SECRET ? 'DÉFINI (' + process.env.JWT_SECRET.length + ' chars)' : 'UNDEFINED');
-    console.log('Token généré:', token.substring(0, 20) + '...');
-
     return sendSuccess(res, {
       token,
       user: {

@@ -69,7 +69,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
 
     const members = await prisma.member.findMany({
       where: {
-        ...(status ? { status: status as string } : { status: { not: 'INACTIVE' } }),
+        ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
         ...(filterSection ? {
           OR: [
             { groupe: filterSection },
@@ -97,7 +97,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     let montantFinal = data.montantFinal;
 
     if (data.plan) {
-      prixBase = (TARIFS[data.plan].base !== null && TARIFS[data.plan].base !== undefined) 
+      prixBase = (TARIFS[data.plan].base !== null && TARIFS[data.plan].base !== undefined && TARIFS[data.plan].base !== 0) 
         ? TARIFS[data.plan].base 
         : (data.prixBase ?? 0);
       if (data.dateInscription) {
@@ -208,7 +208,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       const rabaisCustomPct = data.rabaisCustomPct !== undefined ? data.rabaisCustomPct : existingMember.rabaisCustomPct;
 
       if (plan) {
-        updateData.prixBase = (TARIFS[plan].base !== null && TARIFS[plan].base !== undefined) 
+        updateData.prixBase = (TARIFS[plan].base !== null && TARIFS[plan].base !== undefined && TARIFS[plan].base !== 0) 
           ? TARIFS[plan].base 
           : (data.prixBase !== undefined ? data.prixBase : existingMember.prixBase ?? 0);
         

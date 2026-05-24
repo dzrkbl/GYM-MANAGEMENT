@@ -1,6 +1,6 @@
 // src/lib/tarifs.ts
 export const TARIFS = {
-  MENSUEL:      { base: null },   // à définir plus tard
+  MENSUEL:      { base: 0 },   // à définir plus tard
   TRIMESTRIEL:  { base: 250 },
   ANNUEL:       { base: 790 },
 };
@@ -14,6 +14,11 @@ export function calculerMontantFinal(params: {
   let prix = (params.plan === 'MENSUEL' && params.prixBase !== undefined && params.prixBase !== null)
     ? params.prixBase
     : (TARIFS[params.plan]?.base ?? 0);
+
+  if (prix === 0 && (params.prixBase === undefined || params.prixBase === null)) {
+    throw new Error("Prix de base explicite requis pour calculer le montant final d'un plan sans tarif de base fixe");
+  }
+
   if (params.rabaisFamille) {
     prix = prix * 0.90; // -10%
   }
