@@ -228,4 +228,73 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
   }
 });
 
+// GET /api/dashboard/kpis — indicateurs de pilotage
+router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
+  try {
+    const now = new Date();
+    const finJour = (d: Date) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+
+    // MRR : équivalent mensuel des cotisations des membres actifs.
+    const actifs = await prisma.member.findMany({
+      where: { status: 'ACTIF' },
+      select: { plan: true, montantFinal: true },
+    });
+    let mrr = 0;
+    for (const m of actifs) {
+      const montant = m.montantFinal || 0;
+      if (m.plan === 'ANNUEL') mrr += montant / 12;
+      else if (m.plan === 'TRIMESTRIEL') mrr += montant / 3;
+      else if (m.plan === 'MENSUEL') mrr += montant;
+    }
+    mrr = Math.round(mrr * 100) / 100;
+
+    // Rétention : actifs / (actifs + inactifs). EN_ATTENTE exclus (pas encore démarrés).
+    const [nbActifs, nbInactifs] = await Promise.all([
+      prisma.member.count({ where: { status: 'ACTIF' } }),
+      prisma.member.count({ where: { status: 'INACTIF' } }),
+    ]);
+    const retentionPct = (nbActifs + nbInactifs) > 0
+      ? Math.round((nbActifs / (nbActifs + nbInactifs)) * 1000) / 10
+      : 0;
+
+    // Recouvrement : parmi les versements échus, part déjà encaissée (en montant).
+    const echus = await prisma.paymentVersement.findMany({
+      where: { datePrevue: { lte: finJour(now) } },
+      select: { montant: true, datePaiement: true },
+    });
+    let totalEchu = 0, encaisseEchu = 0;
+    for (const v of echus) { totalEchu += v.montant; if (v.datePaiement) encaisseEchu += v.montant; }
+    const recouvrementPct = totalEchu > 0 ? Math.round((encaisseEchu / totalEchu) * 1000) / 10 : 100;
+
+    // Prévision de trésorerie : 3 prochains mois (versements prévus, à partir du mois courant).
+    const moisLabels = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    const previsions = [];
+    for (let i = 0; i < 3; i++) {
+      const debut = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const fin = new Date(now.getFullYear(), now.getMonth() + i + 1, 0, 23, 59, 59);
+      const vers = await prisma.paymentVersement.findMany({
+        where: { datePrevue: { gte: debut, lte: fin } },
+        select: { montant: true, datePaiement: true },
+      });
+      let total = 0, encaisse = 0;
+      for (const v of vers) { total += v.montant; if (v.datePaiement) encaisse += v.montant; }
+      previsions.push({
+        label: `${moisLabels[debut.getMonth()]} ${debut.getFullYear()}`,
+        total: Math.round(total * 100) / 100,
+        encaisse: Math.round(encaisse * 100) / 100,
+        aVenir: Math.round((total - encaisse) * 100) / 100,
+      });
+    }
+
+    return sendSuccess(res, {
+      mrr,
+      retention: { pct: retentionPct, actifs: nbActifs, inactifs: nbInactifs },
+      recouvrement: { pct: recouvrementPct, encaisse: Math.round(encaisseEchu * 100) / 100, total: Math.round(totalEchu * 100) / 100 },
+      previsions,
+    });
+  } catch (error) {
+    return sendError(res, 'Erreur lors du calcul des KPIs', 500);
+  }
+});
+
 export default router;
