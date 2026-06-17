@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { normalizeMethodePaiement } from '../lib/paiements';
 
 const router = Router();
 
@@ -10,7 +11,7 @@ const paymentSchema = z.object({
   subscriptionId: z.string().optional().nullable(),
   memberId: z.string(),
   amount: z.number().positive('Le montant doit être positif'),
-  method: z.enum(['COMPTANT', 'VIREMENT', 'CARTE']).optional().nullable(),
+  method: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   paidDate: z.string().optional().nullable(),
   status: z.enum(['PAYÉ', 'EN_ATTENTE', 'EN_RETARD']).default('EN_ATTENTE'),
@@ -151,17 +152,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       where: { membreId: data.memberId }
     });
 
-    let methodEnum: any = null;
-    if (data.method) {
-      const input = data.method.toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        methodEnum = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
-        methodEnum = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        methodEnum = 'CARTE';
-      }
-    }
+    const methodEnum = normalizeMethodePaiement(data.method);
 
     const payment = await prisma.paymentVersement.create({
       data: {
@@ -202,16 +193,8 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (method) {
-      const input = String(method).toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        updateData.methodePaiement = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
-        updateData.methodePaiement = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        updateData.methodePaiement = 'CARTE';
-      } else if (input === 'CHEQUE' || input === 'CHÈQUE') {
-        updateData.methodePaiement = 'CHEQUE';
-      }
+      const normalized = normalizeMethodePaiement(String(method));
+      if (normalized) updateData.methodePaiement = normalized;
     }
 
     const payment = await prisma.paymentVersement.update({
@@ -231,19 +214,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     const { id } = req.params;
     const { methodePaiement, note, datePaiement } = req.body;
 
-    let methodEnum: any = 'CASH';
-    if (methodePaiement) {
-      const input = String(methodePaiement).toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        methodEnum = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'INTERAC') {
-        methodEnum = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        methodEnum = 'CARTE';
-      } else if (input === 'CHEQUE' || input === 'CHÈQUE') {
-        methodEnum = 'CHEQUE';
-      }
-    }
+    const methodEnum = normalizeMethodePaiement(methodePaiement) ?? 'CASH';
 
     const updated = await prisma.paymentVersement.update({
       where: { id },

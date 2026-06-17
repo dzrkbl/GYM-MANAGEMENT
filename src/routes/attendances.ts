@@ -21,37 +21,18 @@ router.post('/pointer', authenticate, async (req: Request, res: Response): Promi
     // Normalize memberIds to an array
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [data.memberIds];
 
-    let pointed = 0;
-    let skipped = 0;
+    // Insertion en masse ; la contrainte unique (memberId, courseId, date) évite les doublons.
+    const result = await prisma.attendance.createMany({
+      data: memberIds.map((memberId) => ({
+        memberId,
+        courseId: data.courseId,
+        date,
+        status: 'PRESENT',
+      })),
+      skipDuplicates: true,
+    });
 
-    for (const memberId of memberIds) {
-      // Check if already pointed
-      const existing = await prisma.attendance.findUnique({
-        where: {
-          memberId_courseId_date: {
-            memberId,
-            courseId: data.courseId,
-            date
-          }
-        }
-      });
-
-      if (existing) {
-        skipped++;
-      } else {
-        await prisma.attendance.create({
-          data: {
-            memberId,
-            courseId: data.courseId,
-            date,
-            status: 'PRESENT'
-          }
-        });
-        pointed++;
-      }
-    }
-
-    return sendSuccess(res, { pointed, skipped });
+    return sendSuccess(res, { pointed: result.count, skipped: memberIds.length - result.count });
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     return sendError(res, 'Erreur lors du pointage', 500);

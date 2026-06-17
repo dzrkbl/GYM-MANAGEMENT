@@ -1,23 +1,42 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/depenses?annee=2026&mois=5
-router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
+const CATEGORIES = ['FIXE', 'VARIABLE', 'SALARIALE', 'AUTRE'] as const;
+type Categorie = (typeof CATEGORIES)[number];
+
+function parseCategorie(value: unknown, fallback: Categorie | undefined = 'FIXE'): Categorie | undefined {
+  if (value === undefined || value === null || value === '') return fallback;
+  const v = String(value).toUpperCase();
+  return (CATEGORIES as readonly string[]).includes(v) ? (v as Categorie) : fallback;
+}
+
+// GET /api/depenses?annee=2026&mois=5 — données financières → ADMIN
+router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const { annee, mois, categorie } = req.query;
     const where: any = {};
-    if (annee)     where.annee = parseInt(annee as string, 10);
-    if (mois)      where.mois  = parseInt(mois as string, 10);
-    if (categorie) where.categorie = categorie as any;
+    if (annee) {
+      const y = parseInt(annee as string, 10);
+      if (!isNaN(y)) where.annee = y;
+    }
+    if (mois) {
+      const m = parseInt(mois as string, 10);
+      if (!isNaN(m)) where.mois = m;
+    }
+    if (categorie) {
+      const c = parseCategorie(categorie, undefined);
+      if (c) where.categorie = c;
+    }
 
     const depenses = await prisma.depense.findMany({ where, orderBy: { label: 'asc' } });
-    return res.json({ success: true, data: depenses });
+    return sendSuccess(res, depenses);
   } catch (error) {
     console.error('Error in GET /api/depenses:', error);
-    return res.status(500).json({ success: false, message: 'Erreur serveur lors de la récupération des dépenses' });
+    return sendError(res, 'Erreur serveur lors de la récupération des dépenses', 500);
   }
 });
 
@@ -26,25 +45,29 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
   try {
     const { label, montant, mois, annee, categorie, note, isOverride, configCode } = req.body;
     if (!label || montant === undefined || !annee) {
-      return res.status(400).json({ success: false, message: 'label, montant et annee requis' });
+      return sendError(res, 'label, montant et annee sont requis', 400);
     }
+    const amt = parseFloat(montant);
+    const y = parseInt(annee, 10);
+    if (isNaN(amt)) return sendError(res, 'Montant invalide', 400);
+    if (isNaN(y)) return sendError(res, 'Année invalide', 400);
 
     const depense = await prisma.depense.create({
       data: {
         label,
-        montant: parseFloat(montant),
+        montant: amt,
         mois: mois ? parseInt(mois, 10) : null,
-        annee: parseInt(annee, 10),
-        categorie: categorie || 'FIXE',
+        annee: y,
+        categorie: parseCategorie(categorie)!,
         note,
         isOverride: !!isOverride,
         configCode
       }
     });
-    return res.status(201).json({ success: true, data: depense });
+    return sendSuccess(res, depense, 201);
   } catch (error) {
     console.error('Error in POST /api/depenses:', error);
-    return res.status(500).json({ success: false, message: 'Erreur de création de dépense' });
+    return sendError(res, 'Erreur de création de dépense', 500);
   }
 });
 
@@ -59,14 +82,14 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
         montant: montant !== undefined ? parseFloat(montant) : undefined,
         mois: mois !== undefined ? (mois ? parseInt(mois, 10) : null) : undefined,
         annee: annee ? parseInt(annee, 10) : undefined,
-        categorie,
+        categorie: categorie !== undefined ? parseCategorie(categorie, undefined) : undefined,
         note
       }
     });
-    return res.json({ success: true, data: depense });
+    return sendSuccess(res, depense);
   } catch (error) {
     console.error('Error in PUT /api/depenses:', error);
-    return res.status(500).json({ success: false, message: 'Erreur lors de la mise à jour de la dépense' });
+    return sendError(res, 'Erreur lors de la mise à jour de la dépense', 500);
   }
 });
 
@@ -74,10 +97,10 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
 router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     await prisma.depense.delete({ where: { id: req.params.id } });
-    return res.json({ success: true });
+    return sendSuccess(res, { success: true });
   } catch (error) {
     console.error('Error in DELETE /api/depenses:', error);
-    return res.status(500).json({ success: false, message: 'Erreur lors de la suppression de la dépense' });
+    return sendError(res, 'Erreur lors de la suppression de la dépense', 500);
   }
 });
 

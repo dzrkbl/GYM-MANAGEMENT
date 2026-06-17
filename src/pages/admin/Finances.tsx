@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../lib/api';
 import { formatMontant } from '../../lib/format';
 import { Card } from '../../components/ui/Card';
@@ -61,6 +63,7 @@ interface FinancierData {
 }
 
 export function Finances() {
+  const { user } = useAuth();
   const [mois, setMois] = useState<number>(new Date().getMonth() + 1);
   const [annee, setAnnee] = useState<number>(new Date().getFullYear());
   const [modeCumulatif, setModeCumulatif] = useState<boolean>(false);
@@ -232,6 +235,11 @@ export function Finances() {
     if (rate >= 70) return { bg: 'bg-yellow-100', text: 'text-yellow-800', bar: 'bg-yellow-500' };
     return { bg: 'bg-red-100', text: 'text-red-800', bar: 'bg-red-500' };
   };
+
+  // Page financière réservée aux administrateurs (les endpoints sont aussi protégés côté serveur).
+  if (user?.role !== 'ADMIN') {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="space-y-6 pb-12" id="finances-module">

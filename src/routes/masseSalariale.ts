@@ -7,7 +7,7 @@ const router = Router();
 
 // GET /api/masse-salariale?mois=5&annee=2026
 // Retourne le montant saisi pour ce mois, ou null si pas encore saisi
-router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
+router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const mois = parseInt(req.query.mois as string);
     const annee = parseInt(req.query.annee as string);
@@ -34,7 +34,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
 
 // GET /api/masse-salariale/range?fromMonth=1&fromYear=2026&toMonth=12&toYear=2026
 // Récupère toutes les masses salariales dans un intervalle
-router.get('/range', authenticate, async (req: Request, res: Response): Promise<any> => {
+router.get('/range', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const fromMonth = parseInt(req.query.fromMonth as string) || 1;
     const fromYear = parseInt(req.query.fromYear as string) || 2026;
