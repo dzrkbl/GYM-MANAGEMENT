@@ -3,11 +3,12 @@ import { prisma } from './prisma';
 import { sendEmail } from './mailer';
 import { TPS_RATE, TVQ_RATE, DIVISEUR_TAXES } from './finances';
 
-// Coordonnées de l'entreprise pour les reçus (configurables via variables d'environnement).
+// Coordonnées de l'entreprise pour les reçus (surchargeables via variables d'environnement).
 const RECU_NOM = process.env.RECU_NOM || 'Centre Sportif de Haute-Performance';
 const RECU_ADRESSE = process.env.RECU_ADRESSE || '';
-const RECU_TPS = process.env.RECU_TPS || '';
-const RECU_TVQ = process.env.RECU_TVQ || '';
+const RECU_TPS = process.env.RECU_TPS || '763471679 RT0001';
+const RECU_TVQ = process.env.RECU_TVQ || '1226462895 TQ0001';
+const RECU_NEQ = process.env.RECU_NEQ || '1174455635';
 // On affiche la ventilation des taxes seulement si les numéros de taxes sont configurés.
 const AVEC_TAXES = !!(RECU_TPS && RECU_TVQ);
 
@@ -51,6 +52,7 @@ export function generateRecuPdf(data: RecuData): Buffer {
   doc.setFont('helvetica', 'normal');
   if (RECU_ADRESSE) { doc.text(RECU_ADRESSE, left, y); y += 5; }
   if (AVEC_TAXES) { doc.text(`TPS : ${RECU_TPS}    TVQ : ${RECU_TVQ}`, left, y); y += 5; }
+  if (RECU_NEQ) { doc.text(`NEQ : ${RECU_NEQ}`, left, y); y += 5; }
 
   y += 6;
   doc.setDrawColor(200);
@@ -100,6 +102,13 @@ export function generateRecuPdf(data: RecuData): Buffer {
   doc.setFont('helvetica', 'bold');
   doc.text('Total payé :', 120, y);
   doc.text(formatMontant(data.montant), 190, y, { align: 'right' });
+
+  if (AVEC_TAXES) {
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('Les prix sont taxes incluses.', 190, y, { align: 'right' });
+  }
 
   y += 20;
   doc.setFont('helvetica', 'normal');
