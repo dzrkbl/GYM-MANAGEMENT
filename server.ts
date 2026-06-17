@@ -27,6 +27,8 @@ import communicationsRouter from './src/routes/communications';
 import leadsRouter from './src/routes/leads';
 
 import { runAllReminders } from './src/lib/reminders';
+import { prisma } from './src/lib/prisma';
+import { bootstrapIfEmpty } from './src/lib/seedData';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -100,7 +102,7 @@ async function startServer() {
     // Run database migrations in the background so they don't block port-binding/health checks
     if (process.env.DATABASE_URL) {
       console.log('⏳ Running database migrations in the background...');
-      exec('npx prisma migrate deploy', (error, stdout, stderr) => {
+      exec('npx prisma migrate deploy', async (error, stdout, stderr) => {
         if (error) {
           console.error(`❌ Migration error: ${error.message}`);
           return;
@@ -109,6 +111,14 @@ async function startServer() {
           console.warn(`⚠️ Migration stderr: ${stderr}`);
         }
         console.log(`✅ Migrations completed successfully:\n${stdout}`);
+
+        // Amorçage automatique si la base est vide (1er déploiement, sans terminal).
+        try {
+          const seeded = await bootstrapIfEmpty(prisma);
+          if (seeded) console.log('✅ Base vide : amorçage initial effectué (admin + sections + cours).');
+        } catch (e) {
+          console.error('❌ Erreur d\'amorçage initial:', e);
+        }
       });
     }
   });
