@@ -67,6 +67,11 @@ model Member {
   rabaisReferentPct      Float?
   rabaisReferentApplique Boolean     @default(false)
 
+  // Consentement au règlement intérieur (inscription en ligne)
+  reglementVersion       String?     // version du règlement acceptée
+  reglementAccepteAt     DateTime?   // horodatage de l'acceptation
+  reglementSignataire    String?     // nom complet saisi comme signature
+
   // Relations
   sections      MemberSection[]
   attendances   Attendance[]

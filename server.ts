@@ -21,6 +21,7 @@ import coachSalaireRouter from './src/routes/coachSalaire';
 import depensesRouter from './src/routes/depenses';
 import depenseConfigsRouter from './src/routes/depenseConfigs';
 import importRouter from './src/routes/import';
+import inscriptionRouter from './src/routes/inscription';
 
 import { prisma } from './src/lib/prisma';
 import { sendEmail } from './src/lib/mailer';
@@ -48,6 +49,7 @@ app.use('/api/coach-salaire', coachSalaireRouter);
 app.use('/api/depenses', depensesRouter);
 app.use('/api/depense-configs', depenseConfigsRouter);
 app.use('/api/import', importRouter);
+app.use('/api/inscription', inscriptionRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
+import { Inscription } from './pages/Inscription';
 import { Dashboard } from './pages/Dashboard';
 import { Pointer } from './pages/Pointer';
 import { Membres } from './pages/Membres';
@@ -20,6 +21,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/inscription" element={<Inscription />} />
           
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
