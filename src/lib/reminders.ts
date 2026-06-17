@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { sendEmail } from './mailer';
+import { sendEmail, htmlCourriel } from './mailer';
 
 // ---------- Helpers de dates ----------
 function jourDebut(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -16,15 +16,6 @@ function formatMontant(n: number): string {
   return n.toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' $';
 }
 function formatDate(d: Date): string { return d.toLocaleDateString('fr-CA'); }
-
-function corpsCourriel(html: string): string {
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #1a1a2e;">Centre Sportif de Haute-Performance</h2>
-      ${html}
-      <p>Merci,<br><strong>L'équipe CSHP</strong></p>
-    </div>`;
-}
 
 interface MembreContact { id: string; firstName: string; lastName: string; email: string | null; parentEmail: string | null; }
 function destinataire(m: { email: string | null; parentEmail: string | null }): string | null {
@@ -87,7 +78,7 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
       if (!to) { s.ignores++; continue; }
       const nom = `${v.member.firstName} ${v.member.lastName}`;
       const enRetard = niveau.type === 'PAIEMENT_RETARD';
-      const html = corpsCourriel(`
+      const html = htmlCourriel(`
         <p>Bonjour,</p>
         <p>${enRetard
           ? `Un versement pour <strong>${nom}</strong> est <strong>en retard</strong>.`
@@ -120,7 +111,7 @@ export async function sendRenewalReminders(now = new Date()): Promise<Stat> {
     if (!to || !m.finContrat) { s.ignores++; continue; }
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${m.finContrat.toISOString().slice(0, 10)}`;
-    const html = corpsCourriel(`
+    const html = htmlCourriel(`
       <p>Bonjour,</p>
       <p>L'inscription de <strong>${nom}</strong> arrive à échéance le
       <strong>${formatDate(m.finContrat)}</strong>.</p>
@@ -158,7 +149,7 @@ export async function sendAbsenceAlerts(now = new Date(), seuilJours = 14): Prom
     if (!to) { s.ignores++; continue; }
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${semaine}`; // au plus une alerte par membre par semaine
-    const html = corpsCourriel(`
+    const html = htmlCourriel(`
       <p>Bonjour,</p>
       <p>Nous avons remarqué que <strong>${nom}</strong> ne s'est pas présenté(e) aux
       entraînements depuis un certain temps.</p>

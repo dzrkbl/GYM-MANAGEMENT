@@ -74,6 +74,12 @@ export function Inscription() {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-6 sm:p-8">
         <div className="text-center mb-6">
+          <img
+            src="/logo.png"
+            alt="Centre Sportif de Haute-Performance"
+            className="h-20 mx-auto mb-3"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
           <h1 className="text-2xl font-bold text-cshp-black">Centre Sportif de Haute-Performance</h1>
           <p className="text-cshp-gray mt-1">Formulaire d'inscription</p>
         </div>

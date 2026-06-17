@@ -1,6 +1,8 @@
 import { jsPDF } from 'jspdf';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 import { prisma } from './prisma';
-import { sendEmail } from './mailer';
+import { sendEmail, htmlCourriel } from './mailer';
 import { TPS_RATE, TVQ_RATE, DIVISEUR_TAXES } from './finances';
 
 // Coordonnées de l'entreprise pour les reçus (surchargeables via variables d'environnement).
@@ -37,11 +39,34 @@ export interface RecuData {
   methode: string;
 }
 
+// Charge le logo du club depuis public/logo.png (ou .jpg) s'il existe.
+function chargerLogo(): { data: string; format: 'PNG' | 'JPEG' } | null {
+  const candidats: Array<[string, 'PNG' | 'JPEG', string]> = [
+    ['logo.png', 'PNG', 'png'],
+    ['logo.jpg', 'JPEG', 'jpeg'],
+    ['logo.jpeg', 'JPEG', 'jpeg'],
+  ];
+  for (const [file, format, mime] of candidats) {
+    const p = path.join(process.cwd(), 'public', file);
+    if (existsSync(p)) {
+      const b64 = readFileSync(p).toString('base64');
+      return { data: `data:image/${mime};base64,${b64}`, format };
+    }
+  }
+  return null;
+}
+
 // Génère le PDF du reçu et retourne un Buffer.
 export function generateRecuPdf(data: RecuData): Buffer {
   const doc = new jsPDF();
   const left = 20;
   let y = 20;
+
+  // Logo du club en haut à droite (si fourni dans public/).
+  const logo = chargerLogo();
+  if (logo) {
+    try { doc.addImage(logo.data, logo.format, 158, 8, 36, 36); } catch { /* logo invalide : on l'ignore */ }
+  }
 
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
@@ -159,15 +184,11 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
   await sendEmail({
     to: destinataire,
     subject: `Reçu de paiement — CSHP (no ${String(numero).padStart(5, '0')})`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1a1a2e;">${RECU_NOM}</h2>
+    html: htmlCourriel(`
         <p>Bonjour,</p>
         <p>Vous trouverez en pièce jointe le reçu pour le paiement de
         <strong>${membreNom}</strong> (${formatMontant(versement.montant)}).</p>
-        <p>Merci,<br><strong>L'équipe CSHP</strong></p>
-      </div>
-    `,
+      `),
     attachments: [{ filename: `recu-${String(numero).padStart(5, '0')}.pdf`, content: pdf }],
   });
 

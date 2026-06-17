@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
-import { sendEmail } from '../lib/mailer';
+import { sendEmail, htmlCourriel } from '../lib/mailer';
 import { REGLEMENT_VERSION } from '../lib/reglement';
 
 const router = Router();
@@ -86,18 +86,14 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     sendEmail({
       to: destinataire,
       subject: 'Inscription reçue — CSHP',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #1a1a2e;">Centre Sportif de Haute-Performance</h2>
-          <p>Bonjour,</p>
-          <p>Nous avons bien reçu la demande d'inscription de <strong>${nomComplet}</strong>.
-          Elle est <strong>en attente de validation</strong> et sera confirmée une fois le
-          premier paiement complété.</p>
-          <p>Vous avez accepté le règlement intérieur (version ${REGLEMENT_VERSION}) le
-          ${new Date().toLocaleDateString('fr-CA')}.</p>
-          <p>Nous communiquerons avec vous sous peu. Merci !<br><strong>L'équipe CSHP</strong></p>
-        </div>
-      `,
+      html: htmlCourriel(`
+        <p>Bonjour,</p>
+        <p>Nous avons bien reçu la demande d'inscription de <strong>${nomComplet}</strong>.
+        Elle est <strong>en attente de validation</strong> et sera confirmée une fois le
+        premier paiement complété.</p>
+        <p>Vous avez accepté le règlement intérieur (version ${REGLEMENT_VERSION}) le
+        ${new Date().toLocaleDateString('fr-CA')}.</p>
+      `),
     }).catch((e) => console.error('Erreur courriel bienvenue:', e));
 
     // Notification à l'administration (si configurée).
