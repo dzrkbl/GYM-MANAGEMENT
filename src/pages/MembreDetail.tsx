@@ -314,6 +314,48 @@ export function MembreDetail() {
             )}
           </Card>
 
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Coordonnées & contact d'urgence</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Téléphone</span>
+                <span className="text-gray-800 font-semibold">{member.phone || '-'}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Courriel</span>
+                <span className="text-gray-800 font-semibold break-all">{member.email || '-'}</span>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Adresse</span>
+                <span className="text-gray-800 font-semibold">
+                  {[member.adresse, member.ville, member.codePostal].filter(Boolean).join(', ') || '-'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Parent / tuteur</span>
+                <span className="text-gray-800 font-semibold">{member.parentName || '-'}</span>
+                <span className="text-gray-500 block text-xs">
+                  {member.parentPhone || ''}{member.parentEmail ? ` · ${member.parentEmail}` : ''}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Contact d'urgence</span>
+                <span className="text-gray-800 font-semibold">
+                  {member.urgenceNom || '-'}{member.urgenceLien ? ` (${member.urgenceLien})` : ''}
+                </span>
+                <span className="text-gray-500 block text-xs">{member.urgenceTel || ''}</span>
+              </div>
+            </div>
+            {member.problemeSante && (
+              <div className="pt-3 border-t border-gray-100">
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 uppercase">
+                  <AlertTriangle size={14} /> Problème de santé signalé
+                </span>
+                {member.noteSante && <p className="text-sm text-slate-700 mt-1 whitespace-pre-line">{member.noteSante}</p>}
+              </div>
+            )}
+          </Card>
+
           {/* Grille de Ceintures et Historique des Passages de Grades */}
           <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b pb-2">

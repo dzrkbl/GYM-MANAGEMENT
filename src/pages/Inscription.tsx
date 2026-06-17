@@ -16,10 +16,14 @@ export function Inscription() {
     firstName: '', lastName: '', dob: '', gender: '',
     phone: '', email: '',
     parentName: '', parentPhone: '', parentEmail: '',
+    adresse: '', codePostal: '', ville: '',
+    noteSante: '',
+    urgenceNom: '', urgenceLien: '', urgenceTel: '',
     section: '',
     reglementSignataire: '',
     website: '', // honeypot
   });
+  const [problemeSante, setProblemeSante] = useState(false);
   const [accepte, setAccepte] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +49,7 @@ export function Inscription() {
     try {
       await apiFetch('/inscription', {
         method: 'POST',
-        body: JSON.stringify({ ...form, accepte: true, reglementVersion: REGLEMENT_VERSION }),
+        body: JSON.stringify({ ...form, problemeSante, accepte: true, reglementVersion: REGLEMENT_VERSION }),
       });
       setDone(true);
     } catch (err: any) {
@@ -122,6 +126,44 @@ export function Inscription() {
             <div className="sm:col-span-2">
               <Input label="Courriel du parent" type="email" value={form.parentEmail} onChange={set('parentEmail')} />
             </div>
+          </div>
+
+          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Adresse</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2"><Input label="Adresse" value={form.adresse} onChange={set('adresse')} /></div>
+            <Input label="Ville" value={form.ville} onChange={set('ville')} />
+            <Input label="Code postal" value={form.codePostal} onChange={set('codePostal')} />
+          </div>
+
+          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Contact d'urgence (1er répondant)</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input label="Nom et prénom" value={form.urgenceNom} onChange={set('urgenceNom')} />
+            <Input label="Lien avec l'athlète" value={form.urgenceLien} onChange={set('urgenceLien')} />
+            <Input label="Téléphone" value={form.urgenceTel} onChange={set('urgenceTel')} />
+          </div>
+
+          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Santé</h2>
+          <div>
+            <label className="block mb-2 text-sm font-medium text-cshp-black">
+              Un problème de santé à porter à notre connaissance ?
+            </label>
+            <div className="flex gap-6 items-center">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="sante" checked={!problemeSante} onChange={() => setProblemeSante(false)} /> Non
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="sante" checked={problemeSante} onChange={() => setProblemeSante(true)} /> Oui
+              </label>
+            </div>
+            {problemeSante && (
+              <textarea
+                value={form.noteSante}
+                onChange={(e) => setForm((p) => ({ ...p, noteSante: e.target.value }))}
+                rows={2}
+                placeholder="Veuillez préciser. Une autorisation médicale pour la pratique sportive pourra être demandée."
+                className="mt-2 w-full border border-gray-300 rounded-lg p-3 bg-white text-sm"
+              />
+            )}
           </div>
 
           <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">

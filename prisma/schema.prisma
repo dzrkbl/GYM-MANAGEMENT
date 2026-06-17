@@ -48,6 +48,18 @@ model Member {
 
   // Infos personnelles additionnelles
   poids                  Float?
+  adresse                String?
+  codePostal             String?
+  ville                  String?
+
+  // Santé
+  problemeSante          Boolean     @default(false)
+  noteSante              String?     // détail si problème de santé
+
+  // Contact d'urgence (1er répondant)
+  urgenceNom             String?
+  urgenceLien            String?
+  urgenceTel             String?
 
   // Contrat
   dateInscription        DateTime?
