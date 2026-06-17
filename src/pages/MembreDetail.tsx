@@ -14,6 +14,7 @@ import {
   DollarSign, Users, CheckCircle, Clock, Heart, Mail, Check, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { KATAS_KARATE, estKarate } from '../lib/katas';
 
 export function MembreDetail() {
   const { id } = useParams<{ id: string }>();
@@ -395,6 +396,41 @@ export function MembreDetail() {
               <p className="text-xs text-gray-400 italic">Aucun historique de grade enregistré.</p>
             )}
           </Card>
+
+          {/* Programme de katas — Karaté uniquement */}
+          {member.sections?.some((s: any) => estKarate(s.section)) && (
+            <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Programme de katas — Karaté</h3>
+              <p className="text-xs text-gray-500">Katas à réviser à la maison selon le grade visé.</p>
+              <div className="space-y-3">
+                {KATAS_KARATE.map((niveau) => (
+                  <div key={niveau.kyu} className="text-sm">
+                    <p className="font-semibold text-gray-900">
+                      {niveau.ceinture} <span className="text-gray-400 font-normal">({niveau.kyu})</span>
+                    </p>
+                    <ul className="mt-1 flex flex-wrap gap-2">
+                      {niveau.katas.map((k) => (
+                        <li key={k.nom}>
+                          {k.videoUrl ? (
+                            <a
+                              href={k.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs bg-cshp-red/10 text-cshp-red font-semibold px-2 py-0.5 rounded"
+                            >
+                              ▶ {k.nom}
+                            </a>
+                          ) : (
+                            <span className="inline-block text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{k.nom}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
