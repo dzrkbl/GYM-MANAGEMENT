@@ -23,8 +23,7 @@ import depenseConfigsRouter from './src/routes/depenseConfigs';
 import importRouter from './src/routes/import';
 import inscriptionRouter from './src/routes/inscription';
 
-import { prisma } from './src/lib/prisma';
-import { sendEmail } from './src/lib/mailer';
+import { runAllReminders } from './src/lib/reminders';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -56,85 +55,16 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'CSHP API is running!' });
 });
 
-// Cron : rappels de paiement (déclenché par un service externe avec le Bearer CRON_SECRET).
-// Source de vérité : table PaymentVersement (versements non payés dont l'échéance approche).
+// Cron : relances automatiques (déclenché par un service externe avec le Bearer CRON_SECRET).
+// Couvre : rappels de paiement (J-7, jour J, retard), renouvellements (J-30) et absences.
 app.get('/api/cron/reminders', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return res.status(401).json({ error: 'Non autorisé' });
     }
-
-    const aujourd_hui = new Date();
-    const dans7Jours = new Date();
-    dans7Jours.setDate(aujourd_hui.getDate() + 7);
-
-    // Arrondir à la journée (minuit)
-    dans7Jours.setHours(0, 0, 0, 0);
-    const dans7JoursFin = new Date(dans7Jours);
-    dans7JoursFin.setHours(23, 59, 59, 999);
-
-    // Versements dont l'échéance tombe dans 7 jours, non payés et sans rappel déjà envoyé.
-    const versements = await prisma.paymentVersement.findMany({
-      where: {
-        datePrevue: {
-          gte: dans7Jours,
-          lte: dans7JoursFin,
-        },
-        datePaiement: null,
-        reminderSentAt: null,
-      },
-      include: {
-        member: true,
-      },
-    });
-
-    const resultats = [];
-
-    for (const versement of versements) {
-      const membre = versement.member;
-      const destinataire = membre.parentEmail || membre.email;
-
-      if (!destinataire) {
-        resultats.push({ membreId: membre.id, statut: 'IGNORÉ — pas de courriel' });
-        continue;
-      }
-
-      const nomComplet = `${membre.firstName} ${membre.lastName}`;
-      const montant = versement.montant.toFixed(2);
-      const dateEcheance = versement.datePrevue.toLocaleDateString('fr-CA');
-
-      await sendEmail({
-        to: destinataire,
-        subject: `Rappel de paiement — CSHP`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a2e;">Centre Sportif de Haute-Performance</h2>
-            <p>Bonjour,</p>
-            <p>Ceci est un rappel amical concernant le paiement pour <strong>${nomComplet}</strong>.</p>
-            <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p><strong>Montant dû :</strong> ${montant} $</p>
-              <p><strong>Date d'échéance :</strong> ${dateEcheance}</p>
-            </div>
-            <p>Pour toute question, contactez-nous à payements@centresportifhp.com</p>
-            <p>Merci,<br><strong>L'équipe CSHP</strong></p>
-          </div>
-        `,
-      });
-
-      await prisma.paymentVersement.update({
-        where: { id: versement.id },
-        data: { reminderSentAt: new Date() },
-      });
-
-      resultats.push({ membreId: membre.id, nom: nomComplet, statut: 'ENVOYÉ ✅' });
-    }
-
-    res.json({
-      success: true,
-      traités: resultats.length,
-      détails: resultats,
-    });
+    const resultats = await runAllReminders();
+    res.json({ success: true, resultats });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

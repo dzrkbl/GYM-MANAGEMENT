@@ -242,6 +242,19 @@ enum CategorieDepense {
   AUTRE
 }
 
+// Journal des rappels/alertes envoyés, pour éviter les doublons (dédup par type + refKey).
+model ReminderLog {
+  id          String   @id @default(uuid())
+  type        String   // PAIEMENT_J7, PAIEMENT_J0, PAIEMENT_RETARD, RENOUVELLEMENT, ABSENCE
+  memberId    String
+  versementId String?
+  refKey      String   // clé de déduplication (id versement, échéance, semaine…)
+  sentAt      DateTime @default(now())
+
+  @@unique([type, refKey])
+  @@index([memberId])
+}
+
 
 
 
