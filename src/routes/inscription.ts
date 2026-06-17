@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { sendEmail, htmlCourriel } from '../lib/mailer';
 import { REGLEMENT_VERSION } from '../lib/reglement';
+import { contenuBienvenue } from '../lib/bienvenue';
+import { estKarate } from '../lib/katas';
 
 const router = Router();
 
@@ -102,14 +104,11 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     sendEmail({
       to: destinataire,
       subject: 'Inscription reçue — CSHP',
-      html: htmlCourriel(`
-        <p>Bonjour,</p>
-        <p>Nous avons bien reçu la demande d'inscription de <strong>${nomComplet}</strong>.
-        Elle est <strong>en attente de validation</strong> et sera confirmée une fois le
-        premier paiement complété.</p>
-        <p>Vous avez accepté le règlement intérieur (version ${REGLEMENT_VERSION}) le
-        ${new Date().toLocaleDateString('fr-CA')}.</p>
-      `),
+      html: htmlCourriel(contenuBienvenue({
+        nom: nomComplet,
+        karate: estKarate(data.section),
+        note: `Votre demande d'inscription est en attente de validation et sera confirmée une fois le premier paiement complété. Vous avez accepté le règlement intérieur (version ${REGLEMENT_VERSION}) le ${new Date().toLocaleDateString('fr-CA')}.`,
+      })),
     }).catch((e) => console.error('Erreur courriel bienvenue:', e));
 
     // Notification à l'administration (si configurée).

@@ -4,6 +4,9 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../lib/tarifs';
+import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { contenuBienvenue } from '../lib/bienvenue';
+import { estKarate } from '../lib/katas';
 
 const router = Router();
 
@@ -155,6 +158,17 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
 
       return member;
     });
+
+    // Courriel de bienvenue avec la documentation (non bloquant).
+    const dest = newMember.parentEmail || newMember.email;
+    if (dest) {
+      const karate = newMember.sections?.some((s: any) => estKarate(s.section));
+      sendEmail({
+        to: dest,
+        subject: 'Bienvenue au Centre Sportif de Haute-Performance',
+        html: htmlCourriel(contenuBienvenue({ nom: `${newMember.firstName} ${newMember.lastName}`, karate })),
+      }).catch((e) => console.error('Erreur courriel bienvenue:', e));
+    }
 
     return sendSuccess(res, newMember, 201);
   } catch (error) {
