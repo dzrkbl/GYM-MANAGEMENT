@@ -12,6 +12,7 @@ import { Rapports } from './pages/Rapports';
 import { Planning } from './pages/Planning';
 import { Sections } from './pages/Sections';
 import { Finances } from './pages/admin/Finances';
+import { Import } from './pages/admin/Import';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/pointer" element={<Pointer />} />
             <Route path="/paiements" element={<Paiements />} />
             <Route path="/admin/finances" element={<Finances />} />
+            <Route path="/admin/import" element={<Import />} />
             <Route path="/coachs" element={<Coachs />} />
             <Route path="/rapports" element={<Rapports />} />
             <Route path="/planning" element={<Planning />} />
