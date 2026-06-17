@@ -163,10 +163,36 @@ export async function sendAbsenceAlerts(now = new Date(), seuilJours = 14): Prom
   return s;
 }
 
+// ---------- #5 Relance des prospects : NEW sans suivi depuis N jours -> alerte admin ----------
+export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promise<Stat> {
+  const s = stat();
+  const notif = process.env.INSCRIPTION_NOTIF_EMAIL;
+  if (!notif) return s; // pas d'adresse admin configurée
+
+  const cutoff = addDays(jourDebut(now), -seuilJours);
+  const leads = await prisma.lead.findMany({ where: { status: 'NEW', createdAt: { lt: cutoff } } });
+
+  for (const l of leads) {
+    const html = htmlCourriel(`
+      <p>Bonjour,</p>
+      <p>Le prospect <strong>${l.firstName} ${l.lastName}</strong> (${l.sport}, ${l.requestType})
+      n'a pas encore été contacté depuis sa demande du ${formatDate(l.createdAt)}.</p>
+      <p>Coordonnées : ${l.phone || '—'} · ${l.email || '—'}</p>
+      <p>Pensez à effectuer un suivi.</p>`);
+    const envoye = await envoyerAvecLog({
+      type: 'LEAD_RELANCE', memberId: l.id, refKey: l.id,
+      to: notif, subject: `Prospect à relancer — ${l.firstName} ${l.lastName}`, html,
+    });
+    envoye ? s.envoyes++ : s.ignores++;
+  }
+  return s;
+}
+
 // ---------- Exécution groupée (appelée par le cron) ----------
 export async function runAllReminders(now = new Date()) {
   const paiements = await sendPaymentReminders(now);
   const renouvellements = await sendRenewalReminders(now);
   const absences = await sendAbsenceAlerts(now);
-  return { paiements, renouvellements, absences };
+  const prospects = await sendLeadFollowups(now);
+  return { paiements, renouvellements, absences, prospects };
 }

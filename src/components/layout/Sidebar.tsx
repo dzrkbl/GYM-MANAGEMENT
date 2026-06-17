@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target } from 'lucide-react';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
@@ -9,6 +9,7 @@ export function Sidebar() {
     ...(user?.role === 'ADMIN' ? [{ to: '/dashboard', icon: Home, label: 'Tableau de bord' }] : []),
     { to: '/planning', icon: CalendarDays, label: 'Planning' },
     { to: '/membres', icon: Users, label: 'Membres' },
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/prospects', icon: Target, label: 'Prospects' }] : []),
     { to: '/pointer', icon: CheckSquare, label: 'Pointage' },
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Paiements' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin/finances', icon: Coins, label: 'Finances' }] : []),

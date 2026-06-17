@@ -24,6 +24,7 @@ import importRouter from './src/routes/import';
 import inscriptionRouter from './src/routes/inscription';
 import auditRouter from './src/routes/audit';
 import communicationsRouter from './src/routes/communications';
+import leadsRouter from './src/routes/leads';
 
 import { runAllReminders } from './src/lib/reminders';
 
@@ -53,6 +54,7 @@ app.use('/api/import', importRouter);
 app.use('/api/inscription', inscriptionRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/communications', communicationsRouter);
+app.use('/api/leads', leadsRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {
