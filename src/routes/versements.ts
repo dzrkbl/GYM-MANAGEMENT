@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement } from '../lib/paiements';
+import { sendRecuVersement } from '../lib/recus';
 
 const router = Router();
 
@@ -33,6 +34,9 @@ router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER'])
         ...(data.montant !== undefined && data.montant !== null ? { montant: data.montant } : {}),
       },
     });
+
+    // Reçu automatique par courriel (sauf comptant) — ne bloque pas la réponse.
+    sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
 
     return sendSuccess(res, versement);
   } catch (error) {

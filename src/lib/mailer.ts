@@ -13,10 +13,16 @@ function getResend(): Resend {
   return resendClient;
 }
 
-export async function sendEmail({ to, subject, html }: {
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
+export async function sendEmail({ to, subject, html, attachments }: {
   to: string;
   subject: string;
   html: string;
+  attachments?: EmailAttachment[];
 }) {
   const client = getResend();
   const { error } = await client.emails.send({
@@ -24,6 +30,9 @@ export async function sendEmail({ to, subject, html }: {
     to,
     subject,
     html,
+    ...(attachments && attachments.length
+      ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }
+      : {}),
   });
   if (error) throw new Error(error.message);
 }

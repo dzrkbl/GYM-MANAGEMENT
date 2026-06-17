@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement } from '../lib/paiements';
+import { sendRecuVersement } from '../lib/recus';
 
 const router = Router();
 
@@ -166,6 +167,11 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       }
     });
 
+    // Reçu automatique si le versement est créé déjà payé (sauf comptant).
+    if (payment.datePaiement) {
+      sendRecuVersement(payment.id).catch((e) => console.error('Erreur envoi reçu:', e));
+    }
+
     return sendSuccess(res, payment, 201);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
@@ -202,6 +208,11 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       data: updateData
     });
 
+    // Reçu automatique si le paiement vient d'être marqué payé (sauf comptant).
+    if (updateData.datePaiement) {
+      sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+    }
+
     return sendSuccess(res, payment);
   } catch (error) {
     return sendError(res, 'Erreur de mise à jour du paiement', 500);
@@ -224,6 +235,9 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
         note: note || ''
       }
     });
+
+    // Reçu automatique (sauf comptant) — ne bloque pas la réponse.
+    sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
 
     return sendSuccess(res, updated);
   } catch (error) {

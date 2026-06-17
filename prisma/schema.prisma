@@ -84,6 +84,8 @@ model PaymentVersement {
   methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
   note            String?
   reminderSentAt  DateTime?          // Anti-doublon pour les rappels de paiement automatiques
+  receiptNumber   Int?               // Numéro de reçu (assigné à l'envoi du reçu)
+  receiptSentAt   DateTime?          // Date d'envoi du reçu par courriel (anti-doublon)
   createdAt       DateTime  @default(now())
 
   member          Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
