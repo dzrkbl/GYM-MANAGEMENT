@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { sendEmail, htmlCourriel, parseDestinataires } from '../lib/mailer';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -31,10 +31,13 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
       select: { email: true, parentEmail: true },
     });
 
-    // Destinataires uniques (parent en priorité), sans doublon.
-    const destinataires = Array.from(
-      new Set(membres.map((m) => m.parentEmail || m.email).filter((e): e is string => !!e))
-    );
+    // Destinataires uniques (parent en priorité), en séparant les courriels multiples
+    // (familles séparées) et sans doublon.
+    const set = new Set<string>();
+    for (const m of membres) {
+      for (const e of parseDestinataires(m.parentEmail || m.email)) set.add(e);
+    }
+    const destinataires = Array.from(set);
 
     if (destinataires.length === 0) {
       return sendError(res, 'Aucun destinataire avec une adresse courriel pour ce filtre.', 400);

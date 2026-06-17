@@ -33,16 +33,29 @@ export interface EmailAttachment {
   content: Buffer;
 }
 
+// Sépare une valeur "a@x.com; b@y.com" (ou tableau) en liste d'adresses propres.
+// Permet de contacter plusieurs parents (familles séparées) pour un même membre.
+export function parseDestinataires(value?: string | string[] | null): string[] {
+  if (!value) return [];
+  const arr = Array.isArray(value) ? value : [value];
+  return arr
+    .flatMap((s) => String(s).split(/[;,]/))
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export async function sendEmail({ to, subject, html, attachments }: {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   attachments?: EmailAttachment[];
 }) {
+  const destinataires = parseDestinataires(to);
+  if (destinataires.length === 0) throw new Error('Aucun destinataire courriel valide');
   const client = getResend();
   const { error } = await client.emails.send({
     from: 'CSHP <payements@centresportifhp.com>',
-    to,
+    to: destinataires,
     subject,
     html,
     ...(attachments && attachments.length
