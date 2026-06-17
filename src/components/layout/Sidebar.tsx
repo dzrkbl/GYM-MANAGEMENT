@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target } from 'lucide-react';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
@@ -9,12 +9,16 @@ export function Sidebar() {
     ...(user?.role === 'ADMIN' ? [{ to: '/dashboard', icon: Home, label: 'Tableau de bord' }] : []),
     { to: '/planning', icon: CalendarDays, label: 'Planning' },
     { to: '/membres', icon: Users, label: 'Membres' },
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/prospects', icon: Target, label: 'Prospects' }] : []),
     { to: '/pointer', icon: CheckSquare, label: 'Pointage' },
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Paiements' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin/finances', icon: Coins, label: 'Finances' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/rapports', icon: FileText, label: 'Rapports' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/coachs', icon: UserCog, label: 'Coachs' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/sections', icon: Tag, label: 'Sections' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/import', icon: UploadCloud, label: 'Import' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/communications', icon: Send, label: 'Courriels' }] : []),
+    ...(user?.role === 'ADMIN' ? [{ to: '/admin/audit', icon: History, label: 'Audit' }] : []),
   ];
 
   return (

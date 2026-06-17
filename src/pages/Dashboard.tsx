@@ -4,20 +4,25 @@ import { apiFetch } from '../lib/api';
 import { formatMontant } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
-import { DollarSign, Users, AlertCircle, CalendarCheck } from 'lucide-react';
+import { DollarSign, Users, AlertCircle, CalendarCheck, TrendingUp, Percent, Repeat } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
+  const [kpis, setKpis] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     async function fetchDashboard() {
       try {
-        const res = await apiFetch<any>('/dashboard/resume');
+        const [res, kpisRes] = await Promise.all([
+          apiFetch<any>('/dashboard/resume'),
+          apiFetch<any>('/dashboard/kpis'),
+        ]);
         setData(res);
+        setKpis(kpisRes);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -146,13 +151,87 @@ export function Dashboard() {
           </div>
           <div className="mt-4 flex items-center text-sm">
             <span className="text-cshp-gray">
-              {data.revenus.moisActuel > 0 
-                ? ((data.masseSalariale / data.revenus.moisActuel) * 100).toFixed(1) 
+              {data.revenus.moisActuel > 0
+                ? ((data.masseSalariale / data.revenus.moisActuel) * 100).toFixed(1)
                 : 0} % des revenus
             </span>
           </div>
         </Card>
       </div>
+
+      {kpis && (
+        <>
+          <h2 className="text-lg font-bold text-cshp-black pt-2">Indicateurs de pilotage</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* MRR */}
+            <Card className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-cshp-gray mb-1">Revenu récurrent mensuel</p>
+                  <h3 className="text-2xl font-bold text-cshp-black truncate max-w-[180px]">{formatMontant(kpis.mrr)}</h3>
+                </div>
+                <div className="p-3 bg-green-50 text-green-600 rounded-lg shrink-0"><TrendingUp size={24} /></div>
+              </div>
+              <p className="mt-4 text-sm text-cshp-gray">Équivalent mensuel des cotisations actives</p>
+            </Card>
+
+            {/* Recouvrement */}
+            <Card className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-cshp-gray mb-1">Taux de recouvrement</p>
+                  <h3 className="text-2xl font-bold text-cshp-black">{kpis.recouvrement.pct}%</h3>
+                </div>
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg shrink-0"><Percent size={24} /></div>
+              </div>
+              <p className="mt-4 text-sm text-cshp-gray">
+                {formatMontant(kpis.recouvrement.encaisse)} / {formatMontant(kpis.recouvrement.total)} échus
+              </p>
+            </Card>
+
+            {/* Rétention */}
+            <Card className="p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-cshp-gray mb-1">Taux de rétention</p>
+                  <h3 className="text-2xl font-bold text-cshp-black">{kpis.retention.pct}%</h3>
+                </div>
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg shrink-0"><Repeat size={24} /></div>
+              </div>
+              <p className="mt-4 text-sm text-cshp-gray">
+                {kpis.retention.actifs} actifs · {kpis.retention.inactifs} inactifs
+              </p>
+            </Card>
+          </div>
+
+          {/* Prévision de trésorerie */}
+          <Card className="p-6">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-2 mb-4">
+              Prévision de trésorerie (3 mois)
+            </h3>
+            <div className="space-y-4">
+              {kpis.previsions.map((p: any) => {
+                const pct = p.total > 0 ? Math.round((p.encaisse / p.total) * 100) : 0;
+                return (
+                  <div key={p.label}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium text-cshp-black capitalize">{p.label}</span>
+                      <span className="text-cshp-gray">
+                        {formatMontant(p.total)}
+                        <span className="text-xs text-cshp-red ml-2">à venir {formatMontant(p.aVenir)}</span>
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-3 text-xs text-cshp-gray">La portion verte représente les versements déjà encaissés.</p>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

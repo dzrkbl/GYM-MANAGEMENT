@@ -5,8 +5,8 @@ import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
 
-// GET /api/coach-salaire — liste coachs actifs
-router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
+// GET /api/coach-salaire — liste coachs actifs (données financières → ADMIN)
+router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const coachs = await prisma.coachSalaire.findMany({
       where: { actif: true },

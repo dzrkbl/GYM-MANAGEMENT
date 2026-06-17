@@ -270,7 +270,7 @@ export function Membres() {
                       </td>
                       <td className="py-3.5 px-4">
                         <Badge variant="neutral" className="bg-slate-100 text-slate-800 border-none px-2.5 py-1 text-xs">
-                          {getLabel(member.groupe)}
+                          {getLabel(member.sections?.[0]?.section)}
                         </Badge>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-xs text-gray-600 uppercase">

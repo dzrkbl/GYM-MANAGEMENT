@@ -1,8 +1,8 @@
 import { prisma } from './prisma';
 
-const TPS_RATE  = 0.05;
-const TVQ_RATE  = 0.09975;
-const DIVISEUR_TAXES = 1 + TPS_RATE + TVQ_RATE; // 1.14975
+export const TPS_RATE  = 0.05;
+export const TVQ_RATE  = 0.09975;
+export const DIVISEUR_TAXES = 1 + TPS_RATE + TVQ_RATE; // 1.14975
 
 // Calcul du loyer pour une année donnée (auto ou override)
 export async function getLoyerPourAnnee(annee: number): Promise<number> {

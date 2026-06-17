@@ -6,7 +6,6 @@ import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
-import { getGroupeLabel } from '../lib/groupes';
 import { Modal } from '../components/ui/Modal';
 import { useSections } from '../hooks/useSections';
 

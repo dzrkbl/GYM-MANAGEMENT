@@ -14,6 +14,7 @@ import {
   DollarSign, Users, CheckCircle, Clock, Heart, Mail, Check, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { KATAS_KARATE, estKarate } from '../lib/katas';
 
 export function MembreDetail() {
   const { id } = useParams<{ id: string }>();
@@ -229,7 +230,7 @@ export function MembreDetail() {
 
             <div className="pt-2 flex flex-wrap gap-2 justify-center sm:justify-start">
               <Badge variant="neutral" className="bg-slate-900 text-white font-bold px-3 py-1 text-xs">
-                {groupLabel(member.groupe)}
+                {groupLabel(member.sections?.[0]?.section)}
               </Badge>
               {member.sections?.[0]?.belt && (
                 <Badge variant="belt" className="font-semibold text-xs py-1">
@@ -314,6 +315,48 @@ export function MembreDetail() {
             )}
           </Card>
 
+          <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Coordonnées & contact d'urgence</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Téléphone</span>
+                <span className="text-gray-800 font-semibold">{member.phone || '-'}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Courriel</span>
+                <span className="text-gray-800 font-semibold break-all">{member.email || '-'}</span>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Adresse</span>
+                <span className="text-gray-800 font-semibold">
+                  {[member.adresse, member.ville, member.codePostal].filter(Boolean).join(', ') || '-'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Parent / tuteur</span>
+                <span className="text-gray-800 font-semibold">{member.parentName || '-'}</span>
+                <span className="text-gray-500 block text-xs">
+                  {member.parentPhone || ''}{member.parentEmail ? ` · ${member.parentEmail}` : ''}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Contact d'urgence</span>
+                <span className="text-gray-800 font-semibold">
+                  {member.urgenceNom || '-'}{member.urgenceLien ? ` (${member.urgenceLien})` : ''}
+                </span>
+                <span className="text-gray-500 block text-xs">{member.urgenceTel || ''}</span>
+              </div>
+            </div>
+            {member.problemeSante && (
+              <div className="pt-3 border-t border-gray-100">
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 uppercase">
+                  <AlertTriangle size={14} /> Problème de santé signalé
+                </span>
+                {member.noteSante && <p className="text-sm text-slate-700 mt-1 whitespace-pre-line">{member.noteSante}</p>}
+              </div>
+            )}
+          </Card>
+
           {/* Grille de Ceintures et Historique des Passages de Grades */}
           <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
@@ -353,6 +396,41 @@ export function MembreDetail() {
               <p className="text-xs text-gray-400 italic">Aucun historique de grade enregistré.</p>
             )}
           </Card>
+
+          {/* Programme de katas — Karaté uniquement */}
+          {member.sections?.some((s: any) => estKarate(s.section)) && (
+            <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Programme de katas — Karaté</h3>
+              <p className="text-xs text-gray-500">Katas à réviser à la maison selon le grade visé.</p>
+              <div className="space-y-3">
+                {KATAS_KARATE.map((niveau) => (
+                  <div key={niveau.kyu} className="text-sm">
+                    <p className="font-semibold text-gray-900">
+                      {niveau.ceinture} <span className="text-gray-400 font-normal">({niveau.kyu})</span>
+                    </p>
+                    <ul className="mt-1 flex flex-wrap gap-2">
+                      {niveau.katas.map((k) => (
+                        <li key={k.nom}>
+                          {k.videoUrl ? (
+                            <a
+                              href={k.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs bg-cshp-red/10 text-cshp-red font-semibold px-2 py-0.5 rounded"
+                            >
+                              ▶ {k.nom}
+                            </a>
+                          ) : (
+                            <span className="inline-block text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{k.nom}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
@@ -482,7 +560,7 @@ export function MembreDetail() {
                           {formatDateLocal(a.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </span>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.groupe}</span>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.sections?.[0]?.section}</span>
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
                         </div>
                       </div>
@@ -513,7 +591,7 @@ export function MembreDetail() {
                   >
                     <div>
                       <p className="font-bold text-sm text-gray-900 uppercase">{fam.lastName} <span className="capitalize font-medium text-gray-700">{fam.firstName}</span></p>
-                      <p className="text-xs text-gray-500 uppercase">{fam.groupe || '-'}</p>
+                      <p className="text-xs text-gray-500 uppercase">{fam.sections?.[0]?.section || '-'}</p>
                     </div>
                     <Badge variant="success" className="text-[10px]">Famille</Badge>
                   </div>

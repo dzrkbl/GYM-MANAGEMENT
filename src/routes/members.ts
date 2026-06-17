@@ -4,6 +4,10 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../lib/tarifs';
+import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { contenuBienvenue } from '../lib/bienvenue';
+import { estKarate } from '../lib/katas';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
 
@@ -37,7 +41,6 @@ const memberSchema = z.object({
   status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']).default('ACTIF'),
 
   poids: z.number().optional().nullable(),
-  groupe: z.string().optional().nullable(),
   dateInscription: z.string().optional().nullable(),
   finContrat: z.string().optional().nullable(),
   plan: z.enum(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
@@ -71,10 +74,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
         ...(filterSection ? {
-          OR: [
-            { groupe: filterSection },
-            { sections: { some: { section: filterSection } } }
-          ]
+          sections: { some: { section: filterSection } }
         } : {}),
       },
       include: { sections: true, versements: true },
@@ -131,7 +131,6 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             )
           },
           poids: data.poids,
-          groupe: data.groupe,
           dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
           finContrat: finContrat,
           plan: data.plan,
@@ -158,25 +157,21 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         include: { sections: true, versements: true }
       });
 
-      if (data.groupe) {
-        const alreadyInSections = data.sections?.some((sec: any) => 
-          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
-        );
-        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists && !alreadyInSections) {
-          const newSec = await tx.memberSection.create({
-            data: {
-              memberId: member.id,
-              section: data.groupe,
-              belt: data.currentBelt || "Blanche"
-            }
-          });
-          member.sections.push(newSec);
-        }
-      }
-
       return member;
     });
+
+    // Courriel de bienvenue avec la documentation (non bloquant).
+    const dest = newMember.parentEmail || newMember.email;
+    if (dest) {
+      const karate = newMember.sections?.some((s: any) => estKarate(s.section));
+      sendEmail({
+        to: dest,
+        subject: 'Bienvenue au Centre Sportif de Haute-Performance',
+        html: htmlCourriel(contenuBienvenue({ nom: `${newMember.firstName} ${newMember.lastName}`, karate })),
+      }).catch((e) => console.error('Erreur courriel bienvenue:', e));
+    }
+
+    logAudit(req, { action: 'CREATE', entity: 'Member', entityId: newMember.id, description: `${newMember.firstName} ${newMember.lastName}` });
 
     return sendSuccess(res, newMember, 201);
   } catch (error) {
@@ -192,7 +187,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
   try {
     const member = await prisma.member.findUnique({
       where: { id: req.params.id },
-      include: { sections: true, subscriptions: true, payments: true, versements: { orderBy: { numeroVersement: 'asc' } } }
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
     });
 
     if (!member) return sendError(res, 'Membre introuvable', 404);
@@ -290,49 +285,13 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       };
     }
 
-    const updatedMember = await prisma.$transaction(async (tx) => {
-      const oldMember = await tx.member.findUnique({
-        where: { id: req.params.id },
-        select: { groupe: true }
-      });
-      const previousGroupe = oldMember?.groupe;
-
-      const member = await tx.member.update({
-        where: { id: req.params.id },
-        data: updateData,
-        include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
-      });
-
-      if (data.groupe === null && previousGroupe) {
-        // supprimer l'entrée MemberSection correspondante à l'ancien groupe (ne pas laisser un MemberSection orphelin)
-        await tx.memberSection.deleteMany({
-          where: {
-            memberId: member.id,
-            section: previousGroupe
-          }
-        });
-        member.sections = member.sections.filter((s: any) => s.section !== previousGroupe);
-      }
-
-      if (data.groupe) {
-        const alreadyInSections = data.sections?.some((sec: any) => 
-          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
-        );
-        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists && !alreadyInSections) {
-          const newSec = await tx.memberSection.create({
-            data: {
-              memberId: member.id,
-              section: data.groupe,
-              belt: member.currentBelt || "Blanche"
-            }
-          });
-          member.sections.push(newSec);
-        }
-      }
-
-      return member;
+    const updatedMember = await prisma.member.update({
+      where: { id: req.params.id },
+      data: updateData,
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
     });
+
+    logAudit(req, { action: 'UPDATE', entity: 'Member', entityId: updatedMember.id, description: `${updatedMember.firstName} ${updatedMember.lastName}` });
 
     return sendSuccess(res, updatedMember);
   } catch (error) {
@@ -393,6 +352,8 @@ router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), a
       where: { id: req.params.id },
       data: { status: 'INACTIF' }
     });
+
+    logAudit(req, { action: 'DELETE', entity: 'Member', entityId: member.id, description: `Désactivation de ${member.firstName} ${member.lastName}` });
 
     return sendSuccess(res, member);
   } catch (error) {

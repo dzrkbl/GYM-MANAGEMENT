@@ -48,7 +48,18 @@ model Member {
 
   // Infos personnelles additionnelles
   poids                  Float?
-  groupe                 String?     // 'KARATE_GR1', 'KARATE_GR2', 'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3', 'NINJAS_GR1', 'NINJAS_GR2', 'MENSUEL'
+  adresse                String?
+  codePostal             String?
+  ville                  String?
+
+  // Santé
+  problemeSante          Boolean     @default(false)
+  noteSante              String?     // détail si problème de santé
+
+  // Contact d'urgence (1er répondant)
+  urgenceNom             String?
+  urgenceLien            String?
+  urgenceTel             String?
 
   // Contrat
   dateInscription        DateTime?
@@ -68,10 +79,13 @@ model Member {
   rabaisReferentPct      Float?
   rabaisReferentApplique Boolean     @default(false)
 
+  // Consentement au règlement intérieur (inscription en ligne)
+  reglementVersion       String?     // version du règlement acceptée
+  reglementAccepteAt     DateTime?   // horodatage de l'acceptation
+  reglementSignataire    String?     // nom complet saisi comme signature
+
   // Relations
   sections      MemberSection[]
-  subscriptions Subscription[]
-  payments      Payment[]
   attendances   Attendance[]
   grades        Grade[]
   versements    PaymentVersement[]
@@ -86,6 +100,9 @@ model PaymentVersement {
   datePaiement    DateTime?
   methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
   note            String?
+  reminderSentAt  DateTime?          // Anti-doublon pour les rappels de paiement automatiques
+  receiptNumber   Int?               // Numéro de reçu (assigné à l'envoi du reçu)
+  receiptSentAt   DateTime?          // Date d'envoi du reçu par courriel (anti-doublon)
   createdAt       DateTime  @default(now())
 
   member          Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
@@ -102,41 +119,6 @@ model MemberSection {
 
   @@unique([memberId, section])
 }
-
-model Subscription {
-  id        String   @id @default(uuid())
-  memberId  String
-  section   String   // Lier l'abonnement à une section (ex: KARATE)
-  type      String   // MONTHLY, QUARTERLY
-  amount    Float
-  startDate DateTime
-  endDate   DateTime
-  status    String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  payments  Payment[]
-}
-
-model Payment {
-  id             String        @id @default(uuid())
-  subscriptionId String?
-  memberId       String
-  amount         Float
-  method         PaymentMethod?       // CASH, TRANSFER, CARD
-  dueDate        DateTime
-  paidDate       DateTime?
-  status         String        @default("PENDING") // PAID, PENDING, OVERDUE
-  reminderSentAt DateTime?     // Évite les doublons d'alertes
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  member         Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
-}
-
-
 
 model Course {
   id        String   @id @default(uuid())
@@ -217,12 +199,6 @@ enum MethodePaiement {
   CARTE
 }
 
-enum PaymentMethod {
-  CASH
-  TRANSFER
-  CARD
-}
-
 model MasseSalariale {
   id        String   @id @default(uuid())
   mois      Int      // 1-12
@@ -276,6 +252,34 @@ enum CategorieDepense {
   VARIABLE
   SALARIALE
   AUTRE
+}
+
+// Journal d'audit : trace les modifications sensibles (membres, paiements…).
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userNom     String?  // dénormalisé pour l'affichage
+  action      String   // CREATE, UPDATE, DELETE, PAY
+  entity      String   // Member, PaymentVersement…
+  entityId    String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// Journal des rappels/alertes envoyés, pour éviter les doublons (dédup par type + refKey).
+model ReminderLog {
+  id          String   @id @default(uuid())
+  type        String   // PAIEMENT_J7, PAIEMENT_J0, PAIEMENT_RETARD, RENOUVELLEMENT, ABSENCE
+  memberId    String
+  versementId String?
+  refKey      String   // clé de déduplication (id versement, échéance, semaine…)
+  sentAt      DateTime @default(now())
+
+  @@unique([type, refKey])
+  @@index([memberId])
 }
 
 

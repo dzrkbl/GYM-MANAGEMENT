@@ -31,8 +31,7 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
             select: {
               firstName: true,
               lastName: true,
-              sections: { select: { section: true } },
-              groupe: true
+              sections: { select: { section: true } }
             }
           }
         },
@@ -59,7 +58,7 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
           paidDate: v.datePaiement,
           member: v.member,
           subscription: {
-            section: v.member.groupe || v.member.sections?.[0]?.section || 'INCONNU'
+            section: v.member.sections?.[0]?.section || 'INCONNU'
           }
         };
       });
@@ -142,8 +141,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
             id: true,
             firstName: true,
             lastName: true,
-            sections: { select: { section: true } },
-            groupe: true
+            sections: { select: { section: true } }
           }
         }
       }
@@ -158,7 +156,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     }> = {};
 
     versements.forEach(v => {
-      const s = v.member.groupe || v.member.sections?.[0]?.section || 'INCONNU';
+      const s = v.member.sections?.[0]?.section || 'INCONNU';
       const isPaid = !!v.datePaiement;
       const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < today;
 
@@ -199,20 +197,8 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
       sectionLabels[s.code] = s.label;
     });
 
-    const defaultLabels: Record<string, string> = {
-      'KARATE_GR1': 'Karaté Gr. 1',
-      'KARATE_GR2': 'Karaté Gr. 2',
-      'KARATE_GR3': 'Karaté Gr. 3',
-      'JUDO_GR1': 'Judo Gr. 1',
-      'JUDO_GR2': 'Judo Gr. 2',
-      'JUDO_GR3': 'Judo Gr. 3',
-      'NINJAS_GR1': 'Ninjas Gr. 1',
-      'NINJAS_GR2': 'Ninjas Gr. 2',
-      'NINJAS_GR3': 'Ninjas Gr. 3',
-    };
-
     const parSection = Object.entries(sectionStats).map(([section, stats]) => {
-      const label = sectionLabels[section] || defaultLabels[section] || section;
+      const label = sectionLabels[section] || section;
       const montantTotal = stats.encaisse + stats.enAttente + stats.enRetard;
       return {
         section,
@@ -236,11 +222,10 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
       }
     });
 
-    const sectionsPres = [
-      'KARATE_GR1', 'KARATE_GR2', 'KARATE_GR3',
-      'JUDO_GR1', 'JUDO_GR2', 'JUDO_GR3',
-      'NINJAS_GR1', 'NINJAS_GR2', 'NINJAS_GR3',
-    ];
+    // Sections réellement présentes dans les données de la période (plus de liste figée).
+    const sectionsPres = Array.from(
+      new Set(attendances.map(a => a.course?.section).filter((s): s is string => !!s))
+    );
     const presencesList = sectionsPres.map(sec => {
       const secAtts = attendances.filter(a => a.course?.section === sec);
       const totalAtts = secAtts.length;
@@ -272,8 +257,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
             id: true,
             firstName: true,
             lastName: true,
-            sections: { select: { section: true } },
-            groupe: true
+            sections: { select: { section: true } }
           }
         }
       },
@@ -286,7 +270,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
         id: v.id,
         membreId: v.membreId,
         membreNom: `${v.member.lastName || ''} ${v.member.firstName || ''}`.trim(),
-        section: v.member.groupe || v.member.sections?.[0]?.section || '',
+        section: v.member.sections?.[0]?.section || '',
         montant: v.montant,
         date: dateString,
         joursRetard: Math.max(0, Math.floor((Date.now() - v.datePrevue.getTime()) / 86400000))

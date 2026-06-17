@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
+import { Inscription } from './pages/Inscription';
 import { Dashboard } from './pages/Dashboard';
 import { Pointer } from './pages/Pointer';
 import { Membres } from './pages/Membres';
@@ -12,6 +13,10 @@ import { Rapports } from './pages/Rapports';
 import { Planning } from './pages/Planning';
 import { Sections } from './pages/Sections';
 import { Finances } from './pages/admin/Finances';
+import { Import } from './pages/admin/Import';
+import { Audit } from './pages/admin/Audit';
+import { Communications } from './pages/admin/Communications';
+import { Prospects } from './pages/admin/Prospects';
 
 export default function App() {
   return (
@@ -19,6 +24,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/inscription" element={<Inscription />} />
           
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -27,6 +33,10 @@ export default function App() {
             <Route path="/pointer" element={<Pointer />} />
             <Route path="/paiements" element={<Paiements />} />
             <Route path="/admin/finances" element={<Finances />} />
+            <Route path="/admin/import" element={<Import />} />
+            <Route path="/admin/audit" element={<Audit />} />
+            <Route path="/admin/communications" element={<Communications />} />
+            <Route path="/admin/prospects" element={<Prospects />} />
             <Route path="/coachs" element={<Coachs />} />
             <Route path="/rapports" element={<Rapports />} />
             <Route path="/planning" element={<Planning />} />

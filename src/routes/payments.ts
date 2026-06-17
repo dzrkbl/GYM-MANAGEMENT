@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { normalizeMethodePaiement } from '../lib/paiements';
+import { sendRecuVersement } from '../lib/recus';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
 
@@ -10,7 +13,7 @@ const paymentSchema = z.object({
   subscriptionId: z.string().optional().nullable(),
   memberId: z.string(),
   amount: z.number().positive('Le montant doit être positif'),
-  method: z.enum(['COMPTANT', 'VIREMENT', 'CARTE']).optional().nullable(),
+  method: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   paidDate: z.string().optional().nullable(),
   status: z.enum(['PAYÉ', 'EN_ATTENTE', 'EN_RETARD']).default('EN_ATTENTE'),
@@ -31,13 +34,10 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       whereClause.datePrevue = { gte: startDate, lte: endDate };
     }
 
-    // Filtre par section (via member OR member.sections)
+    // Filtre par section (via les sections du membre)
     if (section && section !== 'TOUS') {
       whereClause.member = {
-        OR: [
-          { groupe: section as string },
-          { sections: { some: { section: section as string } } }
-        ]
+        sections: { some: { section: section as string } }
       };
     }
 
@@ -49,7 +49,6 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
             id: true,
             firstName: true,
             lastName: true,
-            groupe: true,
             sections: { select: { section: true } }
           }
         }
@@ -83,7 +82,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
         createdAt: v.createdAt,
         member: v.member,
         memberId: v.membreId,
-        section: v.member.groupe || v.member.sections?.[0]?.section || null
+        section: v.member.sections?.[0]?.section || null
       };
     });
 
@@ -155,17 +154,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       where: { membreId: data.memberId }
     });
 
-    let methodEnum: any = null;
-    if (data.method) {
-      const input = data.method.toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        methodEnum = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
-        methodEnum = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        methodEnum = 'CARTE';
-      }
-    }
+    const methodEnum = normalizeMethodePaiement(data.method);
 
     const payment = await prisma.paymentVersement.create({
       data: {
@@ -178,6 +167,13 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         note: '',
       }
     });
+
+    // Reçu automatique si le versement est créé déjà payé (sauf comptant).
+    if (payment.datePaiement) {
+      sendRecuVersement(payment.id).catch((e) => console.error('Erreur envoi reçu:', e));
+    }
+
+    logAudit(req, { action: 'CREATE', entity: 'PaymentVersement', entityId: payment.id, description: `Versement de ${data.amount} $` });
 
     return sendSuccess(res, payment, 201);
   } catch (error) {
@@ -206,22 +202,21 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (method) {
-      const input = String(method).toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        updateData.methodePaiement = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'TRANSFER' || input === 'INTERAC') {
-        updateData.methodePaiement = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        updateData.methodePaiement = 'CARTE';
-      } else if (input === 'CHEQUE' || input === 'CHÈQUE') {
-        updateData.methodePaiement = 'CHEQUE';
-      }
+      const normalized = normalizeMethodePaiement(String(method));
+      if (normalized) updateData.methodePaiement = normalized;
     }
 
     const payment = await prisma.paymentVersement.update({
       where: { id },
       data: updateData
     });
+
+    // Reçu automatique si le paiement vient d'être marqué payé (sauf comptant).
+    if (updateData.datePaiement) {
+      sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+    }
+
+    logAudit(req, { action: 'UPDATE', entity: 'PaymentVersement', entityId: id });
 
     return sendSuccess(res, payment);
   } catch (error) {
@@ -235,19 +230,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     const { id } = req.params;
     const { methodePaiement, note, datePaiement } = req.body;
 
-    let methodEnum: any = 'CASH';
-    if (methodePaiement) {
-      const input = String(methodePaiement).toUpperCase();
-      if (input === 'COMPTANT' || input === 'CASH') {
-        methodEnum = 'CASH';
-      } else if (input === 'VIREMENT' || input === 'INTERAC') {
-        methodEnum = 'VIREMENT';
-      } else if (input === 'CARTE') {
-        methodEnum = 'CARTE';
-      } else if (input === 'CHEQUE' || input === 'CHÈQUE') {
-        methodEnum = 'CHEQUE';
-      }
-    }
+    const methodEnum = normalizeMethodePaiement(methodePaiement) ?? 'CASH';
 
     const updated = await prisma.paymentVersement.update({
       where: { id },
@@ -257,6 +240,11 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
         note: note || ''
       }
     });
+
+    // Reçu automatique (sauf comptant) — ne bloque pas la réponse.
+    sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+
+    logAudit(req, { action: 'PAY', entity: 'PaymentVersement', entityId: id });
 
     return sendSuccess(res, updated);
   } catch (error) {

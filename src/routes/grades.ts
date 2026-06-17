@@ -25,18 +25,13 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER', 'COACH']
     const isMember = await prisma.member.findFirst({
       where: {
         id: data.memberId,
-        OR: [
-          { groupe: data.section },
-          { sections: { some: { section: data.section } } }
-        ]
+        sections: { some: { section: data.section } }
       }
     });
 
     if (!isMember) {
       return sendError(res, "Le membre n'est pas inscrit dans cette section", 404);
     }
-
-    const { force } = req.body; // option from client to force the jump
 
     // create transaction
     const result = await prisma.$transaction(async (tx) => {
