@@ -6,6 +6,10 @@ export interface JwtPayload {
   userId: string;
   role: string;
   section?: string | null;
+  // Attachés au runtime par le middleware authenticate (pas présents dans le token signé) :
+  email?: string;
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 export function signToken(payload: JwtPayload): string {

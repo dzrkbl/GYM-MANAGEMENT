@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement } from '../lib/paiements';
 import { sendRecuVersement } from '../lib/recus';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
 
@@ -172,6 +173,8 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       sendRecuVersement(payment.id).catch((e) => console.error('Erreur envoi reçu:', e));
     }
 
+    logAudit(req, { action: 'CREATE', entity: 'PaymentVersement', entityId: payment.id, description: `Versement de ${data.amount} $` });
+
     return sendSuccess(res, payment, 201);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
@@ -213,6 +216,8 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
     }
 
+    logAudit(req, { action: 'UPDATE', entity: 'PaymentVersement', entityId: id });
+
     return sendSuccess(res, payment);
   } catch (error) {
     return sendError(res, 'Erreur de mise à jour du paiement', 500);
@@ -238,6 +243,8 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
 
     // Reçu automatique (sauf comptant) — ne bloque pas la réponse.
     sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+
+    logAudit(req, { action: 'PAY', entity: 'PaymentVersement', entityId: id });
 
     return sendSuccess(res, updated);
   } catch (error) {

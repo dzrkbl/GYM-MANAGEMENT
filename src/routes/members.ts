@@ -7,6 +7,7 @@ import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../lib/tarifs'
 import { sendEmail, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
 
@@ -170,6 +171,8 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       }).catch((e) => console.error('Erreur courriel bienvenue:', e));
     }
 
+    logAudit(req, { action: 'CREATE', entity: 'Member', entityId: newMember.id, description: `${newMember.firstName} ${newMember.lastName}` });
+
     return sendSuccess(res, newMember, 201);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -288,6 +291,8 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
     });
 
+    logAudit(req, { action: 'UPDATE', entity: 'Member', entityId: updatedMember.id, description: `${updatedMember.firstName} ${updatedMember.lastName}` });
+
     return sendSuccess(res, updatedMember);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
@@ -347,6 +352,8 @@ router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), a
       where: { id: req.params.id },
       data: { status: 'INACTIF' }
     });
+
+    logAudit(req, { action: 'DELETE', entity: 'Member', entityId: member.id, description: `Désactivation de ${member.firstName} ${member.lastName}` });
 
     return sendSuccess(res, member);
   } catch (error) {

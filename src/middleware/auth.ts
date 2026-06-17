@@ -27,7 +27,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return sendError(res, 'Utilisateur introuvable.', 401);
     }
 
-    req.user = payload;
+    // On enrichit l'utilisateur courant avec son nom/courriel (utile pour l'audit).
+    req.user = { ...payload, email: user.email, firstName: user.firstName, lastName: user.lastName };
     next();
   } catch (error) {
     return sendError(res, 'Jeton invalide ou expiré.', 401);

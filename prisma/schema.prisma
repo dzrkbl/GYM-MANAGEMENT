@@ -254,6 +254,21 @@ enum CategorieDepense {
   AUTRE
 }
 
+// Journal d'audit : trace les modifications sensibles (membres, paiements…).
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userNom     String?  // dénormalisé pour l'affichage
+  action      String   // CREATE, UPDATE, DELETE, PAY
+  entity      String   // Member, PaymentVersement…
+  entityId    String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
 // Journal des rappels/alertes envoyés, pour éviter les doublons (dédup par type + refKey).
 model ReminderLog {
   id          String   @id @default(uuid())
