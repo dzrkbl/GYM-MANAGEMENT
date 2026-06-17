@@ -133,10 +133,7 @@ router.get('/stats', authenticate, async (req: Request, res: Response): Promise<
     const activeSectionMembers = await prisma.member.count({
       where: {
         status: 'ACTIF',
-        OR: [
-          { groupe: section as string },
-          { sections: { some: { section: section as string } } }
-        ]
+        sections: { some: { section: section as string } }
       }
     });
 

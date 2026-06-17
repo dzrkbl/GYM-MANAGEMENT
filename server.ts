@@ -7,7 +7,6 @@ import { exec } from 'child_process';
 // Routers
 import authRouter from './src/routes/auth';
 import membersRouter from './src/routes/members';
-import subscriptionsRouter from './src/routes/subscriptions';
 import paymentsRouter from './src/routes/payments';
 import coursesRouter from './src/routes/courses';
 import attendancesRouter from './src/routes/attendances';
@@ -35,7 +34,6 @@ app.use(express.json());
 // Main API Endpoints
 app.use('/api/auth', authRouter);
 app.use('/api/membres', membersRouter);
-app.use('/api/abonnements', subscriptionsRouter);
 app.use('/api/paiements', paymentsRouter);
 app.use('/api/cours', coursesRouter);
 app.use('/api/presences', attendancesRouter);
@@ -57,9 +55,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Cron : rappels de paiement (déclenché par un service externe avec le Bearer CRON_SECRET).
-// TODO (phase modèle de données) : cette route lit encore la table legacy `Payment`.
-// Elle doit être rebranchée sur `PaymentVersement` (+ champ `reminderSentAt`) lors de la
-// consolidation du modèle de paiement, sinon aucun rappel n'est envoyé.
+// Source de vérité : table PaymentVersement (versements non payés dont l'échéance approche).
 app.get('/api/cron/reminders', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -76,13 +72,14 @@ app.get('/api/cron/reminders', async (req, res) => {
     const dans7JoursFin = new Date(dans7Jours);
     dans7JoursFin.setHours(23, 59, 59, 999);
 
-    const paiements = await prisma.payment.findMany({
+    // Versements dont l'échéance tombe dans 7 jours, non payés et sans rappel déjà envoyé.
+    const versements = await prisma.paymentVersement.findMany({
       where: {
-        dueDate: {
+        datePrevue: {
           gte: dans7Jours,
           lte: dans7JoursFin,
         },
-        status: 'PENDING',
+        datePaiement: null,
         reminderSentAt: null,
       },
       include: {
@@ -92,8 +89,8 @@ app.get('/api/cron/reminders', async (req, res) => {
 
     const resultats = [];
 
-    for (const paiement of paiements) {
-      const membre = paiement.member;
+    for (const versement of versements) {
+      const membre = versement.member;
       const destinataire = membre.parentEmail || membre.email;
 
       if (!destinataire) {
@@ -102,8 +99,8 @@ app.get('/api/cron/reminders', async (req, res) => {
       }
 
       const nomComplet = `${membre.firstName} ${membre.lastName}`;
-      const montant = paiement.amount.toFixed(2);
-      const dateEcheance = paiement.dueDate.toLocaleDateString('fr-CA');
+      const montant = versement.montant.toFixed(2);
+      const dateEcheance = versement.datePrevue.toLocaleDateString('fr-CA');
 
       await sendEmail({
         to: destinataire,
@@ -123,8 +120,8 @@ app.get('/api/cron/reminders', async (req, res) => {
         `,
       });
 
-      await prisma.payment.update({
-        where: { id: paiement.id },
+      await prisma.paymentVersement.update({
+        where: { id: versement.id },
         data: { reminderSentAt: new Date() },
       });
 

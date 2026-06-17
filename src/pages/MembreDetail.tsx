@@ -229,7 +229,7 @@ export function MembreDetail() {
 
             <div className="pt-2 flex flex-wrap gap-2 justify-center sm:justify-start">
               <Badge variant="neutral" className="bg-slate-900 text-white font-bold px-3 py-1 text-xs">
-                {groupLabel(member.groupe)}
+                {groupLabel(member.sections?.[0]?.section)}
               </Badge>
               {member.sections?.[0]?.belt && (
                 <Badge variant="belt" className="font-semibold text-xs py-1">
@@ -482,7 +482,7 @@ export function MembreDetail() {
                           {formatDateLocal(a.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                         </span>
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.groupe}</span>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold bg-slate-100 px-2 py-0.5 rounded">Cours : {a.course?.section || member.sections?.[0]?.section}</span>
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
                         </div>
                       </div>
@@ -513,7 +513,7 @@ export function MembreDetail() {
                   >
                     <div>
                       <p className="font-bold text-sm text-gray-900 uppercase">{fam.lastName} <span className="capitalize font-medium text-gray-700">{fam.firstName}</span></p>
-                      <p className="text-xs text-gray-500 uppercase">{fam.groupe || '-'}</p>
+                      <p className="text-xs text-gray-500 uppercase">{fam.sections?.[0]?.section || '-'}</p>
                     </div>
                     <Badge variant="success" className="text-[10px]">Famille</Badge>
                   </div>

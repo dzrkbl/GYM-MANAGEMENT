@@ -37,7 +37,6 @@ const memberSchema = z.object({
   status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']).default('ACTIF'),
 
   poids: z.number().optional().nullable(),
-  groupe: z.string().optional().nullable(),
   dateInscription: z.string().optional().nullable(),
   finContrat: z.string().optional().nullable(),
   plan: z.enum(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
@@ -71,10 +70,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
         ...(filterSection ? {
-          OR: [
-            { groupe: filterSection },
-            { sections: { some: { section: filterSection } } }
-          ]
+          sections: { some: { section: filterSection } }
         } : {}),
       },
       include: { sections: true, versements: true },
@@ -131,7 +127,6 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             )
           },
           poids: data.poids,
-          groupe: data.groupe,
           dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
           finContrat: finContrat,
           plan: data.plan,
@@ -158,23 +153,6 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         include: { sections: true, versements: true }
       });
 
-      if (data.groupe) {
-        const alreadyInSections = data.sections?.some((sec: any) => 
-          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
-        );
-        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists && !alreadyInSections) {
-          const newSec = await tx.memberSection.create({
-            data: {
-              memberId: member.id,
-              section: data.groupe,
-              belt: data.currentBelt || "Blanche"
-            }
-          });
-          member.sections.push(newSec);
-        }
-      }
-
       return member;
     });
 
@@ -192,7 +170,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
   try {
     const member = await prisma.member.findUnique({
       where: { id: req.params.id },
-      include: { sections: true, subscriptions: true, payments: true, versements: { orderBy: { numeroVersement: 'asc' } } }
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
     });
 
     if (!member) return sendError(res, 'Membre introuvable', 404);
@@ -290,48 +268,10 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       };
     }
 
-    const updatedMember = await prisma.$transaction(async (tx) => {
-      const oldMember = await tx.member.findUnique({
-        where: { id: req.params.id },
-        select: { groupe: true }
-      });
-      const previousGroupe = oldMember?.groupe;
-
-      const member = await tx.member.update({
-        where: { id: req.params.id },
-        data: updateData,
-        include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
-      });
-
-      if (data.groupe === null && previousGroupe) {
-        // supprimer l'entrée MemberSection correspondante à l'ancien groupe (ne pas laisser un MemberSection orphelin)
-        await tx.memberSection.deleteMany({
-          where: {
-            memberId: member.id,
-            section: previousGroupe
-          }
-        });
-        member.sections = member.sections.filter((s: any) => s.section !== previousGroupe);
-      }
-
-      if (data.groupe) {
-        const alreadyInSections = data.sections?.some((sec: any) => 
-          typeof sec === 'string' ? sec === data.groupe : sec.section === data.groupe
-        );
-        const alreadyExists = member.sections.some((s: any) => s.section === data.groupe);
-        if (!alreadyExists && !alreadyInSections) {
-          const newSec = await tx.memberSection.create({
-            data: {
-              memberId: member.id,
-              section: data.groupe,
-              belt: member.currentBelt || "Blanche"
-            }
-          });
-          member.sections.push(newSec);
-        }
-      }
-
-      return member;
+    const updatedMember = await prisma.member.update({
+      where: { id: req.params.id },
+      data: updateData,
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } }
     });
 
     return sendSuccess(res, updatedMember);

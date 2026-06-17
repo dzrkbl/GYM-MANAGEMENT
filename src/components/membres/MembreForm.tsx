@@ -73,7 +73,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [phone, setPhone] = useState(membre?.phone || '');
   const [dob, setDob] = useState(membre?.dateOfBirth ? membre.dateOfBirth.split('T')[0] : '');
   const [poids, setPoids] = useState<number | ''>(membre?.poids !== undefined && membre?.poids !== null ? membre.poids : '');
-  const [groupe, setGroupe] = useState(membre?.groupe || '');
+  const [groupe, setGroupe] = useState(membre?.sections?.[0]?.section || '');
 
   useEffect(() => {
     if (GROUPES.length > 0 && !groupe) {
@@ -323,7 +323,6 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         phone: phone || null,
         dob: dob || null,
         poids: poids !== '' ? Number(poids) : null,
-        groupe,
         sections: [{ section: groupe, belt: belt || "Blanche" }],
         notes,
         status,
@@ -643,7 +642,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                           }}
                         >
                           <span className="font-semibold text-gray-800">{m.firstName} {m.lastName}</span>
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase">{m.groupe}</span>
+                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase">{m.sections?.[0]?.section}</span>
                         </button>
                       ))}
                     </div>
@@ -838,7 +837,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                         }}
                       >
                         <span className="font-semibold text-gray-800">{m.firstName} {m.lastName}</span>
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase">{m.groupe}</span>
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded uppercase">{m.sections?.[0]?.section}</span>
                       </button>
                     ))}
                   </div>

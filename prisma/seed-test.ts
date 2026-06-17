@@ -774,7 +774,6 @@ async function main() {
         dateOfBirth: m.dateNaissance,
         poids: m.poids,
         currentBelt: m.grade,
-        groupe: m.sectionCode,
         plan: m.plan as Plan,
         rabaisFamille: m.rabaisFamille,
         prixBase: m.prixBase,
