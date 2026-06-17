@@ -19,6 +19,7 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
     email: initialData?.email || '',
     phone: initialData?.phone || '',
     role: initialData?.role || 'COACH',
+    password: '',
     remuneration: initialData?.remuneration || 0,
     actif: initialData?.actif ?? true,
     dateDebut: initialData?.dateDebut ? initialData.dateDebut.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -54,7 +55,9 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sectionVal = selectedSections.length > 0 ? selectedSections.join(',') : null;
-    const payload = { ...formData, section: sectionVal };
+    const payload: any = { ...formData, section: sectionVal };
+    // Mot de passe optionnel : si laissé vide, on ne l'envoie pas (création = mot de passe temporaire généré ; édition = inchangé).
+    if (!payload.password) delete payload.password;
     await onSubmit(payload);
   };
 
@@ -68,6 +71,22 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input label="Courriel *" name="email" type="email" value={formData.email} onChange={handleChange} required />
         <Input label="Téléphone" name="phone" value={formData.phone} onChange={handleChange} />
+      </div>
+
+      <div>
+        <Input
+          label={initialData ? 'Nouveau mot de passe' : 'Mot de passe'}
+          name="password"
+          type="password"
+          value={formData.password}
+          onChange={handleChange}
+          placeholder={initialData ? 'Laisser vide pour ne pas changer' : 'Laisser vide pour générer un mot de passe temporaire'}
+        />
+        <p className="text-xs text-cshp-gray mt-1">
+          {initialData
+            ? 'Laissez vide pour conserver le mot de passe actuel.'
+            : 'Minimum 8 caractères. Si vide, un mot de passe temporaire sera généré et affiché une seule fois.'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

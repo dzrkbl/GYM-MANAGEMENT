@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
@@ -6,9 +8,14 @@ import { z } from 'zod';
 
 const router = Router();
 
+// Génère un mot de passe temporaire alphanumérique (à communiquer au coach, puis à changer).
+function generateTempPassword(): string {
+  return randomBytes(12).toString('base64url').slice(0, 12);
+}
+
 const coachSchema = z.object({
   email: z.string().email(),
-  passwordHash: z.string().optional(),
+  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères').optional(),
   firstName: z.string(),
   lastName: z.string(),
   phone: z.string().optional().nullable(),
@@ -28,7 +35,9 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) return sendError(res, 'Cet email est déjà utilisé', 400);
 
-    const passwordHash = data.passwordHash || 'temp-pass'; // En production, utiliser bcrypt + password envoyé par email
+    // Si l'admin ne fournit pas de mot de passe, on en génère un temporaire qu'on retourne une seule fois.
+    const plainPassword = data.password || generateTempPassword();
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
 
     const coach = await prisma.user.create({
       data: {
@@ -47,7 +56,11 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     });
 
     const { passwordHash: _, ...coachWithoutPass } = coach;
-    return sendSuccess(res, coachWithoutPass, 201);
+    return sendSuccess(res, {
+      ...coachWithoutPass,
+      // Mot de passe temporaire renvoyé uniquement quand l'admin n'en a pas fourni.
+      ...(data.password ? {} : { tempPassword: plainPassword }),
+    }, 201);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return sendError(res, 'Données invalides', 400, error.issues);
@@ -97,6 +110,11 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
 
     let updateData: any = { ...data };
     if (data.dateDebut) updateData.dateDebut = new Date(data.dateDebut);
+    // Ne jamais stocker le mot de passe en clair : on le hache et on retire le champ brut.
+    if (data.password) {
+      updateData.passwordHash = await bcrypt.hash(data.password, 10);
+    }
+    delete updateData.password;
 
     const coach = await prisma.user.update({
       where: { id },
