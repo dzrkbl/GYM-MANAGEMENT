@@ -38,8 +38,16 @@ interface StatDetail {
 
 const emptyStat = (): StatDetail => ({ inserted: 0, skipped: 0, errors: 0, errorDetails: [] });
 
-// Parseur CSV gérant les champs entre guillemets contenant des virgules.
-function parseCsv(text: string): string[][] {
+// Détecte le séparateur : tabulation (copier-coller depuis un tableur) ou virgule.
+function detectDelimiter(text: string): string {
+  const firstLine = text.replace(/\r/g, '').split('\n').find((l) => l.trim() !== '') || '';
+  const tabs = (firstLine.match(/\t/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  return tabs > commas ? '\t' : ',';
+}
+
+// Parseur CSV/TSV gérant les champs entre guillemets contenant le séparateur.
+function parseCsv(text: string, delim = ','): string[][] {
   const rows: string[][] = [];
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   for (const line of lines) {
@@ -56,7 +64,7 @@ function parseCsv(text: string): string[][] {
         } else cur += c;
       } else {
         if (c === '"') inQuotes = true;
-        else if (c === ',') { fields.push(cur); cur = ''; }
+        else if (c === delim) { fields.push(cur); cur = ''; }
         else cur += c;
       }
     }
@@ -108,7 +116,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 
     // --- MEMBRES ---
     if (data.membres && data.membres.trim()) {
-      let rows = parseCsv(data.membres);
+      let rows = parseCsv(data.membres, detectDelimiter(data.membres));
       if (skipHeader) rows = rows.slice(1);
 
       for (let i = 0; i < rows.length; i++) {
@@ -171,7 +179,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 
     // --- VERSEMENTS ---
     if (data.versements && data.versements.trim()) {
-      let rows = parseCsv(data.versements);
+      let rows = parseCsv(data.versements, detectDelimiter(data.versements));
       if (skipHeader) rows = rows.slice(1);
 
       for (let i = 0; i < rows.length; i++) {
