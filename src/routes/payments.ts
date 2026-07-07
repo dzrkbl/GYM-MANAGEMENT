@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement } from '../lib/paiements';
-import { sendRecuVersement } from '../lib/recus';
+import { sendRecuVersementBackground } from '../lib/recus';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -170,7 +170,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
 
     // Reçu automatique si le versement est créé déjà payé (sauf comptant).
     if (payment.datePaiement) {
-      sendRecuVersement(payment.id).catch((e) => console.error('Erreur envoi reçu:', e));
+      sendRecuVersementBackground(payment.id);
     }
 
     logAudit(req, { action: 'CREATE', entity: 'PaymentVersement', entityId: payment.id, description: `Versement de ${data.amount} $` });
@@ -213,7 +213,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
 
     // Reçu automatique si le paiement vient d'être marqué payé (sauf comptant).
     if (updateData.datePaiement) {
-      sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+      sendRecuVersementBackground(id);
     }
 
     logAudit(req, { action: 'UPDATE', entity: 'PaymentVersement', entityId: id });
@@ -242,7 +242,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     });
 
     // Reçu automatique (sauf comptant) — ne bloque pas la réponse.
-    sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+    sendRecuVersementBackground(id);
 
     logAudit(req, { action: 'PAY', entity: 'PaymentVersement', entityId: id });
 

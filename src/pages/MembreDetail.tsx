@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch, payerVersement } from '../lib/api';
-import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
+import { formatMontant, formatDate, formatDateLocal, todayLocalISO, joursAvantEcheance } from '../lib/format';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -40,7 +40,7 @@ export function MembreDetail() {
   // Modale Paiement d'un versement
   const [isPayVersementOpen, setIsPayVersementOpen] = useState(false);
   const [currentVersement, setCurrentVersement] = useState<any>(null);
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payDate, setPayDate] = useState(todayLocalISO());
   const [payMethod, setPayMethod] = useState('VIREMENT');
   const [payNote, setPayNote] = useState('');
   const [isPayingVersement, setIsPayingVersement] = useState(false);
@@ -114,7 +114,7 @@ export function MembreDetail() {
   // Enregistrer le paiement d'un versement
   const openPayVersementModal = (versement: any) => {
     setCurrentVersement(versement);
-    setPayDate(new Date().toISOString().split('T')[0]);
+    setPayDate(todayLocalISO());
     setPayMethod('VIREMENT');
     setPayNote('');
     setIsPayVersementOpen(true);
@@ -468,7 +468,7 @@ export function MembreDetail() {
               <div className="space-y-4">
                 {member.versements.map((v: any, index: number) => {
                   const isPaid = !!v.datePaiement;
-                  const isLate = !isPaid && new Date(v.datePrevue) < new Date();
+                  const isLate = !isPaid && joursAvantEcheance(v.datePrevue) < 0;
                   return (
                     <div 
                       key={v.id} 
@@ -502,7 +502,7 @@ export function MembreDetail() {
                           <p>Échéance prévue : <strong>{formatDateLocal(v.datePrevue, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
                           {isPaid && (
                             <div className="bg-slate-100/60 text-slate-700 p-2 rounded-lg mt-2 text-[11px] font-medium border border-slate-200/50">
-                              Paid on {formatDateLocal(v.datePaiement) || '-'} via <span className="uppercase font-bold">{v.methodePaiement}</span>
+                              Payé le {formatDateLocal(v.datePaiement) || '-'} via <span className="uppercase font-bold">{v.methodePaiement}</span>
                               {v.note && <span className="block mt-0.5 text-gray-500 italic">"Note: {v.note}"</span>}
                             </div>
                           )}

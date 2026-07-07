@@ -11,7 +11,7 @@ import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
 import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
-import { formatDateLocal } from '../lib/format';
+import { formatDateLocal, joursAvantEcheance } from '../lib/format';
 
 export function Membres() {
   const { user } = useAuth();
@@ -108,9 +108,7 @@ export function Membres() {
     // Vérifier si un versement passé n'est pas payé
     const existsLate = versements.some((v: any) => {
       if (v.datePaiement) return false;
-      const prevue = new Date(v.datePrevue);
-      prevue.setHours(0,0,0,0);
-      return prevue < today;
+      return joursAvantEcheance(v.datePrevue) < 0;
     });
 
     if (existsLate) {
@@ -126,10 +124,7 @@ export function Membres() {
       .sort((a: any, b: any) => new Date(a.datePrevue).getTime() - new Date(b.datePrevue).getTime())[0];
 
     if (nextVersement) {
-      const prevue = new Date(nextVersement.datePrevue);
-      prevue.setHours(0,0,0,0);
-      const diffTime = prevue.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = joursAvantEcheance(nextVersement.datePrevue);
       return {
         label: `🔵 Échéance dans ${diffDays} j.`,
         colorClass: 'bg-blue-50 text-blue-700 border-blue-200'
@@ -217,7 +212,7 @@ export function Membres() {
 
       {/* TABLEAU / VUE LISTE ADMINISTRATIVE */}
       {error ? (
-        <div className="p-4 bg-red-50-border border-red-200 text-red-600 rounded-lg font-medium shadow-sm">{error}</div>
+        <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-lg font-medium shadow-sm">{error}</div>
       ) : isLoading ? (
         <div className="py-12 flex justify-center"><Spinner /></div>
       ) : members.length === 0 ? (

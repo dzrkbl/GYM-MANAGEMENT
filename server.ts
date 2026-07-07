@@ -29,12 +29,65 @@ import leadsRouter from './src/routes/leads';
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
 import { bootstrapIfEmpty } from './src/lib/seedData';
+import { rateLimit } from './src/middleware/rateLimit';
+
+// Sans secret JWT, aucune authentification ne peut fonctionner : on refuse de
+// démarrer avec un message clair plutôt que d'échouer au premier login.
+if (!process.env.JWT_SECRET) {
+  console.error('❌ JWT_SECRET manquant. Définissez cette variable d\'environnement avant de démarrer.');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Derrière le proxy de Render : nécessaire pour que req.ip soit la vraie
+// adresse du client (utilisée par le limiteur de débit).
+app.set('trust proxy', 1);
+
 app.use(cors());
-app.use(express.json());
+// Limite montée à 2 Mo : les imports CSV collés (membres + versements) dépassent
+// facilement la limite par défaut de 100 Ko d'Express.
+app.use(express.json({ limit: '2mb' }));
+
+// ---- Déclencheur intégré des rappels quotidiens ----
+// Render (offre gratuite) dort sans trafic et aucun cron externe n'est encore
+// configuré : on déclenche donc la tournée de rappels au premier accès de la
+// journée (entre 8 h et 20 h, heure de Montréal). ReminderLog déduplique, donc
+// plusieurs exécutions le même jour sont sans effet. Un cron externe sur
+// /api/cron/reminders reste recommandé (il réveille aussi l'application).
+let derniereTentativeRappels = 0;
+let rappelsEnCours = false;
+function heureMontreal(): number {
+  return parseInt(
+    new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })
+      .format(new Date()),
+    10
+  );
+}
+app.use((_req, _res, next) => {
+  const maintenant = Date.now();
+  const h = heureMontreal();
+  if (!rappelsEnCours && maintenant - derniereTentativeRappels > 6 * 3600_000 && h >= 8 && h < 20) {
+    rappelsEnCours = true;
+    derniereTentativeRappels = maintenant;
+    runAllReminders()
+      .then((r: any) => { if (!r?.ignore) console.log('✅ Tournée de rappels quotidienne exécutée.'); })
+      .catch((e) => console.error('Erreur rappels quotidiens:', e))
+      .finally(() => { rappelsEnCours = false; });
+  }
+  next();
+});
+
+// Anti-abus sur les deux endpoints publics sensibles.
+app.post('/api/auth/login', rateLimit({
+  fenetreMs: 15 * 60_000, max: 10,
+  message: 'Trop de tentatives de connexion. Réessayez dans quelques minutes.',
+}));
+app.post('/api/inscription', rateLimit({
+  fenetreMs: 60 * 60_000, max: 5,
+  message: "Trop de demandes d'inscription. Réessayez plus tard.",
+}));
 
 // Main API Endpoints
 app.use('/api/auth', authRouter);
@@ -82,6 +135,12 @@ app.get('/api/cron/reminders', async (req, res) => {
 import { createServer as createViteServer } from 'vite';
 
 async function startServer() {
+  // Toute route /api inconnue doit répondre en JSON (404) au lieu de recevoir
+  // la page HTML de l'application (le fallback SPA ci-dessous).
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ success: false, error: 'Endpoint API introuvable' });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

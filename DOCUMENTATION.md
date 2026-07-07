@@ -43,9 +43,11 @@ Au démarrage (`server.ts`), si `DATABASE_URL` est défini :
 | Variable | Rôle |
 |---|---|
 | `DATABASE_URL` | Connexion PostgreSQL |
-| `JWT_SECRET` | Signature des jetons (≥ 32 caractères) |
+| `JWT_SECRET` | Signature des jetons (≥ 32 caractères). **Obligatoire : le serveur refuse de démarrer sans.** |
 | `NODE_ENV` | `development` ou `production` |
-| `RESEND_API_KEY` | Envoi des courriels (Resend) |
+| `RESEND_API_KEY` | Envoi des courriels via **Resend** (le domaine de l'expéditeur doit être vérifié chez Resend) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Envoi des courriels via **SMTP** (ex. boîte Hostinger : `smtp.hostinger.com`, port 465). Utilisé seulement si `RESEND_API_KEY` est absent. |
+| `EMAIL_FROM` | Expéditeur des courriels (défaut : `CSHP <payements@centresportifhp.com>`) |
 | `APP_URL` | URL publique (logo dans les courriels, liens) |
 | `CRON_SECRET` | Protège `GET /api/cron/reminders` |
 | `INSCRIPTION_NOTIF_EMAIL` | Destinataire des avis d'inscription/prospects (optionnel) |
@@ -161,10 +163,16 @@ Toutes les routes `/api/*`. Réponses standardisées via `lib/api-response.ts`
   l'envoie par courriel **quand un versement passe payé, SAUF si la méthode est
   CASH** (reçu papier manuel dans ce cas). Numérotation séquentielle. Idempotent
   (`receiptSentAt`).
-- **reminders.ts** — relances déclenchées par le cron : paiement (J-7, jour J,
-  retard), renouvellement (J-30 avant `finContrat`), absence (aucune présence depuis
-  14 j), prospects (NEW sans suivi depuis 3 j → alerte admin). **Déduplication** via
-  `ReminderLog` (unique `type+refKey`).
+- **reminders.ts** — relances : paiement (J-7, jour J, retard), renouvellement
+  (J-30 avant `finContrat`), absence (aucune présence depuis 14 j), prospects (NEW
+  sans suivi depuis 3 j → alerte admin). **Déduplication** via `ReminderLog`
+  (unique `type+refKey`). Deux déclencheurs : le **cron externe**
+  (`/api/cron/reminders`) et un **déclencheur intégré** dans `server.ts` (tournée
+  lancée au premier accès de la journée, entre 8 h et 20 h heure de Montréal —
+  utile car le plan gratuit de Render dort et aucun cron externe n'est requis).
+  La tournée est **ignorée si aucun transport courriel n'est configuré**, un
+  échec d'envoi individuel n'interrompt pas le reste, et les échecs sont
+  consignés dans le journal d'audit (action `ERREUR`, entité `Courriel`).
 - **bienvenue.ts** — contenu du courriel de bienvenue (avec section Karaté + vidéos
   de katas).
 - **katas.ts** — programme de katas Heian par grade (Karaté) + liens vidéo.
@@ -172,7 +180,13 @@ Toutes les routes `/api/*`. Réponses standardisées via `lib/api-response.ts`
 - **seedData.ts** — `seedInitialData` (admin, sections, cours, charges) +
   `bootstrapIfEmpty` (amorçage au démarrage si base vide).
 - **audit.ts** — `logAudit(req, …)` (non bloquant).
-- **mailer.ts** — `sendEmail` (Resend) + `htmlCourriel` (gabarit commun avec logo).
+- **mailer.ts** — courriels à **double transport** : Resend si `RESEND_API_KEY`
+  est défini, sinon SMTP (`SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`, ex. boîte
+  Hostinger). `configCourriel()` expose le diagnostic (utilisé par
+  `GET /api/communications/config` et le bouton « courriel de test » de la page
+  Communications, `POST /api/communications/test`). `sendEmailBackground()` =
+  envoi non bloquant dont **tout échec est consigné dans le journal d'audit**
+  (action `ERREUR`, entité `Courriel`) — plus aucune erreur avalée en silence.
 
 ## 8. Migrations
 
@@ -194,9 +208,12 @@ migration). Sur une base existante incompatible (dev), faire `prisma migrate res
 
 ## 10. Tâche planifiée (cron)
 
-Configurer un service externe (ex. cron-job.org) pour appeler **une fois par jour** :
-`GET <APP_URL>/api/cron/reminders` avec l'en-tête `Authorization: Bearer <CRON_SECRET>`.
-Cela exécute toutes les relances (§7 reminders.ts).
+Les relances tournent déjà **sans cron externe** grâce au déclencheur intégré de
+`server.ts` (première requête de la journée, 8 h–20 h heure de Montréal). Un cron
+externe reste recommandé (il **réveille** aussi l'app sur le plan gratuit de
+Render) : configurer p. ex. cron-job.org pour appeler **une fois par jour**
+`GET <APP_URL>/api/cron/reminders` avec l'en-tête
+`Authorization: Bearer <CRON_SECRET>`.
 
 ## 11. Dette technique connue / points d'attention
 
@@ -214,6 +231,27 @@ Cela exécute toutes les relances (§7 reminders.ts).
 - **SMS** : non implémenté (les communications/relances sont par courriel).
 - `PaymentVersement.reminderSentAt` est un champ **legacy** non utilisé (les
   relances passent par `ReminderLog`).
+- **`PUT /api/membres/:id` recrée les versements** (`deleteMany` + `create`) : les
+  données sont préservées par le formulaire (mode « custom » forcé en édition),
+  mais les **id** changent — les clés de déduplication `ReminderLog` liées aux
+  anciens id deviennent orphelines (risque de re-rappel après édition). À terme :
+  faire un vrai upsert par versement.
+- **Restes de la revue frontend (non corrigés, par priorité)** :
+  1. `MembreForm` n'expose pas les champs parent/adresse/urgence (corriger un
+     courriel de parent impose de passer par la base) ; « taille de ceinture »
+     est saisie mais jamais envoyée au backend.
+  2. Recherche de la page Membres : re-télécharge la liste à chaque frappe alors
+     que le filtre est côté client (mettre le filtre en `useMemo`).
+  3. Onglet Famille/Parrainage de `MembreDetail` : ne charge pas les membres
+     INACTIFS → un parrain inactif paraît absent.
+  4. Code-splitting : `Rapports` importe jsPDF/recharts en statique (dans le
+     bundle de tous les rôles) ; `motion` semble inutilisé dans package.json.
+  5. `Modal` : pas d'Échap/clic-fond/focus-trap ; navigation d'étapes de
+     `MembreForm` avec un bug de précédence permettant de sauter la validation.
+  6. `Rapports.tsx`/`Paiements.tsx` : `<Navigate>` retourné avant des hooks
+     (violation des règles des hooks, crash latent) ; `Prospects.tsx` avale les
+     erreurs de changement de statut.
+  7. Âge calculé par différence d'années (off-by-one avant l'anniversaire).
 
 ## 12. Reprendre le projet en local
 

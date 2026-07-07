@@ -3,10 +3,39 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { sendEmail, htmlCourriel, parseDestinataires } from '../lib/mailer';
+import { sendEmail, htmlCourriel, parseDestinataires, configCourriel } from '../lib/mailer';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
+
+// GET /api/communications/config — état de la configuration courriel (ADMIN)
+router.get('/config', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
+  const cfg = configCourriel();
+  return sendSuccess(res, { configure: cfg.provider !== null, provider: cfg.provider, from: cfg.from, details: cfg.details });
+});
+
+// POST /api/communications/test — envoie un courriel de test et remonte l'erreur réelle (ADMIN)
+router.post('/test', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  const cfg = configCourriel();
+  if (!cfg.provider) {
+    return sendError(res, `Courriel non configuré : ${cfg.details}`, 400);
+  }
+  const to = (req.body?.to && String(req.body.to).trim()) || req.user?.email;
+  if (!to) return sendError(res, 'Aucune adresse de destination.', 400);
+  try {
+    await sendEmail({
+      to,
+      subject: 'Test courriel — CSHP ✅',
+      html: htmlCourriel(`<p>La configuration courriel fonctionne (transport : ${cfg.details}).</p>`),
+    });
+    logAudit(req, { action: 'CREATE', entity: 'Courriel', description: `Test courriel réussi → ${to} (${cfg.details})` });
+    return sendSuccess(res, { ok: true, provider: cfg.provider, details: cfg.details, to });
+  } catch (e: any) {
+    const message = e instanceof Error ? e.message : String(e);
+    logAudit(req, { action: 'ERREUR', entity: 'Courriel', description: `Test courriel échoué → ${to} : ${message}` });
+    return sendError(res, `Échec de l'envoi (${cfg.details}) : ${message}`, 502);
+  }
+});
 
 const schema = z.object({
   section: z.string().optional().nullable(), // code de section, ou 'TOUS'/vide
@@ -51,13 +80,27 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     const envoyes = resultats.filter((r) => r.status === 'fulfilled').length;
     const echecs = resultats.length - envoyes;
 
+    // Détail des échecs : adresses concernées + message d'erreur réel (une erreur de
+    // configuration est identique pour tous — on remonte la première à l'interface).
+    const echecsDetails = resultats.flatMap((r, i) =>
+      r.status === 'rejected'
+        ? [{ adresse: destinataires[i], erreur: r.reason instanceof Error ? r.reason.message : String(r.reason) }]
+        : []
+    );
+
     logAudit(req, {
-      action: 'CREATE',
+      action: echecs > 0 && envoyes === 0 ? 'ERREUR' : 'CREATE',
       entity: 'Communication',
-      description: `Courriel groupé « ${data.sujet} » → ${envoyes} destinataire(s)${data.section && data.section !== 'TOUS' ? ' (' + data.section + ')' : ''}`,
+      description: `Courriel groupé « ${data.sujet} » → ${envoyes} envoyé(s), ${echecs} échec(s)${data.section && data.section !== 'TOUS' ? ' (' + data.section + ')' : ''}${echecs > 0 ? ' — ' + echecsDetails[0].erreur : ''}`,
     });
 
-    return sendSuccess(res, { destinataires: destinataires.length, envoyes, echecs });
+    return sendSuccess(res, {
+      destinataires: destinataires.length,
+      envoyes,
+      echecs,
+      erreur: echecs > 0 ? echecsDetails[0].erreur : null,
+      echecsDetails: echecsDetails.slice(0, 20),
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     console.error('Error in POST /api/communications:', error);
