@@ -39,11 +39,12 @@
 
 → Registre complet : [budget.md](budget.md)
 
-## ✅ 3 prochaines actions
+## ✅ Prochaines actions
 
-1. Brancher le connecteur Meta Ads et créer la campagne « Pass Découverte » **en PAUSE** (config exacte : [04-meta-ads-setup.md](../04-meta-ads-setup.md)).
-2. Tourner les 2 vidéos au cellulaire (scripts : [05-creatifs-et-annonces.md](../05-creatifs-et-annonces.md)) après signature des consentements.
-3. Faire le test de bout en bout du formulaire (faux lead → Sheets → Brevo → « appel 5 minutes »).
+1. **Recherche communautés dans NotebookLM** : ajouter les sources puis coller les prompts de [10-recherche-communautes.md](../10-recherche-communautes.md) — les réponses guideront les vidéos à tourner.
+2. Brancher le connecteur Meta Ads et créer la campagne « Pass Découverte » **en PAUSE** (config exacte : [04-meta-ads-setup.md](../04-meta-ads-setup.md)).
+3. Tourner les 2 vidéos au cellulaire (scripts : [05-creatifs-et-annonces.md](../05-creatifs-et-annonces.md)) après signature des consentements — en intégrant les codes issus de la recherche communautés.
+4. Faire le test de bout en bout du formulaire (faux lead → Sheets → Brevo → « appel 5 minutes »).
 
 ## 🧠 Rappels de doctrine (les erreurs à ne pas refaire)
 

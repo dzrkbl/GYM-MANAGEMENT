@@ -8,6 +8,18 @@ Format : les plus récentes en haut.
 
 ---
 
+## 2026-07-28 — Recherche « marketing par communauté » lancée (NotebookLM)
+
+- **Décision :** orienter les créatifs sur la résonance culturelle — communauté
+  maghrébine d'abord (~80 % des élèves), puis haïtienne, ouest-africaine et autres.
+  Pack de recherche : [../10-recherche-communautes.md](../10-recherche-communautes.md).
+- **Pourquoi :** Meta ne permet plus le ciblage ethnique (retiré 2020-2022) → le
+  contenu EST le ciblage ; les pubs s'adressent aux parents décideurs, et les codes
+  qui les mettent en confiance sont culturels (valeurs, langue, canaux de confiance).
+- **Revue prévue :** dès le retour des réponses NotebookLM — intégration au playbook,
+  puis verdicts créatifs après 14 jours de test.
+- **Résultat constaté :** *(à remplir)*
+
 ## 2026-07-28 — Création de l'espace de gestion marketing dans le dépôt de l'app
 
 - **Décision :** centraliser stratégie (playbook 90 jours) + suivi opérationnel dans

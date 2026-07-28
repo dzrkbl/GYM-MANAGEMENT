@@ -50,6 +50,8 @@ Plan couvrant la période du **14 juillet au 11 octobre 2026**, construit autour
 | [07-kpi-et-tracking.md](07-kpi-et-tracking.md) | Tableaux de bord, seuils go/no-go, plan B | Semaine 3+ |
 | [08-leviers-complementaires.md](08-leviers-complementaires.md) | Parrainage, kickboxing femmes, écoles, location, journées pédago | Semaine 2+ |
 | [templates/](templates/) | Fichiers CSV à importer dans Google Sheets (suivi leads + KPI) | Semaine 2 |
+| [09-questions-notebooklm.md](09-questions-notebooklm.md) | Questions de recherche en attente (subventions, écoles, rétention…) | Quand tu retournes dans NotebookLM |
+| [10-recherche-communautes.md](10-recherche-communautes.md) | **Recherche communautés** (maghrébine ~80 %, haïtienne, ouest-africaine…) : sources à ajouter, prompts, plan d'intégration | **En cours — priorité créatifs** |
 
 ---
 
