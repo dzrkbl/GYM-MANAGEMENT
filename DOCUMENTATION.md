@@ -63,6 +63,9 @@ prisma/
   schema.prisma          Modèle de données
   migrations/            UNE baseline unique alignée sur le schéma (voir §8)
   seed.ts                Appelle seedInitialData()
+marketing/               Gestion marketing du club (hors code) : playbook 90 jours,
+                         suivi des campagnes/budget/créatifs, journal de décisions.
+                         Point d'entrée : marketing/README.md
 src/
   routes/                Une route Express par domaine (voir §6)
   lib/                   Logique partagée (voir §7)
