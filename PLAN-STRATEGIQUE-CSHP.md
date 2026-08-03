@@ -167,7 +167,47 @@ Lecture stratégique :
   objectif 150-180 membres. La cible est atteinte dès 150 et chaque membre au-delà est du
   coussin.
 
-### 1.7 Revenus annexes (10 000-20 000 $/an, presque sans temps additionnel)
+### 1.7 Économie unitaire : le coût par cours
+
+Horaire de référence (chaque groupe s'entraîne 2×/semaine) : lundi 3 cours judo, mardi
+2 karaté, mercredi 2 U8, jeudi 2 karaté, vendredi 3 judo, samedi 2 U8 = **14 cours/semaine**,
+soit **700 cours/an** sur 50 semaines d'opération.
+
+**Coût par cours (dépenses fixes réparties sur les cours donnés) :**
+
+| Poste | Par cours |
+|---|---|
+| Loyer (58 450 $ nets/an ÷ 700) | 83,50 $ |
+| Autres charges (15 500 $ nets/an ÷ 700) | 22,20 $ |
+| **Total net** | **~106 $/cours** (120 $ TTC) |
+| + Coach payé (judo) le cas échéant | +30-40 $/cours |
+
+**Revenu par présence d'un membre** (2 présences/sem.) :
+
+| Forfait | Net/an | Présences/an | Revenu par présence |
+|---|---|---|---|
+| Annuel 790 $ | 687 $ | ~100 | **6,87 $** |
+| Trimestriel 250 $ | 217 $ / trim. | 26 / trim. | **8,36 $** |
+| Mix réel (rabais famille, churn) | ~627 $ | ~100 | **6,27 $** |
+
+**Seuil de rentabilité d'un cours** : 106 ÷ 6,27 ≈ **17 élèves** (15-16 si tous à l'annuel
+plein tarif) ; **20-22 élèves** pour un cours de judo si le coach est payé 30-40 $.
+
+Lecture :
+- **Un cours plein (20-25) est rentable au tarif actuel** : 125-157 $ de revenus vs ~106 $ de
+  coûts → marge de +20 à +50 $/cours (avant coach).
+- **Aujourd'hui, à ~11 élèves/cours en moyenne (80 membres ÷ 7 groupes), chaque cours perd
+  ~35 $** → ~24 000 $/an, ce qui recoupe exactement la perte globale du § 1.2.
+- **Plafond de cet horaire au tarif actuel** : capacité 150-175 membres (2 groupes karaté,
+  3 judo, 2 U8). À pleine capacité : ~102 000-112 000 $ de revenus nets − ~78 000 $ de
+  dépenses = **bénéfice maximal de ~24 000-34 000 $/an**. Rentable, oui — mais c'est un revenu
+  d'appoint, pas un salaire de 50-60 k$. Pour la cible salaire il faut soit ajouter des cours
+  (3e groupe karaté, 3e cours U8 → capacité 210), soit monter les prix, soit les deux (§ 1.6).
+- Le loyer court 24 h/24 mais n'est porté que par 14 heures de cours/semaine : **chaque
+  500 $/mois de location des heures de jour réduit le coût par cours de ~8,50 $** — c'est le
+  levier le plus direct sur cette économie unitaire.
+
+### 1.8 Revenus annexes (10 000-20 000 $/an, presque sans temps additionnel)
 
 | Source | Estimation annuelle | Effort |
 |---|---|---|
