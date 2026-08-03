@@ -1,7 +1,8 @@
 # Plan stratégique CSHP 2026-2029 — Étude de faisabilité et rentabilisation
 
 **Centre Sportif de Haute-Performance — 6498 rue Beaubien Est, Montréal (Anjou / Saint-Léonard)**
-Rédigé : juillet 2026 · Horizon : 3 ans (durée résiduelle du bail)
+Rédigé : juillet 2026 · Révision 2 (dépenses nettes de taxes ; capacité corrigée avec les
+données réelles des sections) · Horizon : 3 ans (durée résiduelle du bail)
 
 ---
 
@@ -9,82 +10,101 @@ Rédigé : juillet 2026 · Horizon : 3 ans (durée résiduelle du bail)
 
 1. **Au tarif actuel, le gym perd de l'argent structurellement.** À 790 $/an taxes incluses,
    un membre rapporte ~687 $ nets de TPS/TVQ. Avec 80 membres, les revenus (~50 000 $/an)
-   couvrent 60 % des charges (84 000 $/an) : **perte d'environ 2 800 $/mois**. Même au sommet
-   historique de 150 membres, le gym dégageait à peine ~10 000 $/an. **Le problème n'est pas
-   d'abord le nombre de membres, c'est le prix.**
-2. **La révision tarifaire est le levier n° 1.** À ~90 $/mois équivalent (1 080 $/an, taxes
-   incl.) — ce qui reste dans le bas de la fourchette du marché montréalais pour un dojo privé —
-   le point d'équilibre tombe à **~97 membres** et 150 membres dégagent **55 000-65 000 $/an**
-   de bénéfice (avec les revenus annexes). Sans repricing, l'objectif salaire exigerait
-   **200+ membres**, au-delà de la capacité du local.
-3. **Vivre du gym est réaliste, mais pas avant fin 2028**, et seulement si : repricing en
-   août 2026, rentrée de septembre réussie, rétention corrigée, délégation d'une partie des
-   cours. Ne quittez jamais l'emploi à temps plein avant que le gym ait versé le salaire cible
-   pendant 6 mois consécutifs + 3-6 mois de réserve de caisse.
-4. **Recommandation : plan par étapes avec dates de décision (kill-switch)** plutôt que de
+   couvrent les deux tiers des dépenses nettes (~74 000 $/an) : **perte d'environ
+   2 000 $/mois**. Le sommet historique de 150 membres dégageait ~20 000 $/an — un club qui
+   survivait, pas un club qui payait un salaire.
+2. **Le point d'équilibre est à ~118 membres au tarif actuel** (108 si tout le monde est à
+   l'annuel). L'objectif salaire de 50-60 k$ exige ~198-214 membres au tarif actuel, soit
+   95-100 % de la capacité maximale (210), en permanence, sans marge d'erreur.
+3. **Deux leviers, pas un : le prix ET le volume.** La capacité réelle (3 sections × 70 =
+   210) rend l'objectif atteignable par plusieurs chemins — voir la matrice prix × membres
+   (§ 1.6). Une hausse même modérée (890-990 $/an) combinée à 180 membres atteint la cible
+   avec de la marge ; le tarif actuel ne l'atteint qu'à pleine capacité absolue et 100 %
+   d'abonnements annuels.
+4. **Vivre du gym est réaliste, mais pas avant fin 2028**, et seulement si : révision
+   tarifaire en août 2026, rentrée de septembre réussie, rétention corrigée, délégation d'une
+   partie des cours. Ne quittez jamais l'emploi à temps plein avant que le gym ait versé le
+   salaire cible pendant 6 mois consécutifs + 3-6 mois de réserve de caisse.
+5. **Recommandation : plan par étapes avec dates de décision (kill-switch)** plutôt que de
    choisir A, B ou C aujourd'hui. Les 12 premiers mois de travail sont identiques pour les
    options A (temps plein) et B (vendre) : rentabiliser d'abord, décider ensuite.
-   L'option C (céder le bail maintenant) est l'option de dernier recours — elle brûle 7 ans de
-   marque et 80 membres de fonds de commerce pour éviter ~34 000 $/an de pertes qui sont
-   corrigeables autrement.
+   L'option C (céder le bail maintenant) est l'option de dernier recours.
+6. **Vérification comptable urgente (gain potentiel immédiat)** : si les CTI/RTI (taxes
+   payées sur le loyer et les dépenses, ~10 000 $/an) n'ont jamais été réclamés, ils sont
+   récupérables rétroactivement jusqu'à 4 ans — à valider avec le comptable dès maintenant.
 
 ---
 
 ## Volet 1 — Faisabilité financière et potentiel de revenu
 
-### 1.1 Les chiffres de base (nets de taxes)
+### 1.1 Méthode : tout est comparé NET de taxes, des deux côtés
 
-Les prix affichés incluent TPS (5 %) + TVQ (9,975 %), soit un facteur net de 1/1,14975 :
+Les prix affichés incluent TPS (5 %) + TVQ (9,975 %), soit un facteur de 1,14975. Le gym,
+inscrit à la TPS/TVQ (obligatoire au-delà de 30 000 $ de revenus), **remet les taxes perçues
+sur les ventes et récupère les taxes payées sur ses dépenses** (crédits/remboursements de
+taxe sur intrants). La comparaison correcte est donc revenus nets vs dépenses nettes.
+
+**Revenus nets par membre :**
 
 | Forfait | Prix affiché (tx incl.) | Revenu net de taxes | Équivalent net/an |
 |---|---|---|---|
 | Annuel | 790 $ | **687 $** | 687 $ |
-| Trimestriel | 250 $ | 217 $ | 870 $ *si renouvelé 4×* |
+| Trimestriel | 250 $ | 217 $ | 870 $ *si renouvelé 4×* / ~544 $ à rétention moyenne (2,5 trim.) |
 | Mensuel | 83,33 $ | 72 $ | 870 $ *si 12 mois* |
 | Rabais famille | −10 % | — | — |
 
-Point important : le trimestriel rapporte plus **seulement si le membre reste 12 mois**. En
-pratique, la rétention moyenne d'un trimestriel est de ~2,5 trimestres, soit **~544 $ nets/an**.
 Avec un mix réaliste (≈ 65 % annuel / 35 % trimestriel, ~15 % avec rabais famille), le revenu
-moyen par membre est de **~625-630 $ nets/an**.
+moyen par membre est de **~627 $ nets/an** (soit ~91 % du tarif annuel net — le trimestriel
+qui ne se renouvelle pas tire la moyenne vers le bas).
+
+**Dépenses nettes :**
+
+| Poste | Facturé (tx incl.) | Net de taxes récupérables |
+|---|---|---|
+| Loyer | 5 600 $/mois | **4 871 $/mois** (58 450 $/an) |
+| Autres charges (élec., assurances, coachs…) | 1 400 $/mois | ~1 290 $/mois (~15 500 $/an) *(≈ 60 % des postes taxables)* |
+| **Total** | 7 000 $/mois (84 000 $/an) | **~6 160 $/mois (~74 000 $/an)** |
+
+Soit **~10 000 $/an de taxes récupérables** — à condition de les réclamer. Si ça n'a jamais
+été fait, la réclamation rétroactive (jusqu'à 4 ans) est le gain le plus rapide de tout ce
+plan. Hypothèse à valider : les 7 000 $/mois incluent la rémunération des coachs de judo
+(les salaires ne portent pas de taxes ni de crédits).
 
 ### 1.2 Situation actuelle (80 membres)
 
 | Poste | Montant annuel |
 |---|---|
-| Revenus (80 × ~627 $) | ~50 200 $ |
-| Charges (loyer 67 200 $ + autres ~16 800 $) | 84 000 $ |
-| **Résultat** | **≈ −33 800 $/an (−2 800 $/mois)** |
-
-*Hypothèse : les 7 000 $/mois de charges incluent la rémunération des entraîneurs de judo.
-Si ce n'est pas le cas, la perte réelle est encore plus élevée — à valider dans le module
-`masseSalariale` de l'application.*
+| Revenus nets (80 × ~627 $) | ~50 200 $ |
+| Dépenses nettes | ~74 000 $ |
+| **Résultat** | **≈ −23 800 $/an (−2 000 $/mois)** |
 
 ### 1.3 Point d'équilibre et objectif salaire — au tarif ACTUEL
 
-| Objectif | Revenus nets requis | Membres requis (mix actuel, ~627 $/membre) |
-|---|---|---|
-| a) Équilibre strict (0 $) | 84 000 $ | **~134 membres** (123 si 100 % annuel) |
-| b) + salaire 50 000-60 000 $ | 134 000-144 000 $ | **~214-230 membres** |
+| Objectif | Revenus nets requis | Membres requis (mix ~627 $) | Membres requis (100 % annuel, 687 $) |
+|---|---|---|---|
+| a) Équilibre strict (0 $) | 74 000 $ | **~118** | **~108** |
+| b) + bénéfice 50 000-60 000 $ | 124 000-134 000 $ + coûts marginaux | **~205-225** | **~190-205** |
 
-**Verdict sans détour : au tarif actuel, l'objectif salaire est mathématiquement impossible.**
-214+ membres dépasse la capacité du local et votre capacité d'enseignement. Même le sommet
-historique de 150 membres ne couvrait les charges qu'avec ~10 000 $ de marge — c'était déjà
-un modèle sans salaire.
+À 200+ membres, les dépenses ne restent pas gelées : 3e cours U8, assistants karaté, heures
+de coachs judo supplémentaires (+10 000-12 000 $/an estimés) — c'est ce qui pousse le besoin
+réel à ~205-225 membres au mix actuel.
+
+**Verdict nuancé : au tarif actuel, l'objectif salaire n'est atteignable qu'à pleine capacité
+(210 membres) avec un mix 100 % annuel — zéro marge d'erreur.** À 210 membres au mix réel
+(annuel + trimestriel), le bénéfice plafonne à ~45-48 k$. Le moindre creux d'attrition vous
+ramène sous la cible. C'est un chemin possible sur papier, fragile dans la vraie vie.
 
 Nuance sur le « salaire net » : 50-60 k$ de bénéfice dégagé par le gym ≈ 38-45 k$ dans votre
 poche après impôt personnel québécois. Pour un vrai 50-60 k$ **net d'impôt**, le gym doit
-dégager ~68-82 k$ — ce qui demande ~180 membres au tarif révisé, plus les revenus annexes.
-Les cibles ci-dessous visent 50-60 k$ de bénéfice avant impôt personnel, ce qui est la
-convention usuelle.
+dégager ~68-82 k$. Les cibles de ce document visent 50-60 k$ de bénéfice avant impôt
+personnel, ce qui est la convention usuelle.
 
-### 1.4 Révision tarifaire recommandée (le cœur du plan)
+### 1.4 Révision tarifaire recommandée
 
 Votre tarif annuel équivaut à **65,83 $/mois taxes incluses**. Le marché montréalais pour un
 dojo privé à temps plein (karaté/judo enfants et adultes) se situe entre **90 et 150 $/mois**.
-Vous êtes 30-50 % sous le marché — c'est un héritage de l'ancienne gestion, pas un
-positionnement stratégique. Grille recommandée (taxes incluses), applicable aux **nouveaux
-membres dès le 15 août 2026** :
+Vous êtes 30-50 % sous le marché. Grille recommandée (taxes incluses), applicable aux
+**nouveaux membres dès le 15 août 2026** :
 
 | Forfait | Nouveau prix (tx incl.) | Équivalent/mois | Revenu net/an |
 |---|---|---|---|
@@ -96,10 +116,14 @@ membres dès le 15 août 2026** :
 
 **Membres actuels : tarif fidélité, pas de choc.** Au renouvellement : **960 $/an
 (80 $/mois équivalent, +21 % vs 790 $)**, présenté comme « tarif protégé membres fondateurs »,
-avec préavis de 60 jours et une lettre expliquant la nouvelle direction (départ de l'ancien
-gestionnaire = bon prétexte narratif : « nouvelle ère, réinvestissement dans le club »).
-Attrition attendue d'une hausse bien communiquée de cet ordre : 5-10 % — largement compensée :
-80 membres à 960 $ rapportent plus que 88 membres à 790 $.
+avec préavis de 60 jours et une lettre expliquant la nouvelle direction. Attrition attendue
+d'une hausse bien communiquée de cet ordre : 5-10 % — largement compensée : 80 membres à
+960 $ rapportent plus que 88 membres à 790 $.
+
+Si la hausse à 1 080 $ paraît trop agressive pour le quartier, la matrice du § 1.6 montre
+qu'une **hausse modérée à 890-990 $** fonctionne aussi — elle demande simplement plus de
+membres (180 au lieu de 150) pour la même cible. C'est un vrai choix stratégique : *prix* ou
+*volume*. Ce qui ne fonctionne pas, c'est 790 $.
 
 Trois règles pour ne pas faire fuir :
 1. **Jamais de hausse surprise** — préavis écrit, date claire, ancien prix honoré jusqu'à
@@ -110,17 +134,40 @@ Trois règles pour ne pas faire fuir :
 3. **Pousser l'annuel en prélèvements mensuels automatiques** (12 × 90 $) plutôt que le
    paiement unique : la barrière psychologique disparaît et la rétention monte.
 
-### 1.5 Nouveaux chiffres après repricing
+### 1.5 Nouveaux seuils après repricing (grille à 1 080 $)
 
-Revenu moyen par membre (mix annuel/trimestriel, fidélité + nouveaux, rabais famille) :
-**~850-880 $ nets/an** en régime établi (2027).
+Revenu moyen par membre (mix nouveaux/fidélité/trimestriel, rabais famille) : **~850 $
+nets/an** en régime établi (2027).
 
-| Objectif | Membres requis (tarif révisé) |
+| Objectif | Membres requis (grille 1 080 $) |
 |---|---|
-| a) Équilibre strict | **~97 membres** |
-| b) Bénéfice 50 000-60 000 $ | **~160-170 membres**, ou **150 membres + revenus annexes** |
+| a) Équilibre strict | **~87 membres** (vous y êtes presque déjà) |
+| b) Bénéfice 50 000-60 000 $ | **~150-160 membres** |
 
-### 1.6 Revenus annexes (10 000-20 000 $/an, presque sans temps additionnel)
+### 1.6 La matrice prix × membres (l'outil de décision central)
+
+Bénéfice annuel estimé (revenus nets − dépenses nettes, incluant les coûts marginaux de
+croissance : ~74 k$ à 120 membres, ~77 k$ à 150, ~82 k$ à 180, ~86 k$ à 210). Mix réaliste
+annuel/trimestriel (~91 % du tarif annuel net en moyenne) :
+
+| Membres ↓ / Tarif annuel → | 790 $ (actuel) | 890 $ | 990 $ | 1 080 $ |
+|---|---|---|---|---|
+| 120 | +1 k$ | +11 k$ | +20 k$ | +29 k$ |
+| 150 | +17 k$ | +29 k$ | +41 k$ | **+52 k$** ✓ |
+| 180 | +31 k$ | +45 k$ | **+60 k$** ✓ | +72 k$ |
+| 210 (capacité max) | +46 k$ | **+62 k$** ✓ | +79 k$ | +94 k$ |
+
+Lecture stratégique :
+- **La zone cible (50-60 k$) est atteignable par trois chemins** : 1 080 $ × 150 membres,
+  990 $ × 180, ou 890 $ × 210. Plus le prix est bas, plus il faut opérer près de la capacité
+  maximale — donc moins de marge pour l'attrition, les blessures, un mauvais septembre.
+- **La ligne 790 $ n'atteint jamais la cible**, même à pleine capacité (46 k$ à 210 au mix
+  réel ; ~58 k$ seulement si 100 % des 210 sont à l'annuel — un état impossible à maintenir).
+- Recommandation : viser la **diagonale robuste** — nouveaux à 1 080 $, fidélité à 960 $,
+  objectif 150-180 membres. La cible est atteinte dès 150 et chaque membre au-delà est du
+  coussin.
+
+### 1.7 Revenus annexes (10 000-20 000 $/an, presque sans temps additionnel)
 
 | Source | Estimation annuelle | Effort |
 |---|---|---|
@@ -129,33 +176,34 @@ Revenu moyen par membre (mix annuel/trimestriel, fidélité + nouveaux, rabais f
 | **Location des heures creuses de jour** (le local est vide en journée : yoga, mise en forme 50+, garderies, écoles) | 6 000-18 000 $ (500-1 500 $/mois) | Moyen au départ, puis passif |
 | Camps de la relâche / été (si délégué) | 3 000-8 000 $ | Élevé — seulement en phase 2 |
 
-La location de jour mérite une attention immédiate : vous travaillez à temps plein le jour,
-le local dort de 8 h à 17 h. C'est du loyer que quelqu'un d'autre peut payer à votre place.
-
 ---
 
 ## Volet 2 — Capacité d'accueil et croissance
 
-### 2.1 Capacité du local
+### 2.1 Capacité du local (données réelles des sections)
 
-À 5 600 $/mois taxes incluses dans l'est de Montréal (~18-25 $/pi² brut), le local fait
-vraisemblablement **2 400-3 200 pi²**, dont ~1 600-2 200 pi² de surface de tatami/pratique.
-Normes de qualité : ~30-40 pi²/pratiquant en judo (projections), ~25-30 pi² en karaté.
+Structure démontrée par l'historique du club :
 
-| Mesure | Estimation |
-|---|---|
-| Capacité par cours (qualité préservée) | Karaté enfants : 20-25 · Judo : 16-20 · Adultes : 20-25 |
-| Créneaux hebdo sur VOTRE horaire actuel (soirs + samedi) | 12-14 |
-| Créneaux hebdo avec délégation (assistants + coachs judo) | 20-24 |
-| **Capacité membres, horaire actuel** (fréquentation ~2×/sem.) | **~120-130** |
-| **Capacité membres avec délégation** | **~160-180 (réaliste)** |
-| Plafond théorique absolu | ~200-220 (qualité dégradée, non recommandé) |
+| Section | Sommet atteint | Format | Capacité section |
+|---|---|---|---|
+| Karaté | 70 | 3 cours de 20-25 | **70** |
+| Judo | 70 | 3 cours de 20-25 | **70** |
+| U8 / Ninjas | 50 | 2 cours de 25 | **70** (nécessite un 3e cours) |
+| **Total théorique** | — | — | **210** |
 
-**Conclusion structurante : au-delà de ~130 membres, le goulot n'est pas le plancher, c'est
-vous.** La croissance vers 150+ exige de déléguer des cours (voir Volet 4). C'est aussi la
-condition de vendabilité de l'option B.
+Deux nuances de planification :
+- **Les sommets par section n'ont pas été simultanés** (le pic total était 150). 210 est
+  crédible — le format des cours le permet — mais n'a jamais été observé en même temps.
+- Un taux d'occupation permanent de 100 % n'existe pas dans un club (attrition, saisons) :
+  le chiffre de planification durable est **~85-90 % de la capacité, soit 180-190 membres**.
+  210 est le plafond, pas la cible.
 
-### 2.2 Trajectoire réaliste 80 → 150
+**Le vrai goulot au-delà de ~130 membres, c'est votre temps, pas le plancher.** Passer à
+180-210 exige le 3e cours U8 et des cours karaté donnés par des assistants (vous avez un
+emploi de jour et un mariage) — d'où les coûts marginaux intégrés au § 1.6 et le plan de
+délégation du Volet 4. C'est aussi la condition de vendabilité de l'option B.
+
+### 2.2 Trajectoire réaliste 80 → 150 → 180
 
 Le marché des arts martiaux jeunesse est ultra-saisonnier : **la rentrée de septembre génère
 40-50 % des inscriptions annuelles**, janvier un second pic. Trajectoire avec le plan
@@ -167,7 +215,7 @@ marketing du Volet 3 (sans budget massif) et une attrition ramenée à ~2 %/mois
 | 31 déc. 2026 | **105-115** | Rentrée sept. : +25-35 inscriptions |
 | 30 juin 2027 | 115-130 | Pic janvier + référencements, plateau printemps |
 | 31 déc. 2027 | **140-160** | 2e rentrée avec avis Google, notoriété, délégation |
-| 2028 | 160-180 | Plafond réaliste du local |
+| 2028 | 170-190 | Zone de croisière durable (3e cours U8 ouvert) |
 
 **Réponse courte : 12-18 mois pour revenir à 150, à condition que la rétention soit réglée.**
 Vous l'avez déjà fait une fois ; la cause de la chute (le cogestionnaire) est partie. C'est un
@@ -246,11 +294,12 @@ Vous avez déjà construit l'outil (cette application). Il reste à fermer la bo
 
 | Priorité | Tâche | Comment | Gain |
 |---|---|---|---|
-| 1 | **Paiements préautorisés** (carte/prélèvement) | Intégrer Stripe aux versements — fini la chasse aux chèques et aux retards | 2-4 h/mois + trésorerie stable |
-| 2 | **Rappels de paiement automatiques** | Le cron Resend existe déjà : réactiver `reminderSentAt` sur les versements futurs (déjà dans votre TODO) | 1-2 h/mois |
-| 3 | **Inscription et essai en libre-service** | Publier le lien du module d'inscription sur Google/Facebook/site — plus de saisie manuelle | 1-2 h/mois |
-| 4 | **Pointage autonome** | Tablette à l'entrée, les membres se pointent eux-mêmes | 15 min/cours |
-| 5 | Réponses standardisées (tarifs, horaires, essai) | Messages enregistrés Messenger/SMS + FAQ sur la fiche Google | 1-2 h/mois |
+| 1 | **Réclamation des CTI/RTI** (taxes sur intrants) | Comptable — vérifier les 4 dernières années | jusqu'à ~10 000 $/an |
+| 2 | **Paiements préautorisés** (carte/prélèvement) | Intégrer Stripe aux versements — fini la chasse aux chèques et aux retards | 2-4 h/mois + trésorerie stable |
+| 3 | **Rappels de paiement automatiques** | Le cron Resend existe déjà : réactiver `reminderSentAt` sur les versements futurs (déjà dans votre TODO) | 1-2 h/mois |
+| 4 | **Inscription et essai en libre-service** | Publier le lien du module d'inscription sur Google/Facebook/site — plus de saisie manuelle | 1-2 h/mois |
+| 5 | **Pointage autonome** | Tablette à l'entrée, les membres se pointent eux-mêmes | 15 min/cours |
+| 6 | Réponses standardisées (tarifs, horaires, essai) | Messages enregistrés Messenger/SMS + FAQ sur la fiche Google | 1-2 h/mois |
 
 ### 4.3 Déléguer en priorité
 
@@ -258,7 +307,7 @@ Vous avez déjà construit l'outil (cette application). Il reste à fermer la bo
 |---|---|---|---|
 | Dès sept. 2026 | 1-2 cours enfants/sem. comme assistant, puis titulaire | 2-3 ceintures marron/noires formées par vous | 25-40 $/cours ou abonnement gratuit |
 | Dès sept. 2026 | Accueil/essais pendant que vous enseignez | Parent bénévole fiable ou étudiant | 0-15 $/h |
-| > 120 membres | Coordination admin 8-10 h/sem. | Employé à temps partiel | ~600-800 $/mois |
+| > 120 membres | 3e cours U8 + coordination admin 8-10 h/sem. | Assistant formé + employé à temps partiel | ~600-800 $/mois |
 | Continu | Judo : autonomie complète des coachs (planning + grades dans l'app) | Coachs judo existants | Déjà en place |
 
 Former des assistants n'est pas une dépense : c'est **la condition de la croissance au-delà de
@@ -273,18 +322,18 @@ fonctionne que si vous êtes sur le tatami ne peut ni grandir ni se vendre.
 
 | Critère | **A — Temps plein** | **B — Rentabiliser puis vendre (1-2 ans)** | **C — Céder le bail maintenant** |
 |---|---|---|---|
-| Revenu potentiel | 60-90 k$/an de bénéfice à 160-180 membres (2028+) | Prix de vente réaliste : **50-90 k$** (1,5-2,5× le bénéfice discrétionnaire + actifs) — seulement si rentable et délégué | ~0 $, voire coûts de sortie ; vente d'actifs 10-30 k$ au mieux |
+| Revenu potentiel | 60-90 k$/an de bénéfice à 170-190 membres (2028+) | Prix de vente réaliste : **50-90 k$** (1,5-2,5× le bénéfice discrétionnaire + actifs) — seulement si rentable et délégué | ~0 $, voire coûts de sortie ; vente d'actifs 10-30 k$ au mieux |
 | Horizon | 24-36 mois avant de quitter l'emploi | 18-24 mois de travail + 6-12 mois de vente | 3-9 mois |
 | Risque principal | Point de défaillance unique : une blessure = zéro revenu ; perte des avantages de l'emploi salarié | **Marché d'acheteurs très étroit** : un dojo s'achète par un autre instructeur, rarement par un investisseur | Responsabilité du bail : 36 mois × 5 600 $ = **201 600 $** d'engagement résiduel |
 | Charge mentale | Élevée 18 mois, puis décroissante si délégation | Identique à A pendant 18 mois, puis libération | Minimale à terme, mais deuil de 7 ans de travail |
-| Conditions de réussite | Repricing + 160 membres + 6 mois de salaire versé + réserve de caisse AVANT de démissionner | Club rentable 12-24 mois de livres propres, cours donnés à 50 %+ par d'autres que vous, systèmes documentés (votre app est un argument de vente), bail transférable avec option de renouvellement | Accord du locateur pour la cession (art. 1871 C.c.Q. : il ne peut refuser sans motif sérieux) ; en sous-location vous restez responsable |
+| Conditions de réussite | Repricing + 160-180 membres + 6 mois de salaire versé + réserve de caisse AVANT de démissionner | Club rentable 12-24 mois de livres propres, cours donnés à 50 %+ par d'autres que vous, systèmes documentés (votre app est un argument de vente), bail transférable avec option de renouvellement | Accord du locateur pour la cession (art. 1871 C.c.Q. : il ne peut refuser sans motif sérieux) ; en sous-location vous restez responsable |
 | Verdict | **Possible, pas avant fin 2028** | **Le meilleur rapport risque/rendement** — et c'est le même travail que A pendant 18 mois | **Dernier recours** — arrête l'hémorragie mais détruit toute la valeur créée en 7 ans |
 
 ### Points durs à connaître
 
 - **Option B — vérité sur la valorisation** : un petit club de fitness/arts martiaux se vend
   1,5-2,5× son bénéfice discrétionnaire du vendeur, ou 25-40 % du chiffre d'affaires. Un club
-  **déficitaire ne vaut que ses tatamis** (10-20 k$). Un club à 150 membres dégageant 55 k$
+  **déficitaire ne vaut que ses tatamis** (10-20 k$). Un club à 150 membres dégageant 50 k$
   peut s'afficher 90-120 k$ et se vendre 50-90 k$ avec cession de bail. Tout l'écart entre ces
   deux mondes, c'est le travail des 18 prochains mois.
 - **Le bail est un actif ET un passif** : pour A comme pour B, négociez **dès maintenant une
@@ -303,6 +352,7 @@ Ne choisissez pas A/B/C aujourd'hui. Les 12 premiers mois sont identiques pour A
 échec mesuré vous bascule proprement vers C. Décidez sur des chiffres, pas sur la fatigue.
 
 **Phase 0 — Août 2026 (coût ~0 $)**
+- Vérification CTI/RTI avec le comptable (récupération rétroactive possible).
 - Nouvelle grille tarifaire en vigueur le 15 août (nouveaux) ; lettre « tarif fidélité » aux
   membres actuels pour les renouvellements.
 - Campagne de réactivation des anciens membres (base de données existante).
@@ -313,29 +363,30 @@ Ne choisissez pas A/B/C aujourd'hui. Les 12 premiers mois sont identiques pour A
 - Campagne Meta 10-15 $/jour du 15 août au 30 sept. ; démos dans 3-5 écoles du quartier.
 - Stripe + rappels automatiques + inscription en ligne activés.
 - 1-2 assistants karaté en formation ; démarchage location des heures de jour.
-- **Cible : 105-115 membres au 31 décembre, perte mensuelle ramenée sous ~500 $.**
+- **Cible : 105-115 membres au 31 décembre — le gym atteint l'équilibre mensuel.**
 
 **✔ Point de décision n° 1 — Janvier 2027**
-- ≥ 105 membres et saignée quasi stoppée → continuer (A/B restent ouvertes).
+- ≥ 105 membres et équilibre atteint → continuer (A/B restent ouvertes).
 - < 95 membres malgré l'exécution du plan → basculer vers l'option C : mandat de cession de
   bail au printemps, vente d'actifs, sortie ordonnée à l'été 2027. Pertes limitées, tête haute.
 
 **Phase 2 — 2027**
 - Deuxième rentrée avec notoriété, avis Google et référencements ; délégation de 30-50 % des
-  cours ; revenus annexes (examens, équipement, location de jour) en régime de croisière.
-- **Cible : 140-160 membres au 31 décembre 2027, bénéfice annualisé 35-55 k$.**
+  cours ; 3e cours U8 ; revenus annexes (examens, équipement, location de jour) en régime de
+  croisière.
+- **Cible : 140-160 membres au 31 décembre 2027, bénéfice annualisé 40-55 k$.**
 
 **✔ Point de décision n° 2 — Décembre 2027 : A ou B**
 - **Choisir A** si : vous aimez toujours enseigner, le bénéfice annualisé dépasse ~50 k$,
   l'option de renouvellement du bail est signée, et 6 mois de salaire ont été versés sans
   stress de trésorerie → démission de l'emploi salarié courant 2028.
-- **Choisir B** si : le mariage/la vie a changé vos priorités, ou que le plafond de ~180
-  membres vous semble étouffant → mandater la vente au T1 2028, pendant que les chiffres
-  montent (on vend une courbe ascendante, jamais un plateau), avec 12-24 mois de livres
-  propres et un club qui tourne à 50 % sans vous.
+- **Choisir B** si : le mariage/la vie a changé vos priorités, ou que la perspective de gérer
+  un club à 180-210 membres vous semble étouffante → mandater la vente au T1 2028, pendant que
+  les chiffres montent (on vend une courbe ascendante, jamais un plateau), avec 12-24 mois de
+  livres propres et un club qui tourne à 50 % sans vous.
 
 **La seule mauvaise décision serait de ne rien changer aux tarifs et d'attendre : au rythme
-actuel, la perte de ~34 000 $/an consommera vos liquidités personnelles bien avant la fin du
+actuel, la perte de ~24 000 $/an consommera vos liquidités personnelles bien avant la fin du
 bail — et c'est votre mariage qui la financera.**
 
 ---
@@ -344,12 +395,20 @@ bail — et c'est votre mariage qui la financera.**
 
 - Tarifs actuels tirés de l'application de gestion (`src/lib/tarifs.ts`) : annuel 790 $,
   trimestriel 250 $, mensuel 83,33 $, rabais famille −10 % — taxes incluses (TPS+TVQ 14,975 %).
-- Charges : 7 000 $/mois déclarées (dont loyer 5 600 $), supposées inclure la rémunération
-  des coachs de judo — **à valider**.
+- **Dépenses nettes de taxes** : loyer 5 600 $ tx incl. → 4 871 $ net ; autres charges
+  1 400 $/mois avec ~60 % de postes taxables → ~1 290 $ nets. Total ~74 000 $/an. Suppose que
+  le gym est inscrit TPS/TVQ et réclame ses CTI/RTI — **à valider avec le comptable** ; sinon
+  les dépenses effectives restent 84 000 $/an et tous les seuils remontent d'environ 15 %.
+- Les 7 000 $/mois sont supposés inclure la rémunération des coachs de judo — à valider dans
+  le module `masseSalariale`.
+- Coûts marginaux de croissance estimés : +3 k$/an à 150 membres, +8 k$/an à 180, +12 k$/an à
+  210 (3e cours U8, assistants, heures coachs) — à recaler avec les salaires réels.
 - Mix d'abonnements estimé (65 % annuel / 35 % trimestriel, rétention trimestrielle moyenne
-  2,5 trimestres) — à recaler avec les données réelles des modules paiements/versements.
-- Superficie du local estimée par le loyer (18-25 $/pi² brut, est de Montréal) — à remplacer
-  par la superficie réelle du bail.
+  2,5 trimestres, ~15 % rabais famille → revenu moyen ≈ 91 % du tarif annuel net) — à recaler
+  avec les données réelles des modules paiements/versements.
+- **Capacité : données réelles des sections** (karaté 70 = 3 cours de 20-25 ; judo 70 = 3
+  cours de 20-25 ; U8/Ninjas sommet 50 en 2 cours de 25, 70 possible avec un 3e cours).
+  Total théorique 210 ; planification durable à 85-90 % → 180-190.
 - Références de marché : abonnements arts martiaux privés à Montréal 90-150 $/mois (enfants),
   100-160 $/mois (adultes) ; multiples de vente des petits clubs : 1,5-2,5× le bénéfice
   discrétionnaire ou 25-40 % du chiffre d'affaires.
