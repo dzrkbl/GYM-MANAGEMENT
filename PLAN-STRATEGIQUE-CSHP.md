@@ -501,6 +501,172 @@ qui se construit toute seule pendant qu'elle vous rapporte.
 
 ---
 
+## Volet 7 — Plan d'exécution : location aux garderies + subventions (recherche vérifiée, août 2026)
+
+Toutes les coordonnées ci-dessous proviennent de sources web consultées (annuaires,
+fiches officielles du Ministère de la Famille, sites des organismes). **Reconfirmer chaque
+numéro avant l'envoi d'une offre** — les fiches d'annuaires peuvent dater.
+
+### 7.1 La cible : garderies et CPE autour du 6498 Beaubien Est
+
+**Voisines immédiates — même pâté de maisons (à contacter en premier, en personne) :**
+
+| Nom | Type | Adresse | Téléphone | Courriel |
+|---|---|---|---|---|
+| Ma Petite École Beaubien (Montessori) | Privée | 6456-6458 Beaubien Est | 514 360-3498 | — (via leur page Facebook) |
+| Les Anges de Beaubien (42 places, 10 poupons) | Privée | 6500 Beaubien Est | 514 638-9460 | garderielesangesdebeaubien@outlook.com |
+| Des Petites Mains Magiques (29 places) | Subventionnée | 6531-6533 Beaubien Est | 514 252-9496 | lespetitesmains.magiques@gmail.com |
+
+**À ~1 km (corridor Bélanger Est) :**
+
+| Nom | Type | Adresse | Téléphone |
+|---|---|---|---|
+| Jardin d'enfants Ma Première Classe (60 places) | Subventionnée | 6065 Bélanger, St-Léonard | 514 252-9595 |
+| Garderie CYMA (63 places) | Subventionnée | 6143-6157 Bélanger, St-Léonard | 514 360-2356 |
+| Garderie Rêve d'Enfance (60 places, 20 poupons) | Privée | 6163 Bélanger Est, St-Léonard | 514 259-9840 |
+
+**À 1,5-2 km :**
+
+| Nom | Type | Adresse | Téléphone |
+|---|---|---|---|
+| CPE des Roseraies (80 places) | CPE | 6500 boul. des Galeries d'Anjou | 514 353-1911 |
+| CPE Au Pays des Schtroumpfs | CPE | 5200 Bélanger Est | 514 728-4508 |
+| Au Jardin des Merveilles II | Subventionnée | 5278 Jean-Talon Est, St-Léonard | 514 722-9425 |
+| Mini Spandas | Privée | 8671 av. de Chaumont, Anjou | 514 473-4703 |
+| 1-2-3 Géant | Privée | 8663 av. Chaumont, Anjou | 514 992-4734 |
+| CPE Le Repère des Mousses | CPE | 4675 Bélanger Est | 514 727-7222 |
+
+**Bureaux coordonnateurs de la garde en milieu familial** (les responsables de garde en
+milieu familial sont aussi des clientes — petits groupes, aucune salle de motricité) :
+
+| Bureau | Adresse | Téléphone |
+|---|---|---|
+| BC de Saint-Léonard | 4869 Jarry Est, bur. 216 | 514 323-8998 |
+| BC territoire CLSC Rosemont | 3914 rue Masson | 514 387-7341 |
+| BC territoire CLSC Mercier-Est/Anjou | 3405 rue Saint-Donat | 514 356-1583 |
+
+**Pour compléter la liste** (~74 services de garde recensés dans Saint-Léonard + Anjou) :
+- Localisateur officiel du Ministère de la Famille (carte par adresse, fiches avec téléphone) :
+  mfa.gouv.qc.ca → « Localisateur » ; carte interactive : geoegl.msp.gouv.qc.ca/mfa/
+- Ministère de la Famille, renseignements : 1 855 336-8568, renseignements@mfa.gouv.qc.ca
+- Liste CSV complète filtrable par code postal : donneesquebec.ca (jeu de données
+  « Liste des CPE, garderies et bureaux coordonnateurs »)
+
+### 7.2 La proposition de valeur (ce qu'il faut mettre en valeur, dans l'ordre)
+
+Le pain point réel des garderies : le programme éducatif québécois (« Accueillir la petite
+enfance ») exige de l'activité physique quotidienne, et **de novembre à avril les éducatrices
+n'ont nulle part où aller** — parcs gelés, locaux exigus. Votre argumentaire :
+
+1. **Sécurité** : salle 100 % matelassée (tatamis), zéro coin dur, local privé fermé —
+   aucun public pendant leur créneau. C'est l'argument n° 1, avant le prix.
+2. **L'hiver réglé** : une solution motricité au chaud, réservée à leur groupe, de novembre
+   à avril (et toute l'année s'ils veulent).
+3. **À distance de poussette-bus** : pour les 3 voisines immédiates, littéralement la porte
+   à côté — zéro logistique de transport, l'objection principale disparaît.
+4. **Clé en main ou location nue** : au choix — salle seule, ou avec matériel (ballons,
+   cerceaux, parcours) fourni.
+5. **Simple et prévisible** : forfait mensuel fixe, entente d'une page, résiliable sur
+   30 jours, preuve d'assurance RC 2 M$ fournie.
+6. **(Plus tard)** Option animée par un instructeur — vendue plus cher, quand un assistant
+   sera formé.
+
+### 7.3 L'offre et la grille tarifaire
+
+| Formule | Prix (TPS/TVQ en sus) | Repère |
+|---|---|---|
+| Visite d'essai avec le groupe | **Gratuite** | Le déclencheur — les éducatrices doivent voir la salle |
+| 1 créneau/sem. (75 min, 9 h-11 h 30) | **220 $/mois** (~50 $/séance) | < 5 $/enfant/séance pour un groupe de 12 |
+| 2 créneaux/sem. | **400 $/mois** | L'ancrage à pousser |
+| Saison sept.-juin | Engagement saisonnier, résiliable 30 jours | Facture mensuelle par virement |
+
+Capacité : 5 matins × 2 créneaux (9 h-10 h 15 / 10 h 15-11 h 30) = 10 créneaux/semaine.
+**Plein : ~2 000-2 200 $/mois.** Objectif réaliste année 1 : 4-6 créneaux = 880-1 320 $/mois.
+
+### 7.4 Scripts de contact
+
+**Appel (viser la directrice, entre 9 h 30 et 11 h ou à la sieste 13 h-14 h 30) :**
+> « Bonjour, je m'appelle [prénom], je suis le propriétaire du Centre Sportif de
+> Haute-Performance, le dojo juste à côté de chez vous sur Beaubien. Ma salle — une grande
+> surface entièrement matelassée — est libre tous les matins, et je la rends disponible aux
+> garderies du quartier pour la motricité, surtout en vue de l'hiver. J'offre une visite
+> d'essai gratuite avec votre groupe pour que vos éducatrices voient la salle. Auriez-vous
+> 20 minutes cette semaine ? »
+
+**Objections :**
+- *« Pas de budget »* → « C'est ~50 $ la séance pour tout le groupe, moins de 5 $ par enfant,
+  et l'essai est gratuit. Plusieurs garderies le prennent sur le budget d'activités d'hiver. »
+- *« Assurance / sécurité »* → « Je vous fournis la preuve d'assurance responsabilité de 2 M$
+  et une entente écrite ; le local est privé et fermé pendant votre créneau. »
+- *« Trop compliqué de se déplacer »* → (voisines) « Vous êtes à 2 minutes en poussette-bus,
+  je vous fais faire le trajet à la visite. »
+
+**Courriel (5 phrases max, 2-3 photos de la salle, objet :
+« Salle de motricité matelassée pour votre garderie — à côté de chez vous »).** Préférer
+l'appel ou la visite en personne : pour les 3 voisines, passez la porte, tout simplement.
+
+### 7.5 Subventions et aides gouvernementales (vérifiées — qui appeler et pourquoi)
+
+**Top 3 rapport effort/gain pour un propriétaire seul :**
+
+| # | Programme | Ce que ça donne | Action concrète |
+|---|---|---|---|
+| 1 | **Bon départ / Jumpstart (Canadian Tire)** | Jusqu'à **600 $/enfant/an** de frais d'inscription payés **directement au gym** pour les familles à faible revenu. Les entreprises privées enregistrées sont admissibles comme prestataire (« payee ») — pas besoin d'OBNL. | S'enregistrer comme payee à la première demande d'un parent ; afficher l'info au gym et dans la lettre de rentrée. jumpstart.canadiantire.ca |
+| 2 | **Subvention salariale — Services Québec** | ~**50 % du salaire remboursé jusqu'à 30 semaines** pour l'embauche d'une personne référée par Services Québec (accueil, coordination). Entreprise privée admissible. Variante PRIIME pour personnes immigrantes. | Test d'admissibilité en ligne (10 min) puis bureau de Services Québec — **514 256-8496** (7335 boul. Langelier, St-Léonard ; confirmer via localisateur.servicesquebec.gouv.qc.ca). Formulaire EQ-6444-01. |
+| 3 | **PME MTL Est-de-l'Île** | **Accompagnement d'affaires gratuit** (le conseiller connaît tous les programmes et monte les dossiers avec vous) + Fonds Jeunes entreprises : jusqu'à **25 000 $ non remboursable** (jumelé à un prêt). Territoire : Anjou/St-Léonard/Montréal-Est. | Un appel : **514 494-2606** — 7305 boul. Henri-Bourassa Est, bur. 200. Demander un conseiller pour « diversification des revenus d'un commerce de services ». |
+
+**Autres programmes pertinents :**
+
+- **Emplois d'été Canada** : privé ≤ 50 employés admissible, ~50 % du salaire minimum pour un
+  jeune (15-30 ans) l'été. La fenêtre 2026 est passée — **déposer pour l'été 2027 dès
+  l'ouverture (nov.-déc. 2026)**. À mettre au calendrier.
+- **Programme PIED (prévention des chutes, aînés)** — CIUSSS de l'Est-de-l'Île :
+  **514 353-6885**. Pas une subvention, mais un locataire potentiel de vos après-midis :
+  proposer la salle (tatamis = chutes amorties) comme site partenaire à Saint-Léonard/Anjou.
+- **Crédit d'impôt pour stage (Revenu Québec)** : 24-32 % du salaire d'un stagiaire reconnu
+  (ex. étudiant en kinésiologie qui animerait motricité/gym douce le jour).
+- **Futurpreneur** (si vous avez 18-39 ans) : prêt 20 000 $ + jusqu'à 55 000 $ BDC, avec
+  2 ans de mentorat inclus — un prêt, pas une subvention ; utile seulement si un
+  investissement précis le justifie.
+- **Fédérations** : Judo Québec (514 252-3040, affiliation@judo-quebec.qc.ca — assurance
+  accident/RC incluse dans l'affiliation) ; Karaté Québec (karatequebec.com/affiliation —
+  affiliation = assurance + inscription au répertoire officiel des dojos, donc visibilité
+  gratuite).
+- **Reconnaissance municipale (Anjou/Montréal)** : réservée aux **OBNL** — inaccessible au
+  gym privé tel quel. Option à moyen terme : créer un OBNL parallèle (« Club de judo/karaté
+  d'Anjou », 3 administrateurs, incorporation Partie III) qui louerait vos installations et
+  ouvrirait l'accès aux subventions municipales, plateaux scolaires et programmes réservés.
+  La plupart exigent ~12 mois d'historique : si l'idée vous intéresse, incorporer tôt.
+  Info : 311.
+- Aucune subvention spécifique n'existe pour « louer son local à des garderies » — c'est du
+  développement commercial pur ; PME MTL peut toutefois accompagner gratuitement la démarche.
+
+### 7.6 Échéancier de mise en place (la fenêtre est MAINTENANT — les garderies bouclent leur programmation d'automne en août)
+
+**Semaine 1 (4-10 août)**
+- Propriétaire : accord écrit pour la sous-location d'heures (présenter comme sécurisation
+  de sa créance).
+- Assureur : avenant RC pour tiers locataires + attestation à joindre aux offres.
+- Serrure à code + entente type d'une page (créneau, tarif, ménage, responsabilité).
+- Visite en personne des 3 garderies voisines (6456, 6500, 6531 Beaubien Est).
+
+**Semaine 2 (11-17 août)**
+- 10 appels (liste § 7.1) + compléter la liste via le localisateur MFA.
+- Appels : PME MTL Est (514 494-2606) et Services Québec (test subvention salariale).
+- Courriel aux 3 bureaux coordonnateurs pour rejoindre les RSG en milieu familial.
+
+**Semaines 3-4 (18-31 août)**
+- Visites d'essai gratuites (samedi, fin de journée, ou 1-2 matinées de congé stratégiques).
+- Signatures : objectif **2-4 contrats démarrant la semaine du 1er septembre**.
+- En parallèle : annonce Peerspace/Giggster (tournages) + courriel aux fédérations
+  (liste de salles pour stages/examens) + appel PIED (514 353-6885) pour l'automne.
+
+**Indicateurs de succès :** 20 garderies contactées → 6-8 visites → 2-4 contrats
+(440-1 600 $/mois). Seuil minimal avant Noël : 2 contrats à 2 créneaux = **800 $/mois**,
+soit 40 % de la perte mensuelle actuelle effacée par des matinées où le local dormait.
+
+---
+
 ## Annexe — Hypothèses et données sources
 
 - Tarifs actuels tirés de l'application de gestion (`src/lib/tarifs.ts`) : annuel 790 $,
