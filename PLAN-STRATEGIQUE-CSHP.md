@@ -431,6 +431,76 @@ bail — et c'est votre mariage qui la financera.**
 
 ---
 
+## Volet 6 — Plan de location des heures creuses (jour + fin de semaine)
+
+Le local est payé 168 h/semaine et utilisé ~20 h (cours à partir de 17 h en semaine, samedi
+partiel, dimanche vide). Contrainte structurante : **vous êtes absent le jour** → privilégier
+des locataires **récurrents et autonomes** (accès par code, contrat, preuve d'assurance),
+jamais des événements à coordonner un par un.
+
+### 6.1 Les activités classées par rentabilité et compatibilité
+
+**Palier 1 — À démarcher immédiatement (récurrent, zéro présence requise) :**
+
+| Activité | Créneau | Tarif marché | Potentiel/mois | Pourquoi c'est un « fit » |
+|---|---|---|---|---|
+| **Motricité pour garderies/CPE** (2-3 garderies du quartier) | Sem. 9 h-11 h 30 | 45-60 $/h | **700-1 200 $** | Sol matelassé = argument sécurité imbattable ; et chaque enfant est un futur U8/Ninja (pipeline d'inscription). Les garderies bâtissent leur programmation d'automne en août — démarcher MAINTENANT. |
+| **École de langue/culture du samedi ou dimanche** (arabe, mandarin, russe…) | Sam. PM / dim. 3-4 h | 40-60 $/h | **500-900 $** | Clientèle récurrente, fiable, année scolaire complète, aucun aménagement requis. |
+| **Club nomade complémentaire** (BJJ, lutte, capoeira, kendo — pas un dojo concurrent) | Dim. + midi + 21 h 15 | forfait 500-900 $/mois | **500-900 $** | Les tatamis sont déjà là. Le BJJ explose à Montréal et beaucoup de petits clubs cherchent des tapis. Synergie avec le judo, pas cannibalisation. |
+
+**Palier 2 — Forte marge, demande un minimum d'organisation :**
+
+| Activité | Créneau | Tarif | Potentiel/mois | Condition |
+|---|---|---|---|---|
+| **Fêtes d'anniversaire « ninja »** (animées par un assistant ceinture marron, 50-75 $/fête) | Sam. PM / dim. | 300-375 $/fête (2 h) | **450-1 350 $** (2-6 fêtes) | Marge ~225-300 $/fête + machine à recrutement : 15-20 enfants invités repartent avec un coupon d'essai. À lancer seulement quand un assistant est formé. |
+| **Gym douce 50+ / prévention des chutes** (programme PIED via organisme communautaire/CIUSSS) | Sem. 13 h-15 h | 40-55 $/h | **300-700 $** | Financé par le public, récurrent ; le tatami (chutes amorties) est littéralement l'argument de vente. Passer par les organismes d'Anjou, pas en direct. |
+| **Bootcamp matinal d'un entraîneur indépendant** | Sem. 6 h-7 h 30 | 25-35 $/h | **300-500 $** | L'entraîneur amène sa clientèle ; accès par code. |
+| **Séminaires, stages, examens de fédérations** (judo, karaté, aïkido) | 1 dim./mois | 350-600 $/jour | **350-600 $** | Un courriel aux fédérations suffit pour être sur leur liste de salles. |
+
+**Palier 3 — Ponctuel, effort quasi nul, à activer en tâche de fond :**
+
+- **Tournages et séances photo** (Peerspace, Giggster) : un dojo est un décor recherché
+  (scènes de combat, clips, pubs). 75-150 $/h, sporadique : 1 h pour créer l'annonce,
+  ~100-400 $/mois en moyenne lissée.
+- **Ateliers corporatifs midi** (autodéfense, team-building) pour les entreprises du parc
+  industriel d'Anjou : 250-400 $/atelier — vous pouvez en donner à l'heure du lunch si votre
+  emploi le permet, sinon déléguer.
+
+**À éviter (et pourquoi) :**
+- Fêtes privées sans animateur (responsabilité, ménage, alcool) ;
+- dressage canin (hygiène des tatamis — irrécupérable) ;
+- pickleball et sports à sol dur (incompatible avec les tapis) ;
+- tout locataire qui exige des aménagements permanents.
+
+### 6.2 L'effet financier
+
+Cible réaliste en régime de croisière (6-12 mois, sans tout faire en même temps) :
+**1 500-3 000 $/mois**, soit de quoi **effacer à elle seule la perte actuelle (~2 000 $/mois)**
+avant même la croissance des adhésions. Chaque tranche de 500 $/mois de location réduit le
+coût par cours de ~8,50 $ (§ 1.7).
+
+### 6.3 Le twist stratégique : le locataire d'aujourd'hui est l'acheteur de demain
+
+Un club nomade (BJJ/lutte) qui s'installe dans vos heures creuses en formule loyer ou partage
+de revenus (30 % de ses abonnements) devient en 12-18 mois : un copayeur du loyer, un
+partenaire d'horaire, et **le repreneur naturel du bail ou du club entier si vous choisissez
+l'option B** — il connaît le local, la clientèle et les chiffres. C'est une option de sortie
+qui se construit toute seule pendant qu'elle vous rapporte.
+
+### 6.4 Prérequis avant le premier locataire (1 semaine de démarches)
+
+1. **Bail** : vérifier la clause de sous-location/usage et obtenir l'accord écrit du
+   propriétaire (art. 1870 C.c.Q. — il ne peut refuser sans motif sérieux). Présenter ça
+   comme une sécurisation de sa propre créance : un locataire qui diversifie ses revenus
+   paie son loyer.
+2. **Assurance** : avenant à la police RC pour les tiers locataires + exiger une preuve
+   d'assurance RC de chaque locataire récurrent (2 M$).
+3. **Logistique d'absence** : serrure à code (codes par locataire), caméra à l'entrée,
+   contrat d'une page (créneau, tarif, ménage, responsabilité), dépôt. Paiement par virement
+   mensuel automatique. TPS/TVQ à percevoir sur les loyers commerciaux.
+
+---
+
 ## Annexe — Hypothèses et données sources
 
 - Tarifs actuels tirés de l'application de gestion (`src/lib/tarifs.ts`) : annuel 790 $,
