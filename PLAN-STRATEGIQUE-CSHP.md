@@ -667,6 +667,126 @@ soit 40 % de la perte mensuelle actuelle effacée par des matinées où le local
 
 ---
 
+## Volet 8 — Campagne Meta Ads : plan d'exécution personnalisé (cibler les parents, convertir en essais/appels/ventes)
+
+Plan construit sur VOTRE infrastructure réelle (application CSHP) : endpoint public
+`POST /api/leads` (anti-spam, types ESSAI/RAPPEL/TARIFS), pipeline de suivi
+NEW→CONTACTED→CONVERTED→LOST, conversion lead→membre en un clic, inscription en ligne
+avec courriels Resend automatiques.
+
+### 8.1 Le constat qui dicte le ciblage : vos salles vides sont le judo et les U8
+
+À l'import de mai 2026, ~69 membres sur ~80 étaient au karaté. Le karaté (2 groupes,
+capacité 40-50) est donc presque plein ; **le judo (3 cours, coachs déjà payés) et les
+U8/Ninjas (2 cours) sont quasi vides**. Chaque dollar de pub doit remplir CES cours —
+un membre judo/U8 est de la marge quasi pure puisque le cours a lieu de toute façon.
+**Action préalable : confirmer le mix exact par section dans le tableau de bord de l'app.**
+
+### 8.2 Audiences prioritaires (dans l'ordre)
+
+| Priorité | Audience | Réglage Meta | Pourquoi |
+|---|---|---|---|
+| **P1** | Parents d'enfants 4-7 ans (U8/Ninjas) | Rayon 5 km autour du 6498 Beaubien Est · 25-45 ans · ciblage LARGE (c'est le créatif qui qualifie, pas les critères d'intérêts) | Demande la plus forte du marché, cours les plus vides, et chaque Ninja devient un karatéka/judoka dans 2 ans |
+| **P2** | Parents d'enfants 6-12 ans (Judo) | Même géo · 27-48 ans · large | 3 cours payés qui tournent à vide = marge pure |
+| **P3** | Réactivation & retargeting | Audience personnalisée : export CSV de VOTRE base (anciens membres + leads perdus) importé dans Meta + spectateurs de vidéos 50 %+ + visiteurs de la page | Coût par résultat 3-5× moins cher que le froid ; message « nouvelle direction » |
+| — | Exclusion partout | Audience personnalisée « membres actifs » (export de l'app) | Ne payez jamais pour montrer une pub à un client actuel |
+| (P4) | Lookalike 1-3 % de la liste membres | Seulement si 100+ contacts matchés | À tester au mois 2, pas avant |
+
+Le karaté ne reçoit **pas de budget froid** tant qu'il est quasi plein — liste d'attente
+organique seulement. Ciblage des mineurs interdit sur Meta : on cible toujours le parent.
+
+### 8.3 Structure de campagne et budget (15 $/jour — 675 $ du 15 août au 30 septembre)
+
+| Campagne | Objectif Meta | Budget | Contenu |
+|---|---|---|---|
+| C1 — Acquisition | **Prospects (Instant Forms)** | 10-11 $/j | 2 ensembles : A = créatifs U8 (P1), B = créatifs Judo (P2). 2-3 pubs par ensemble. |
+| C2 — Réactivation | Prospects ou Trafic → formulaire | 4-5 $/j | Audiences P3, créatif « nouvelle direction / on vous ravoit » + offre de rentrée |
+
+Réglages clés : formulaire Instant Form avec **téléphone obligatoire** + 2 questions de
+qualification (« Âge de l'enfant ? », « Quel sport ? Karaté/Judo/Ninjas 4-7 ans ») — un
+champ de plus filtre les curieux et fait baisser le volume mais monter la qualité ;
+placements automatiques ; optimisation « prospects ». Pas de bouton « Booster » depuis la
+page — tout passe par le Gestionnaire de publicités (le boost optimise sur l'engagement,
+pas sur les prospects).
+
+### 8.4 Créatifs : 3 concepts, filmés au téléphone pendant vos cours (autorisations parentales signées)
+
+| Concept | Format | Accroche (première seconde = tout) |
+|---|---|---|
+| **« La vraie classe »** | Vidéo verticale 20-30 s : salut, rires, chute amortie, high-five du prof | « À 4 ans, on ne tient pas en place. À 7 ans, on tient un salut. » |
+| **« Parent POV »** | Témoignage parent 20 s ou carrousel 3 images | « Mon gars de 5 ans vidait son énergie sur les murs. Maintenant c'est sur un tatami. » |
+| **« Rentrée / urgence réelle »** | Image forte + texte court | « Essai gratuit en septembre — groupes limités à 25 enfants. Anjou / Saint-Léonard. » |
+
+Règles : français d'abord (votre clientèle) ; sous-titres intégrés (80 % regardent sans
+son) ; le visage du prof (vous) dans les 3 premières secondes — les gens s'inscrivent chez
+quelqu'un, pas dans un local ; jamais plus de 2 semaines sans rafraîchir le créatif gagnant.
+CTA unique partout : **« Réserver l'essai gratuit »**.
+
+### 8.5 La machine de conversion (là où 80 % des campagnes locales meurent)
+
+Le lead Meta ne vaut rien sans rappel rapide : contacté en **moins de 15 minutes**, un lead
+répond 8-10× plus qu'après 24 h. Votre contrainte (emploi de jour) impose l'automatisation :
+
+1. **Immédiat (automatique)** : courriel de confirmation au lead + notification à vous
+   (votre app le fait déjà pour l'inscription via `INSCRIPTION_NOTIF_EMAIL` — même mécanique
+   à brancher sur les leads).
+2. **Le soir même (manuel, 15 min/jour)** : SMS puis appel. Script : « Bonjour [prénom],
+   c'est [vous] du CSHP à Anjou — vous avez demandé un essai pour [enfant]. J'ai de la place
+   [mardi] ou [jeudi] à 18 h, lequel vous arrange ? » — proposer 2 créneaux, jamais
+   « quand voulez-vous ? ».
+3. **Relances** : J+1 SMS, J+3 appel, J+7 dernier SMS (« Je garde sa place jusqu'à
+   vendredi »). Après l'essai : proposition d'inscription LE SOIR MÊME de l'essai, avec le
+   rabais famille en argument de closing.
+
+**Chantier technique dans l'app (petit, à faire avant le 15 août) :**
+- Ajouter `source` + champs UTM au modèle `Lead` (Prisma) et au `POST /api/leads` — sans ça,
+  impossible de savoir quelle pub produit des VENTES (et pas juste des leads).
+- Page d'atterrissage publique `/essai` minimaliste (1 CTA) pour le retargeting et le lien
+  Google — les Instant Forms de Meta suffisent pour C1 au lancement.
+- Pixel Meta + événement « Lead » sur le formulaire, et « CompleteRegistration » sur
+  l'inscription en ligne — pour que Meta optimise sur les vrais résultats.
+- Rapatriement automatique des leads Meta vers `POST /api/leads` (n8n — vous l'utilisez
+  déjà — ou export CSV quotidien au début).
+
+### 8.6 Le tunnel chiffré et les cibles (675 $ de budget)
+
+| Étape | Taux visé | Volume attendu |
+|---|---|---|
+| Budget | — | 675 $ (45 jours × 15 $) |
+| Leads (CPL cible 7-11 $) | — | **60-95 leads** |
+| Contactés < 24 h | 60-70 % | 40-65 |
+| Essais réservés | 50-60 % des contactés | 25-38 |
+| Essais présents | 60-70 % (rappel la veille) | 15-26 |
+| **Inscriptions** | 50-60 % des présents | **8-15 (bien exécuté : jusqu'à 20)** |
+
+Coût d'acquisition : ~45-85 $/membre pour une valeur à vie de 900-1 900 $ (grille révisée,
+12-24 mois de rétention). **Le retour est dans le suivi téléphonique, pas dans la pub.**
+
+**Règles d'arrêt (kill rules)** — 10 minutes, 2 fois par semaine, pas plus :
+- Une pub à 50 $ dépensés sans lead → coupée.
+- CPL > 15 $ sur 5 jours → changer le CRÉATIF (pas l'audience).
+- Des leads mais pas de réponses aux appels → revoir les questions du formulaire (qualité).
+- Ne jamais toucher à une pub qui performe (redémarrer l'apprentissage coûte cher).
+
+### 8.7 Calendrier
+
+| Quand | Quoi |
+|---|---|
+| 6-14 août | Business Manager + page FB nettoyée (photos récentes, avis) ; autorisations parentales ; filmer les 3 concepts pendant les cours ; exports CSV (membres actifs, anciens, leads) → audiences personnalisées ; chantier technique § 8.5 ; formulaires Instant Forms |
+| **15 août** | Lancement C1 + C2 |
+| 15 août - 30 sept. | Optimisation bi-hebdo (kill rules) ; rappels le soir même ; essais les mardis/jeudis/samedis |
+| Oct.-déc. | Couper à 5 $/j (retargeting seul) ; nourrir la page en organique (vidéos de grades) |
+| 2-31 janv. 2027 | 2e vague (résolutions) : relancer C1 avec les créatifs gagnants de septembre + témoignages des inscrits de l'automne |
+
+### 8.8 Mesure du succès dans VOTRE app (pas dans Ads Manager)
+
+Le tableau de bord Meta mesure des leads ; votre app mesure des ventes. Rapport
+hebdomadaire (dimanche, 10 min, avec le bloc admin) : leads reçus par source → % contactés
+< 24 h → essais bookés → présents → convertis (statut CONVERTED) → revenu signé. Si
+Meta dit « succès » et que l'app dit « 0 CONVERTED », c'est le suivi qui casse, pas la pub.
+
+---
+
 ## Annexe — Hypothèses et données sources
 
 - Tarifs actuels tirés de l'application de gestion (`src/lib/tarifs.ts`) : annuel 790 $,
