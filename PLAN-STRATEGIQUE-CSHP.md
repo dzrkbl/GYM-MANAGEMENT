@@ -787,6 +787,40 @@ Meta dit « succès » et que l'app dit « 0 CONVERTED », c'est le suivi qui ca
 
 ---
 
+## Annexe 0 — Corrections issues de la lecture complète du code (à valider dans /admin/finances)
+
+La lecture intégrale du backend (routes, schéma, seed) révèle des écarts avec les hypothèses
+des Volets 1-2 :
+
+1. **Le loyer est indexé** : configuration réelle = 5 589 $/mois (base 2024, taxes incluses)
+   avec **hausse automatique de 2 %/an** → ~5 815 $ en 2026, **~6 170 $ en 2029**. Les seuils
+   de rentabilité montent d'environ 2 %/an si les tarifs ne suivent pas — argument de plus
+   pour l'indexation annuelle des cotisations.
+2. **Les charges du seed dépassent les 7 000 $/mois annoncés** : loyer ~5 815 $ + charges
+   fixes 1 494 $/mois (location automobile 608 $, cellulaires 254 $, assurance auto 160 $,
+   assurance gym 222 $, Hydro 250 $) ≈ **7 309 $/mois AVANT les salaires des coachs de judo**
+   (table CoachSalaire, montants à vérifier). Les vrais seuils sont donc un peu plus hauts
+   que ceux des Volets 1-2 — vérifier la marge nette réelle dans la page Finances de l'app.
+3. **~9 200 $/an de frais automobile** (location 608 $ + assurance 160 $) passent dans les
+   livres du gym. Si c'est un véhicule à usage mixte, c'est un choix fiscal ; mais pour
+   évaluer la rentabilité RÉELLE du dojo (et pour le vendre un jour — option B), il faut
+   les isoler : sans eux, la perte d'exploitation est ~9 000 $/an plus faible qu'elle
+   n'apparaît.
+4. **Inscription TPS/TVQ confirmée** (numéros réels sur les reçus PDF + NEQ) → la
+   récupération des CTI/RTI (Volet 1) s'applique pleinement ; seule la TPS/TVQ *perçue* est
+   calculée dans l'app, pas les intrants — à faire avec le comptable.
+5. **Les relances automatiques sont complètes et dédupliquées** (paiement J-7/J0/retard,
+   renouvellement J-30, absence 14 j, prospect non contacté 3 j) — il suffit qu'un cron
+   externe appelle `/api/cron/reminders` chaque jour. Le champ `reminderSentAt` est legacy.
+6. **Le règlement intérieur (art. 14) prévoit déjà le droit à l'image** avec opt-out — les
+   vidéos des pubs Meta (Volet 8) sont couvertes pour les membres n'ayant pas refusé.
+7. **Pas de SMS dans l'app** (courriel seulement via Resend) : le « speed-to-lead » du
+   Volet 8 se fait depuis votre téléphone à court terme.
+8. **Aucune page publique n'appelle `POST /api/leads`** : l'endpoint public existe, la
+   gestion admin existe, mais la page d'atterrissage `/essai` reste à créer (chantier § 8.5).
+9. **Encaissement 50/50 prévu au règlement** (50 % à l'inscription, 50 % un mois plus tard) :
+   la rentrée de septembre encaisse donc sur sept.-oct. — à intégrer au budget de trésorerie.
+
 ## Annexe — Hypothèses et données sources
 
 - Tarifs actuels tirés de l'application de gestion (`src/lib/tarifs.ts`) : annuel 790 $,
