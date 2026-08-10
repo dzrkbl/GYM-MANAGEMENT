@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { sendEmail, htmlCourriel, configCourriel } from './mailer';
+import { fraisRetard, FRAIS_RETARD_PAR_SEMAINE } from './paiements';
 
 // ---------- Helpers de dates ----------
 function jourDebut(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -94,6 +95,8 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
       if (!to) { s.ignores++; continue; }
       const nom = `${v.member.firstName} ${v.member.lastName}`;
       const enRetard = niveau.type === 'PAIEMENT_RETARD';
+      // Frais de retard courus (règlement art. 6), sauf si exonérés par l'admin.
+      const frais = enRetard ? fraisRetard(v, now) : 0;
       const html = htmlCourriel(`
         <p>${enRetard
           ? `Un versement pour <strong>${nom}</strong> est <strong>en retard</strong>.`
@@ -101,7 +104,9 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
         <div style="background:#f5f5f5;padding:15px;border-radius:8px;margin:20px 0;">
           <p><strong>Montant :</strong> ${formatMontant(v.montant)}</p>
           <p><strong>Échéance :</strong> ${formatDate(v.datePrevue)}</p>
+          ${frais > 0 ? `<p><strong>Frais de retard courus :</strong> ${formatMontant(frais)} (${FRAIS_RETARD_PAR_SEMAINE} $ par semaine de retard — règlement, art. 6)</p>` : ''}
         </div>
+        ${enRetard ? `<p>Conformément au règlement intérieur, tout retard de plus d'une semaine entraîne des frais de ${FRAIS_RETARD_PAR_SEMAINE} $ par semaine. Merci de régulariser rapidement — contactez-nous en cas de difficulté.</p>` : ''}
         <p>Pour toute question : payements@centresportifhp.com</p>`);
       const resultat = await envoyerAvecLog({
         type: niveau.type, memberId: v.membreId, versementId: v.id, refKey: v.id,
@@ -201,6 +206,164 @@ export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promi
   return s;
 }
 
+// ---------- Alerte admin : membres EN ATTENTE dont un cours a lieu demain ----------
+// « En attente » = fiche reçue mais aucun paiement enregistré. L'admin est
+// prévenu la veille du prochain cours de la section pour pouvoir appeler.
+const CODES_JOURS = ['DIM', 'LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM'];
+
+export async function sendEnAttenteAlerts(now = new Date()): Promise<Stat> {
+  const s = stat();
+  const notif = process.env.INSCRIPTION_NOTIF_EMAIL;
+  if (!notif) return s; // pas d'adresse admin configurée
+
+  const demain = addDays(now, 1);
+  const codeDemain = CODES_JOURS[demain.getDay()];
+  const dateDemain = `${demain.getFullYear()}-${String(demain.getMonth() + 1).padStart(2, '0')}-${String(demain.getDate()).padStart(2, '0')}`;
+
+  const [membres, cours] = await Promise.all([
+    prisma.member.findMany({
+      where: { status: 'EN_ATTENTE' },
+      include: { sections: true },
+    }),
+    prisma.course.findMany({ where: { actif: true } }),
+  ]);
+  if (membres.length === 0) return s;
+
+  const sectionsDemain = new Set(
+    cours.filter((c) => (c.jours || []).includes(codeDemain)).map((c) => c.section)
+  );
+
+  const concernes: Array<{ id: string; nom: string; tel: string; courriel: string; depuis: string }> = [];
+  for (const m of membres) {
+    const aCoursDemain = m.sections.some((sec) => sectionsDemain.has(sec.section));
+    if (!aCoursDemain) { s.ignores++; continue; }
+    // Une seule alerte par membre et par date de cours.
+    const refKey = `${m.id}:${dateDemain}`;
+    const deja = await prisma.reminderLog.findUnique({
+      where: { type_refKey: { type: 'EN_ATTENTE_COURS', refKey } },
+    });
+    if (deja) { s.ignores++; continue; }
+    concernes.push({
+      id: m.id,
+      nom: `${m.firstName} ${m.lastName}`,
+      tel: m.parentPhone || m.phone || '—',
+      courriel: m.parentEmail || m.email || '—',
+      depuis: m.createdAt ? formatDate(m.createdAt) : '—',
+    });
+  }
+  if (concernes.length === 0) return s;
+
+  const lignes = concernes
+    .map((c) => `<li><strong>${c.nom}</strong> — 📞 ${c.tel} · ${c.courriel} (fiche reçue le ${c.depuis})</li>`)
+    .join('');
+  try {
+    await sendEmail({
+      to: notif,
+      subject: `⏳ ${concernes.length} inscription(s) EN ATTENTE — cours demain (${codeDemain})`,
+      html: htmlCourriel(`
+        <p>Bonjour,</p>
+        <p>Ces athlètes ont un cours <strong>demain</strong> mais leur inscription est
+        toujours <strong>EN ATTENTE</strong> (aucun paiement enregistré). Un appel
+        aujourd'hui permet de confirmer leur place :</p>
+        <ul>${lignes}</ul>
+        <p>Dès qu'un premier paiement est enregistré, l'athlète devient ACTIF automatiquement.</p>`,
+        { salutation: null }),
+    });
+  } catch (e) {
+    derniereErreurEnvoi = e instanceof Error ? e.message : String(e);
+    s.erreurs++;
+    return s;
+  }
+
+  for (const c of concernes) {
+    await prisma.reminderLog.create({
+      data: { type: 'EN_ATTENTE_COURS', memberId: c.id, refKey: `${c.id}:${dateDemain}` },
+    }).catch(() => { /* dédup concurrente */ });
+    s.envoyes++;
+  }
+  return s;
+}
+
+// ---------- Alerte admin : retards répétés ----------
+// Un membre cumulant 2 retards ou plus (versements payés avec > 7 jours de
+// retard, ou impayés depuis > 7 jours) est signalé à l'admin, une fois par mois.
+export async function sendRetardRepeteAlerts(now = new Date()): Promise<Stat> {
+  const s = stat();
+  const notif = process.env.INSCRIPTION_NOTIF_EMAIL;
+  if (!notif) return s;
+
+  const versements = await prisma.paymentVersement.findMany({
+    where: {
+      OR: [
+        { datePaiement: null, datePrevue: { lt: addDays(jourDebut(now), -7) } },
+        { datePaiement: { not: null } },
+      ],
+    },
+    include: { member: true },
+  });
+
+  const parMembre = new Map<string, { nom: string; tel: string; retards: number; du: number }>();
+  for (const v of versements) {
+    const paye = v.datePaiement != null;
+    const joursRetard = Math.floor(
+      (((paye ? v.datePaiement!.getTime() : now.getTime()) - v.datePrevue.getTime())) / 86_400_000
+    );
+    if (joursRetard <= 7) continue;
+    const entree = parMembre.get(v.membreId) || {
+      nom: `${v.member.firstName} ${v.member.lastName}`,
+      tel: v.member.parentPhone || v.member.phone || '—',
+      retards: 0,
+      du: 0,
+    };
+    entree.retards++;
+    if (!paye) entree.du += v.montant;
+    parMembre.set(v.membreId, entree);
+  }
+
+  const mois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const recidivistes: Array<{ id: string; nom: string; tel: string; retards: number; du: number }> = [];
+  for (const [id, e] of parMembre) {
+    if (e.retards < 2) continue;
+    const refKey = `${id}:${mois}`; // au plus un signalement par membre par mois
+    const deja = await prisma.reminderLog.findUnique({
+      where: { type_refKey: { type: 'RETARD_REPETE', refKey } },
+    });
+    if (deja) { s.ignores++; continue; }
+    recidivistes.push({ id, ...e });
+  }
+  if (recidivistes.length === 0) return s;
+
+  const lignes = recidivistes
+    .map((r) => `<li><strong>${r.nom}</strong> — ${r.retards} retards cumulés${r.du > 0 ? `, ${formatMontant(r.du)} impayé(s)` : ''} · 📞 ${r.tel}</li>`)
+    .join('');
+  try {
+    await sendEmail({
+      to: notif,
+      subject: `🔁 Retards de paiement répétés — ${recidivistes.length} dossier(s) à surveiller`,
+      html: htmlCourriel(`
+        <p>Bonjour,</p>
+        <p>Ces membres cumulent <strong>plusieurs retards de paiement</strong> (payés en
+        retard ou impayés depuis plus d'une semaine) :</p>
+        <ul>${lignes}</ul>
+        <p>Frais de retard prévus au règlement : ${FRAIS_RETARD_PAR_SEMAINE} $/semaine —
+        exonérables au cas par cas depuis la fiche du membre.</p>`,
+        { salutation: null }),
+    });
+  } catch (e) {
+    derniereErreurEnvoi = e instanceof Error ? e.message : String(e);
+    s.erreurs++;
+    return s;
+  }
+
+  for (const r of recidivistes) {
+    await prisma.reminderLog.create({
+      data: { type: 'RETARD_REPETE', memberId: r.id, refKey: `${r.id}:${mois}` },
+    }).catch(() => { /* dédup concurrente */ });
+    s.envoyes++;
+  }
+  return s;
+}
+
 // ---------- Exécution groupée (appelée par le cron ou le déclencheur intégré) ----------
 export async function runAllReminders(now = new Date()) {
   // Sans transport courriel, chaque envoi échouerait : on s'arrête tout de suite
@@ -216,11 +379,14 @@ export async function runAllReminders(now = new Date()) {
   const renouvellements = await sendRenewalReminders(now);
   const absences = await sendAbsenceAlerts(now);
   const prospects = await sendLeadFollowups(now);
+  const enAttente = await sendEnAttenteAlerts(now);
+  const retardsRepetes = await sendRetardRepeteAlerts(now);
 
   // Rendre les échecs visibles dans l'interface (journal d'audit).
   const totalErreurs =
     Object.values(paiements).reduce((n, s) => n + s.erreurs, 0) +
-    renouvellements.erreurs + absences.erreurs + prospects.erreurs;
+    renouvellements.erreurs + absences.erreurs + prospects.erreurs +
+    enAttente.erreurs + retardsRepetes.erreurs;
   if (totalErreurs > 0) {
     prisma.auditLog.create({
       data: {
@@ -231,5 +397,5 @@ export async function runAllReminders(now = new Date()) {
     }).catch((e) => console.error('Erreur audit rappels:', e));
   }
 
-  return { paiements, renouvellements, absences, prospects };
+  return { paiements, renouvellements, absences, prospects, enAttente, retardsRepetes };
 }

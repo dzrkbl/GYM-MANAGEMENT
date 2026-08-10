@@ -1,5 +1,22 @@
 import { prisma } from './prisma';
 
+// Frais de retard (règlement, art. 6) : 10 $ par semaine après une semaine de
+// retard. Calculés dynamiquement (jamais stockés) ; l'admin peut exonérer un
+// versement (`exonererFraisRetard`).
+export const FRAIS_RETARD_PAR_SEMAINE = 10;
+export const DELAI_GRACE_JOURS = 7;
+
+export function fraisRetard(
+  v: { datePrevue: Date; datePaiement: Date | null; exonererFraisRetard?: boolean },
+  now = new Date()
+): number {
+  if (v.exonererFraisRetard) return 0;
+  const fin = v.datePaiement ?? now;
+  const joursRetard = Math.floor((fin.getTime() - v.datePrevue.getTime()) / 86_400_000);
+  if (joursRetard <= DELAI_GRACE_JOURS) return 0;
+  return Math.floor(joursRetard / 7) * FRAIS_RETARD_PAR_SEMAINE;
+}
+
 /**
  * Un membre EN_ATTENTE (inscription en ligne) devient ACTIF dès son premier
  * paiement enregistré — c'est la règle du centre : l'inscription est confirmée

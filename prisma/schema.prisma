@@ -106,6 +106,9 @@ model PaymentVersement {
   datePaiement    DateTime?
   methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
   note            String?
+  // Frais de retard (10 $/semaine après 1 semaine, règlement art. 6) : calculés
+  // dynamiquement ; l'admin peut les exonérer au cas par cas.
+  exonererFraisRetard Boolean @default(false)
   reminderSentAt  DateTime?          // Anti-doublon pour les rappels de paiement automatiques
   receiptNumber   Int?               // Numéro de reçu (assigné à l'envoi du reçu)
   receiptSentAt   DateTime?          // Date d'envoi du reçu par courriel (anti-doublon)

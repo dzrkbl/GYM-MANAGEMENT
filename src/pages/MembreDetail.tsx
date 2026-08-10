@@ -493,6 +493,9 @@ export function MembreDetail() {
                 {member.versements.map((v: any, index: number) => {
                   const isPaid = !!v.datePaiement;
                   const isLate = !isPaid && joursAvantEcheance(v.datePrevue) < 0;
+                  // Frais de retard (règlement art. 6) : 10 $/sem après 7 jours, sauf exonération.
+                  const joursRetard = isLate ? -joursAvantEcheance(v.datePrevue) : 0;
+                  const frais = !v.exonererFraisRetard && joursRetard > 7 ? Math.floor(joursRetard / 7) * 10 : 0;
                   return (
                     <div 
                       key={v.id} 
@@ -524,6 +527,31 @@ export function MembreDetail() {
 
                         <div className="text-xs text-gray-500 space-y-1">
                           <p>Échéance prévue : <strong>{formatDateLocal(v.datePrevue, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
+                          {isLate && (frais > 0 || v.exonererFraisRetard) && (
+                            <p className={v.exonererFraisRetard ? 'text-gray-400' : 'text-red-600 font-semibold'}>
+                              {v.exonererFraisRetard
+                                ? 'Frais de retard exonérés'
+                                : `Frais de retard courus : ${frais} $ (10 $/semaine)`}
+                              {user?.role === 'ADMIN' && (
+                                <button
+                                  className="ml-2 underline text-[11px] text-gray-500 hover:text-gray-800"
+                                  onClick={async () => {
+                                    try {
+                                      await apiFetch(`/versements/${v.id}/frais-retard`, {
+                                        method: 'PATCH',
+                                        body: JSON.stringify({ exonerer: !v.exonererFraisRetard }),
+                                      });
+                                      fetchMemberData();
+                                    } catch (err: any) {
+                                      alert(err?.message || 'Erreur');
+                                    }
+                                  }}
+                                >
+                                  {v.exonererFraisRetard ? 'Rétablir les frais' : 'Exonérer'}
+                                </button>
+                              )}
+                            </p>
+                          )}
                           {isPaid && (
                             <div className="bg-slate-100/60 text-slate-700 p-2 rounded-lg mt-2 text-[11px] font-medium border border-slate-200/50">
                               Payé le {formatDateLocal(v.datePaiement) || '-'} via <span className="uppercase font-bold">{v.methodePaiement}</span>

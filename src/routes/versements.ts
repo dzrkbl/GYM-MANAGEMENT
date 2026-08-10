@@ -9,6 +9,29 @@ import { logAudit } from '../lib/audit';
 
 const router = Router();
 
+// PATCH /api/versements/:id/frais-retard — exonérer (ou rétablir) les frais de
+// retard d'un versement. Décision financière : ADMIN seulement.
+router.patch('/:id/frais-retard', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { exonerer } = z.object({ exonerer: z.boolean() }).parse(req.body);
+    const versement = await prisma.paymentVersement.update({
+      where: { id: req.params.id },
+      data: { exonererFraisRetard: exonerer },
+      include: { member: { select: { firstName: true, lastName: true } } },
+    });
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'PaymentVersement',
+      entityId: versement.id,
+      description: `Frais de retard ${exonerer ? 'EXONÉRÉS' : 'rétablis'} — ${versement.member.firstName} ${versement.member.lastName}, versement n°${versement.numeroVersement}`,
+    });
+    return sendSuccess(res, versement);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    return sendError(res, 'Erreur lors de la modification des frais de retard', 500);
+  }
+});
+
 // PUT /api/versements/:id/payer
 router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
