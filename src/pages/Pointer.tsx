@@ -12,13 +12,39 @@ interface Course {
   coach?: { firstName: string; lastName: string } | null;
 }
 
+interface Versement {
+  montant: number;
+  datePrevue: string;
+  datePaiement: string | null;
+}
+
 interface Member {
   id: string;
   firstName: string;
   lastName: string;
   belt?: string;
   sections: { section: string; belt: string | null }[];
+  versements?: Versement[];
 }
+
+// Rappel de paiement affiché au coach pendant la prise de présences :
+// prochain versement impayé, visible à partir de 7 jours avant l'échéance
+// et tant que le paiement est en retard.
+function rappelPaiement(member: Member): { montant: number; date: Date; enRetard: boolean; autres: number } | null {
+  const impayes = (member.versements || [])
+    .filter((v) => !v.datePaiement && v.montant > 0)
+    .sort((a, b) => a.datePrevue.localeCompare(b.datePrevue));
+  if (impayes.length === 0) return null;
+  const prochain = impayes[0];
+  const due = new Date(prochain.datePrevue.slice(0, 10) + 'T12:00:00');
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const diffJours = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diffJours > 7) return null;
+  return { montant: prochain.montant, date: due, enRetard: diffJours < 0, autres: impayes.length - 1 };
+}
+
+const fmtMontant = (m: number) => (m % 1 === 0 ? m.toFixed(0) : m.toFixed(2));
 
 export function Pointer() {
   const { codes: sections, getLabel } = useSections();
@@ -238,8 +264,10 @@ export function Pointer() {
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
-                {members.map(member => (
-                  <li 
+                {members.map(member => {
+                  const rappel = rappelPaiement(member);
+                  return (
+                  <li
                     key={member.id}
                     className="flex justify-between items-center p-4 hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => handleToggleMember(member.id)}
@@ -249,9 +277,20 @@ export function Pointer() {
                       <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-cshp-gray">
                         {getBeltColor(member, selectedSection)}
                       </span>
+                      {rappel && (
+                        <span
+                          className={`inline-block mt-1 ml-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            rappel.enRetard ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {fmtMontant(rappel.montant)} $ · {rappel.enRetard ? 'en retard depuis le' : 'dû le'}{' '}
+                          {rappel.date.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
+                          {rappel.autres > 0 && ` (+${rappel.autres})`}
+                        </span>
+                      )}
                     </div>
                     <div>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={pointedMemberIds.has(member.id)}
                         onChange={() => {}} // handled by li onClick
@@ -259,7 +298,8 @@ export function Pointer() {
                       />
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
