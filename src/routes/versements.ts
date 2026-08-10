@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement } from '../lib/paiements';
-import { sendRecuVersement } from '../lib/recus';
+import { sendRecuVersementBackground } from '../lib/recus';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -37,7 +37,7 @@ router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER'])
     });
 
     // Reçu automatique par courriel (sauf comptant) — ne bloque pas la réponse.
-    sendRecuVersement(id).catch((e) => console.error('Erreur envoi reçu:', e));
+    sendRecuVersementBackground(id);
 
     logAudit(req, { action: 'PAY', entity: 'PaymentVersement', entityId: id, description: `Versement réglé (${methode})` });
 

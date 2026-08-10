@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
-import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { REGLEMENT_VERSION } from '../lib/reglement';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
@@ -101,7 +101,7 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     const nomComplet = `${data.firstName} ${data.lastName}`;
 
     // Courriel de bienvenue au parent/athlète (non bloquant).
-    sendEmail({
+    sendEmailBackground({
       to: destinataire,
       subject: 'Inscription reçue — CSHP',
       html: htmlCourriel(contenuBienvenue({
@@ -109,11 +109,11 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         karate: estKarate(data.section),
         note: `Votre demande d'inscription est en attente de validation et sera confirmée une fois le premier paiement complété. Vous avez accepté le règlement intérieur (version ${REGLEMENT_VERSION}) le ${new Date().toLocaleDateString('fr-CA')}.`,
       })),
-    }).catch((e) => console.error('Erreur courriel bienvenue:', e));
+    }, `Courriel de bienvenue (inscription en ligne de ${nomComplet})`);
 
     // Notification à l'administration (si configurée).
     if (process.env.INSCRIPTION_NOTIF_EMAIL) {
-      sendEmail({
+      sendEmailBackground({
         to: process.env.INSCRIPTION_NOTIF_EMAIL,
         subject: `Nouvelle inscription en ligne — ${nomComplet}`,
         html: `
@@ -125,7 +125,7 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
           </ul>
           <p>À valider dans la section Membres.</p>
         `,
-      }).catch((e) => console.error('Erreur courriel notif admin:', e));
+      }, `Notification admin (inscription en ligne de ${nomComplet})`);
     }
 
     return sendSuccess(res, { ok: true, membreId: membre.id }, 201);

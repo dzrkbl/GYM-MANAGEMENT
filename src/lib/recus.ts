@@ -185,7 +185,6 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
     to: destinataire,
     subject: `Reçu de paiement — CSHP (no ${String(numero).padStart(5, '0')})`,
     html: htmlCourriel(`
-        <p>Bonjour,</p>
         <p>Vous trouverez en pièce jointe le reçu pour le paiement de
         <strong>${membreNom}</strong> (${formatMontant(versement.montant)}).</p>
       `),
@@ -198,4 +197,32 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
   });
 
   return true;
+}
+
+/**
+ * Variante non bloquante : consigne tout échec dans le journal d'audit
+ * (visible dans l'interface admin) au lieu de seulement les logs serveur.
+ */
+export function sendRecuVersementBackground(versementId: string): void {
+  sendRecuVersement(versementId).catch(async (e) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('Erreur envoi reçu:', message);
+    let detail = `versement ${versementId}`;
+    try {
+      const v = await prisma.paymentVersement.findUnique({
+        where: { id: versementId },
+        include: { member: { select: { firstName: true, lastName: true } } },
+      });
+      if (v) detail = `${v.member.firstName} ${v.member.lastName} — versement n°${v.numeroVersement}`;
+    } catch { /* on garde le détail minimal */ }
+    prisma.auditLog
+      .create({
+        data: {
+          action: 'ERREUR',
+          entity: 'Courriel',
+          description: `Reçu de paiement (${detail}) : ${message}`,
+        },
+      })
+      .catch((err) => console.error('Erreur audit reçu:', err));
+  });
 }

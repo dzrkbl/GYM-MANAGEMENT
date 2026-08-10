@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { sendEmail, htmlCourriel } from './mailer';
+import { sendEmail, htmlCourriel, configCourriel } from './mailer';
 
 // ---------- Helpers de dates ----------
 function jourDebut(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -23,16 +23,24 @@ function destinataire(m: { email: string | null; parentEmail: string | null }): 
 }
 
 // Envoie un courriel une seule fois par (type, refKey) grâce à ReminderLog.
+// Ne lève jamais : retourne 'envoye', 'ignore' ou 'erreur' pour qu'un échec
+// d'envoi (adresse invalide, config…) n'interrompe pas le reste de la tournée.
 async function envoyerAvecLog(opts: {
   type: string; memberId: string; versementId?: string | null; refKey: string;
   to: string; subject: string; html: string;
-}): Promise<boolean> {
+}): Promise<'envoye' | 'ignore' | 'erreur'> {
   const existing = await prisma.reminderLog.findUnique({
     where: { type_refKey: { type: opts.type, refKey: opts.refKey } },
   });
-  if (existing) return false;
+  if (existing) return 'ignore';
 
-  await sendEmail({ to: opts.to, subject: opts.subject, html: opts.html });
+  try {
+    await sendEmail({ to: opts.to, subject: opts.subject, html: opts.html });
+  } catch (e) {
+    console.error(`Erreur rappel ${opts.type} → ${opts.to}:`, e instanceof Error ? e.message : e);
+    derniereErreurEnvoi = e instanceof Error ? e.message : String(e);
+    return 'erreur';
+  }
 
   try {
     await prisma.reminderLog.create({
@@ -41,11 +49,19 @@ async function envoyerAvecLog(opts: {
   } catch {
     // Dédup concurrente : le log existe déjà, rien à faire.
   }
-  return true;
+  return 'envoye';
 }
 
-type Stat = { envoyes: number; ignores: number };
-const stat = (): Stat => ({ envoyes: 0, ignores: 0 });
+let derniereErreurEnvoi: string | null = null;
+
+type Stat = { envoyes: number; ignores: number; erreurs: number };
+const stat = (): Stat => ({ envoyes: 0, ignores: 0, erreurs: 0 });
+
+function compter(s: Stat, resultat: 'envoye' | 'ignore' | 'erreur'): void {
+  if (resultat === 'envoye') s.envoyes++;
+  else if (resultat === 'erreur') s.erreurs++;
+  else s.ignores++;
+}
 
 // ---------- #7 Rappels de paiement multi-niveaux ----------
 export async function sendPaymentReminders(now = new Date()): Promise<Record<string, Stat>> {
@@ -79,7 +95,6 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
       const nom = `${v.member.firstName} ${v.member.lastName}`;
       const enRetard = niveau.type === 'PAIEMENT_RETARD';
       const html = htmlCourriel(`
-        <p>Bonjour,</p>
         <p>${enRetard
           ? `Un versement pour <strong>${nom}</strong> est <strong>en retard</strong>.`
           : `Ceci est un rappel concernant un paiement à venir (${niveau.libelle}) pour <strong>${nom}</strong>.`}</p>
@@ -88,11 +103,11 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
           <p><strong>Échéance :</strong> ${formatDate(v.datePrevue)}</p>
         </div>
         <p>Pour toute question : payements@centresportifhp.com</p>`);
-      const envoye = await envoyerAvecLog({
+      const resultat = await envoyerAvecLog({
         type: niveau.type, memberId: v.membreId, versementId: v.id, refKey: v.id,
         to, subject: enRetard ? 'Versement en retard — CSHP' : 'Rappel de paiement — CSHP', html,
       });
-      envoye ? s.envoyes++ : s.ignores++;
+      compter(s, resultat);
     }
     result[niveau.type] = s;
   }
@@ -112,15 +127,14 @@ export async function sendRenewalReminders(now = new Date()): Promise<Stat> {
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${m.finContrat.toISOString().slice(0, 10)}`;
     const html = htmlCourriel(`
-      <p>Bonjour,</p>
       <p>L'inscription de <strong>${nom}</strong> arrive à échéance le
       <strong>${formatDate(m.finContrat)}</strong>.</p>
       <p>Communiquez avec nous pour le renouvellement afin d'assurer la continuité de la saison.</p>`);
-    const envoye = await envoyerAvecLog({
+    const resultat = await envoyerAvecLog({
       type: 'RENOUVELLEMENT', memberId: m.id, refKey,
       to, subject: 'Renouvellement à venir — CSHP', html,
     });
-    envoye ? s.envoyes++ : s.ignores++;
+    compter(s, resultat);
   }
   return s;
 }
@@ -150,15 +164,14 @@ export async function sendAbsenceAlerts(now = new Date(), seuilJours = 14): Prom
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${semaine}`; // au plus une alerte par membre par semaine
     const html = htmlCourriel(`
-      <p>Bonjour,</p>
       <p>Nous avons remarqué que <strong>${nom}</strong> ne s'est pas présenté(e) aux
       entraînements depuis un certain temps.</p>
       <p>Nous espérons que tout va bien ! N'hésitez pas à nous contacter si nous pouvons aider.</p>`);
-    const envoye = await envoyerAvecLog({
+    const resultat = await envoyerAvecLog({
       type: 'ABSENCE', memberId: m.id, refKey,
       to, subject: 'On ne vous a pas vu(e) au dojo — CSHP', html,
     });
-    envoye ? s.envoyes++ : s.ignores++;
+    compter(s, resultat);
   }
   return s;
 }
@@ -178,21 +191,45 @@ export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promi
       <p>Le prospect <strong>${l.firstName} ${l.lastName}</strong> (${l.sport}, ${l.requestType})
       n'a pas encore été contacté depuis sa demande du ${formatDate(l.createdAt)}.</p>
       <p>Coordonnées : ${l.phone || '—'} · ${l.email || '—'}</p>
-      <p>Pensez à effectuer un suivi.</p>`);
-    const envoye = await envoyerAvecLog({
+      <p>Pensez à effectuer un suivi.</p>`, { salutation: null });
+    const resultat = await envoyerAvecLog({
       type: 'LEAD_RELANCE', memberId: l.id, refKey: l.id,
       to: notif, subject: `Prospect à relancer — ${l.firstName} ${l.lastName}`, html,
     });
-    envoye ? s.envoyes++ : s.ignores++;
+    compter(s, resultat);
   }
   return s;
 }
 
-// ---------- Exécution groupée (appelée par le cron) ----------
+// ---------- Exécution groupée (appelée par le cron ou le déclencheur intégré) ----------
 export async function runAllReminders(now = new Date()) {
+  // Sans transport courriel, chaque envoi échouerait : on s'arrête tout de suite
+  // avec un résultat explicite plutôt que de générer des dizaines d'erreurs.
+  const cfg = configCourriel();
+  if (!cfg.provider) {
+    console.warn('Rappels ignorés : courriel non configuré.', cfg.details);
+    return { ignore: true, raison: cfg.details };
+  }
+
+  derniereErreurEnvoi = null;
   const paiements = await sendPaymentReminders(now);
   const renouvellements = await sendRenewalReminders(now);
   const absences = await sendAbsenceAlerts(now);
   const prospects = await sendLeadFollowups(now);
+
+  // Rendre les échecs visibles dans l'interface (journal d'audit).
+  const totalErreurs =
+    Object.values(paiements).reduce((n, s) => n + s.erreurs, 0) +
+    renouvellements.erreurs + absences.erreurs + prospects.erreurs;
+  if (totalErreurs > 0) {
+    prisma.auditLog.create({
+      data: {
+        action: 'ERREUR',
+        entity: 'Courriel',
+        description: `Rappels automatiques : ${totalErreurs} envoi(s) en échec — ${derniereErreurEnvoi || 'voir logs serveur'}`,
+      },
+    }).catch((e) => console.error('Erreur audit rappels:', e));
+  }
+
   return { paiements, renouvellements, absences, prospects };
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
+import { formatMontant, formatDate, formatDateLocal, todayLocalISO } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
@@ -53,7 +53,7 @@ export function Paiements() {
 
   // Modal State
   const [payModal, setPayModal] = useState<{ open: boolean; versementId: string | null; amount: number }>({ open: false, versementId: null, amount: 0 });
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]); // aujourd'hui par défaut
+  const [payDate, setPayDate] = useState(todayLocalISO()); // aujourd'hui par défaut
   const [payMethod, setPayMethod] = useState('COMPTANT');
 
   useEffect(() => {
@@ -81,7 +81,7 @@ export function Paiements() {
 
   const openPayModal = (id: string, amount: number) => {
     setPayModal({ open: true, versementId: id, amount });
-    setPayDate(new Date().toISOString().split('T')[0]);
+    setPayDate(todayLocalISO());
     setPayMethod('COMPTANT');
   };
 
@@ -103,8 +103,11 @@ export function Paiements() {
     }));
 
     try {
-      await apiFetch(`/paiements/${versementId}/payer`, {
-        method: 'PATCH',
+      // Même endpoint que la fiche membre : accessible aux gestionnaires de
+      // section (l'ancien /paiements/:id/payer était réservé ADMIN, ce qui
+      // faisait échouer le bouton pour eux après une mise à jour optimiste).
+      await apiFetch(`/versements/${versementId}/payer`, {
+        method: 'PUT',
         body: JSON.stringify({
           datePaiement: payDate,
           methodePaiement: payMethod

@@ -192,17 +192,20 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
 
         // Lier au membre : map de l'import, sinon recherche en base par nom complet.
+        // Le nom complet peut contenir un prénom OU un nom composé (ex. « Rosa-Lya
+        // Maeli Delienne », « Mohamed Adem Moulai Ali ») : on essaie chaque coupure
+        // prénom/nom possible jusqu'à trouver un membre correspondant.
         let memberId = nameToId.get(fullName);
         if (!memberId) {
-          const parts = fullName.split(' ');
-          const firstName = parts[0];
-          const lastName = parts.slice(1).join(' ');
-          const found = lastName
-            ? await prisma.member.findFirst({ where: { firstName, lastName } })
-            : null;
-          if (found) {
-            memberId = found.id;
-            nameToId.set(fullName, found.id);
+          const words = fullName.split(/\s+/).filter(Boolean);
+          for (let s = 1; s < words.length && !memberId; s++) {
+            const firstName = words.slice(0, s).join(' ');
+            const lastName = words.slice(s).join(' ');
+            const found = await prisma.member.findFirst({ where: { firstName, lastName } });
+            if (found) {
+              memberId = found.id;
+              nameToId.set(fullName, found.id);
+            }
           }
         }
         if (!memberId) {

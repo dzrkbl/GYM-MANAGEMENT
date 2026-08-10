@@ -7,7 +7,7 @@ import { createMembre, updateMembre, apiFetch } from '../../lib/api';
 import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../../lib/tarifs';
 import { User, CreditCard, ChevronRight, ChevronLeft, Plus, Trash, Search, Check, AlertCircle } from 'lucide-react';
 import { useSections } from '../../hooks/useSections';
-import { formatDateLocal } from '../../lib/format';
+import { formatDateLocal, todayLocalISO } from '../../lib/format';
 
 interface MembreFormProps {
   membre?: any; // Si fourni, on est en mode édition
@@ -87,7 +87,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
   // Section B
   const [dateInscription, setDateInscription] = useState(
-    membre?.dateInscription ? membre.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]
+    membre?.dateInscription ? membre.dateInscription.split('T')[0] : todayLocalISO()
   );
   const [plan, setPlan] = useState<'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL'>(membre?.plan || 'TRIMESTRIEL');
   const [montantCustom, setMontantCustom] = useState<number | ''>(
@@ -106,13 +106,11 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [raisonRabaisCustom, setRaisonRabaisCustom] = useState(membre?.raisonRabaisCustom || '');
 
   // Section C
+  // En édition d'un membre qui a déjà des versements, on reste en mode « custom » :
+  // choisir 1/2/3 régénère l'échéancier À NEUF (datePaiement remis à null), ce qui
+  // effacerait l'historique des paiements enregistrés.
   const [modeVersement, setModeVersement] = useState<'1' | '2' | '3' | 'custom'>(
-    membre?.versements && membre.versements.length > 0
-      ? (membre.versements.length <= 3 && !membre.versements.some((v: any, i: number) => {
-          // vérifier si les montants sont inégaux ou non standards
-          return false; // par défaut garder custom s'il y a des versements ou essayer de détecter
-        }) ? `${membre.versements.length}` as any : 'custom')
-      : '3'
+    membre?.versements && membre.versements.length > 0 ? 'custom' : '3'
   );
   const [versements, setVersements] = useState<any[]>(() => {
     if (membre?.versements && membre.versements.length > 0) {
@@ -282,7 +280,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       setErrorMessage("");
     }
     if (currentStep === 3) {
-      if (!areVersementsValid) {
+      // Un membre INACTIF ou EN ATTENTE n'a pas à avoir un échéancier équilibré
+      // (ex. départ en cours d'année : on ne va pas exiger un paiement futur).
+      if (status === 'ACTIF' && !areVersementsValid) {
         setErrorMessage("Le total des versements doit être exactement égal au montant final.");
         return;
       }
@@ -307,7 +307,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       return;
     }
 
-    if (!areVersementsValid) {
+    if (status === 'ACTIF' && !areVersementsValid) {
       setErrorMessage(`La somme des versements (${totalVersements.toFixed(2)} $) ne correspond pas au montant calculé (${montantFinalCalculated.toFixed(2)} $).`);
       setCurrentStep(3);
       return;
