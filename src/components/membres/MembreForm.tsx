@@ -36,13 +36,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const isEditing = !!membre;
   const { sections, getLabel } = useSections();
 
-  const GROUPES = useMemo(() => {
-    const list = sections.map(s => ({ value: s.code, label: s.label }));
-    if (!list.some(item => item.value === 'MENSUEL')) {
-      list.push({ value: 'MENSUEL', label: 'Mensuel' });
-    }
-    return list;
-  }, [sections]);
+  const GROUPES = useMemo(() => sections.map(s => ({ value: s.code, label: s.label })), [sections]);
 
   // Étape courante (1 à 4)
   const [currentStep, setCurrentStep] = useState(1);
@@ -89,16 +83,10 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [dateInscription, setDateInscription] = useState(
     membre?.dateInscription ? membre.dateInscription.split('T')[0] : todayLocalISO()
   );
-  const [plan, setPlan] = useState<'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL'>(membre?.plan || 'TRIMESTRIEL');
-  const [montantCustom, setMontantCustom] = useState<number | ''>(
-    membre?.plan === 'MENSUEL' ? (membre.prixBase || '') : ''
+  // Seules deux formules existent (le forfait mensuel a été retiré).
+  const [plan, setPlan] = useState<'TRIMESTRIEL' | 'ANNUEL'>(
+    membre?.plan === 'ANNUEL' ? 'ANNUEL' : 'TRIMESTRIEL'
   );
-
-  useEffect(() => {
-    if (plan !== 'MENSUEL') {
-      setMontantCustom('');
-    }
-  }, [plan]);
 
   const [rabaisFamille, setRabaisFamille] = useState(membre?.rabaisFamille || false);
   const [membreFamilleId, setMembreFamilleId] = useState(membre?.membreFamilleId || '');
@@ -144,10 +132,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   }, [dob]);
 
   // Prix de base
-  const prixBase = useMemo(() => {
-    if (plan === 'MENSUEL') return typeof montantCustom === 'number' ? montantCustom : 0;
-    return TARIFS[plan]?.base ?? 0;
-  }, [plan, montantCustom]);
+  const prixBase = useMemo(() => TARIFS[plan]?.base ?? 0, [plan]);
 
   // Montant final calculé en temps réel
   const montantFinalCalculated = useMemo(() => {
@@ -556,8 +541,8 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
             <div>
               <label className="block text-sm font-medium text-cshp-black mb-2">Choix du plan d'abonnement</label>
-              <div className="grid grid-cols-3 gap-3">
-                {(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL'] as const).map(p => (
+              <div className="grid grid-cols-2 gap-3">
+                {(['TRIMESTRIEL', 'ANNUEL'] as const).map(p => (
                   <button
                     key={p}
                     type="button"
@@ -576,17 +561,6 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 ))}
               </div>
             </div>
-
-            {plan === 'MENSUEL' && (
-              <Input
-                label="Montant personnalisé ($) *"
-                type="number"
-                value={montantCustom}
-                onChange={e => setMontantCustom(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Ex. 120"
-                required
-              />
-            )}
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-3">

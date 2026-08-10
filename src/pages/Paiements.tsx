@@ -281,7 +281,7 @@ export function Paiements() {
                     {p.member?.lastName} {p.member?.firstName}
                   </h3>
                   <div className="text-sm text-cshp-gray mt-1">
-                    {getLabel(p.section || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
+                    {getLabel(p.section || '')}
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>

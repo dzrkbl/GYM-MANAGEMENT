@@ -43,7 +43,7 @@ const memberSchema = z.object({
   poids: z.number().optional().nullable(),
   dateInscription: z.string().optional().nullable(),
   finContrat: z.string().optional().nullable(),
-  plan: z.enum(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
+  plan: z.enum(['TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
   prixBase: z.number().optional().nullable(),
   rabaisFamille: z.boolean().optional().default(false),
   membreFamilleId: z.string().optional().nullable(),

@@ -186,7 +186,8 @@ export function Inscription() {
 
           <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Frais et conditions de paiement</h2>
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 text-sm space-y-2 text-gray-700">
-            <p><strong>Cotisation</strong> — selon la formule choisie (mensuelle, trimestrielle ou annuelle), payable en versements convenus à l'inscription. Le 1ᵉʳ versement est exigible à l'inscription.</p>
+            <p><strong>Cotisation</strong> — selon la formule choisie (trimestrielle ou annuelle), payable en versements convenus à l'inscription. Le 1ᵉʳ versement est exigible à l'inscription.</p>
+            <p><strong>Vacances</strong> — les forfaits comprennent 2 semaines de vacances durant l'hiver et 2 semaines durant l'été (fermeture du centre, déjà incluses dans la tarification).</p>
             <p><strong>Uniforme</strong> — obligatoire après le cours d'essai, payable au centre (montant selon la discipline et la taille). <strong>Non remboursable.</strong></p>
             <p><strong>Affiliation à la fédération</strong> — annuelle, payable au centre ; elle inclut l'assurance de l'athlète. <strong>Non remboursable.</strong></p>
             <p><strong>Retard de paiement</strong> — tout retard de plus d'une semaine entraîne des frais de <strong>10 $ par semaine de retard</strong> (règlement, art. 6).</p>

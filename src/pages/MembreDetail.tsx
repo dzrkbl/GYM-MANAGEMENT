@@ -155,7 +155,6 @@ export function MembreDetail() {
       case 'NINJAS_GR1': return 'Ninjas Gr. 1';
       case 'NINJAS_GR2': return 'Ninjas Gr. 2';
       case 'NINJAS_GR3': return 'Ninjas Gr. 3';
-      case 'MENSUEL': return 'Mensuel';
       default: return g || '-';
     }
   };

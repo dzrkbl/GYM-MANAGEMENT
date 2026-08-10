@@ -196,7 +196,7 @@ model Section {
 }
 
 enum Plan {
-  MENSUEL
+  MENSUEL // hérité — le forfait mensuel n'existe plus, aucune interface ne le propose
   TRIMESTRIEL
   ANNUEL
 }

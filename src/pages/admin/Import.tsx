@@ -18,7 +18,7 @@ interface ImportReport {
 }
 
 const COLONNES_MEMBRES =
-  'prenom, nom, dateNaissance(AAAA-MM-JJ), genre(M/F), courriel, telephone, nomParent, telephoneParent, courrielParent, statut(ACTIF/INACTIF/EN_ATTENTE), section(ex: KARATE_GR1), plan(MENSUEL/TRIMESTRIEL/ANNUEL), prixBase, rabaisFamille(oui/non), membreFamille, rabaisCustomPct, raisonRabais, montantFinal, dateInscription, finContrat, ceinture, notes';
+  'prenom, nom, dateNaissance(AAAA-MM-JJ), genre(M/F), courriel, telephone, nomParent, telephoneParent, courrielParent, statut(ACTIF/INACTIF/EN_ATTENTE), section(ex: KARATE_GR1), plan(TRIMESTRIEL/ANNUEL), prixBase, rabaisFamille(oui/non), membreFamille, rabaisCustomPct, raisonRabais, montantFinal, dateInscription, finContrat, ceinture, notes';
 
 const COLONNES_VERSEMENTS =
   'nomComplet("Prenom Nom"), numero, montant, datePrevue(AAAA-MM-JJ), datePaiement(vide si non payé), methode(CASH/VIREMENT/CHEQUE/CARTE), note';

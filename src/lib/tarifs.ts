@@ -1,12 +1,12 @@
 // src/lib/tarifs.ts
+// Seules deux formules existent : trimestrielle et annuelle.
 export const TARIFS = {
-  MENSUEL:      { base: 83.33 },
   TRIMESTRIEL:  { base: 250 },
   ANNUEL:       { base: 790 },
 };
 
 export function calculerMontantFinal(params: {
-  plan: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
+  plan: 'TRIMESTRIEL' | 'ANNUEL';
   rabaisFamille: boolean;
   rabaisCustomPct?: number | null;
   prixBase?: number | null;
@@ -26,12 +26,10 @@ export function calculerMontantFinal(params: {
 
 export function calculerFinContrat(
   dateInscription: Date | string,
-  plan: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL'
+  plan: 'TRIMESTRIEL' | 'ANNUEL'
 ): Date {
   const d = new Date(dateInscription);
-  if (plan === 'MENSUEL') {
-    d.setMonth(d.getMonth() + 1);
-  } else if (plan === 'TRIMESTRIEL') {
+  if (plan === 'TRIMESTRIEL') {
     d.setMonth(d.getMonth() + 3);
   } else if (plan === 'ANNUEL') {
     d.setFullYear(d.getFullYear() + 1);

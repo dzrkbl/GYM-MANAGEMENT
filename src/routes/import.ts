@@ -14,7 +14,7 @@ const router = Router();
  *   0 prenom | 1 nom | 2 dateNaissance(AAAA-MM-JJ) | 3 genre(M/F) | 4 courriel |
  *   5 telephone | 6 nomParent | 7 telephoneParent | 8 courrielParent |
  *   9 statut(ACTIF/INACTIF/EN_ATTENTE) | 10 section(ex KARATE_GR1) |
- *   11 plan(MENSUEL/TRIMESTRIEL/ANNUEL) | 12 prixBase | 13 rabaisFamille(oui/non) |
+ *   11 plan(TRIMESTRIEL/ANNUEL) | 12 prixBase | 13 rabaisFamille(oui/non) |
  *   14 membreFamille | 15 rabaisCustomPct | 16 raisonRabais | 17 montantFinal |
  *   18 dateInscription | 19 finContrat | 20 ceinture | 21 notes
  *
@@ -99,9 +99,9 @@ function normalizeStatut(value?: string): string {
   return ['ACTIF', 'INACTIF', 'EN_ATTENTE'].includes(v) ? v : 'ACTIF';
 }
 
-function normalizePlan(value?: string): 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL' | null {
+function normalizePlan(value?: string): 'TRIMESTRIEL' | 'ANNUEL' | null {
   const v = (value || '').trim().toUpperCase();
-  return v === 'MENSUEL' || v === 'TRIMESTRIEL' || v === 'ANNUEL' ? v : null;
+  return v === 'TRIMESTRIEL' || v === 'ANNUEL' ? v : null;
 }
 
 // POST /api/import

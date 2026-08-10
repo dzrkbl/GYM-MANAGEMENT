@@ -63,13 +63,7 @@ export function Membres() {
   }
 
   const { codes, getLabel } = useSections();
-  const SECTIONS = useMemo(() => {
-    const list = ["TOUS", ...codes];
-    if (!list.includes("MENSUEL")) {
-      list.push("MENSUEL");
-    }
-    return list;
-  }, [codes]);
+  const SECTIONS = useMemo(() => ["TOUS", ...codes], [codes]);
 
   const STATUSES = [
     { value: 'ACTIF', label: 'Actif' },
