@@ -778,7 +778,31 @@ Coût d'acquisition : ~45-85 $/membre pour une valeur à vie de 900-1 900 $ (gri
 | Oct.-déc. | Couper à 5 $/j (retargeting seul) ; nourrir la page en organique (vidéos de grades) |
 | 2-31 janv. 2027 | 2e vague (résolutions) : relancer C1 avec les créatifs gagnants de septembre + témoignages des inscrits de l'automne |
 
-### 8.8 Mesure du succès dans VOTRE app (pas dans Ads Manager)
+### 8.8 Brief de montage des pubs (CapCut, ~30 min/pub)
+
+Format : vertical 1080×1920 (9:16), 15-30 s, **sous-titres automatiques français
+incrustés** (80 % regardent sans le son), export aussi en 1:1 pour le fil Facebook.
+
+| Séquence | Durée | Contenu |
+|---|---|---|
+| **Hook** | 0-2 s | Le plan le plus fort (projection, kiai de groupe, réussite d'un petit). JAMAIS le logo en premier. |
+| **Preuve** | 2-15 s | 3-4 plans < 3 s : vrais cours, concentration, rires, high-five. L'authenticité bat la production. |
+| **Offre** | 15-25 s | Vous face caméra, une phrase : « Essai gratuit en septembre, à Anjou — groupes limités à 25 » + texte à l'écran. |
+| **CTA** | fin | Carte « Réserver l'essai gratuit » + logo + quartier. |
+
+Règles : 3 variantes par concept en ne changeant QUE le hook (c'est lui qui fixe le CPL) ;
+consentement écrit des parents pour tout enfant reconnaissable en pub payante (le règlement
+art. 14 couvre l'organique en opt-out, la pub payante mérite un oui explicite) ; recycler
+chaque vidéo en organique sur TikTok/Reels/Shorts (gratuit — banc d'essai des hooks pour
+les pubs payantes de janvier).
+
+**Plateforme** : Meta (FB+IG) en payant — les parents 30-45 d'Anjou y sont, Instant Forms
+minimise la friction, le rayon 5 km est mature, et Reels couvre l'audience « TikTok » dans
+Meta. TikTok Ads : pas avec un budget de 675 $ (minimums ~20 $/j par groupe d'annonces,
+usure créative rapide) — organique seulement en 2026, test payant envisageable au T1 2027
+si le CPL Meta est bon.
+
+### 8.9 Mesure du succès dans VOTRE app (pas dans Ads Manager)
 
 Le tableau de bord Meta mesure des leads ; votre app mesure des ventes. Rapport
 hebdomadaire (dimanche, 10 min, avec le bloc admin) : leads reçus par source → % contactés
