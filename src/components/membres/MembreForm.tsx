@@ -189,6 +189,18 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
     return m ? `${m.firstName} ${m.lastName}` : '';
   }, [referePar, membresList]);
 
+  // Pré-remplir les champs de recherche avec le parrain/membre lié existant
+  // (mode édition), une fois la liste des membres chargée.
+  useEffect(() => {
+    if (membreFamilleId && !searchFamille && selectedFamilleLabel) setSearchFamille(selectedFamilleLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFamilleLabel]);
+  useEffect(() => {
+    if (referePar && !searchReferent && selectedReferentLabel) setSearchReferent(selectedReferentLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReferentLabel]);
+
+
   // --- MISE À JOUR DE L'ÉCHÉANCIER AUTOMATIQUE ---
   useEffect(() => {
     if (modeVersement !== 'custom') {
@@ -381,7 +393,18 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-6">
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          // Formulaire multi-étapes : la touche Entrée dans un champ ne doit
+          // JAMAIS soumettre (à l'étape 4, elle enregistrait la fiche pendant
+          // la saisie du parrain).
+          if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+            e.preventDefault();
+          }
+        }}
+        className="p-5 space-y-6"
+      >
         {errorMessage && (
           <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded flex items-start gap-2 text-red-700 text-sm">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -592,7 +615,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                       type="text"
                       className="w-full pl-9 pr-3 min-h-[40px] border border-gray-300 bg-white rounded-lg text-sm"
                       placeholder="Rechercher par prénom ou nom de famille..."
-                      value={searchFamille || selectedFamilleLabel}
+                      value={searchFamille}
                       onFocus={() => setShowFamilleDropdown(true)}
                       onBlur={() => setTimeout(() => setShowFamilleDropdown(false), 200)}
                       onChange={e => {
@@ -787,7 +810,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                     type="text"
                     className="w-full pl-9 pr-3 min-h-[44px] border border-gray-300 bg-white rounded-lg text-sm"
                     placeholder="Entrez le prénom ou nom du membre parrain..."
-                    value={searchReferent || selectedReferentLabel}
+                    value={searchReferent}
                     onFocus={() => setShowReferentDropdown(true)}
                     onBlur={() => setTimeout(() => setShowReferentDropdown(false), 200)}
                     onChange={e => {

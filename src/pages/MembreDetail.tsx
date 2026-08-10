@@ -11,7 +11,7 @@ import { MembreForm } from '../components/membres/MembreForm';
 import { GradeForm } from '../components/forms/GradeForm';
 import { 
   ArrowLeft, UserCircle, Phone, Calendar as CalIcon, Edit3, Award, 
-  DollarSign, Users, CheckCircle, Clock, Heart, Mail, Check, AlertTriangle, ShieldAlert
+  DollarSign, Users, CheckCircle, Clock, Heart, Mail, Check, AlertTriangle, ShieldAlert, Trash2
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
@@ -190,9 +190,29 @@ export function MembreDetail() {
         <button onClick={() => navigate('/membres')} className="flex items-center text-gray-500 hover:text-gray-800 cursor-pointer font-semibold text-sm">
           <ArrowLeft className="mr-2" size={20} /> Retour aux membres
         </button>
-        <Button variant="outline" onClick={() => setIsEditModalOpen(true)} className="min-h-[40px] text-sm py-1 border-gray-300">
-          <Edit3 size={16} className="mr-2" /> Modifier le Profil
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setIsEditModalOpen(true)} className="min-h-[40px] text-sm py-1 border-gray-300">
+            <Edit3 size={16} className="mr-2" /> Modifier le Profil
+          </Button>
+          {user?.role === 'ADMIN' && (
+            <button
+              title="Supprimer définitivement (doublon/test — impossible si des paiements sont encaissés)"
+              className="p-2 text-gray-300 hover:text-red-600 transition-colors"
+              onClick={async () => {
+                if (!confirm(`Supprimer DÉFINITIVEMENT ${member.firstName} ${member.lastName} ?\n\nCette action est irréversible (fiche, échéancier, présences). Pour un membre qui quitte, utilisez plutôt le statut « Inactif ».`)) return;
+                if (!confirm('Dernière confirmation : suppression définitive ?')) return;
+                try {
+                  await apiFetch(`/membres/${member.id}?definitif=1`, { method: 'DELETE' });
+                  navigate('/membres');
+                } catch (err: any) {
+                  alert(err?.message || 'Suppression refusée');
+                }
+              }}
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* HEADER DE PRÉSENTATION RAPIDE */}
@@ -328,6 +348,21 @@ export function MembreDetail() {
               </div>
             </div>
 
+            {(member.provenance || member.refereParNom) && (
+              <div className="text-sm">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold mb-1">Provenance</span>
+                <p className="text-gray-700">
+                  {{
+                    BOUCHE_A_OREILLE: 'Bouche-à-oreille',
+                    RESEAUX_SOCIAUX: 'Réseaux sociaux',
+                    WEB: 'Web',
+                    ECOLE: 'École',
+                    AUTRE: 'Autre',
+                  }[member.provenance as string] || member.provenance || '—'}
+                  {member.refereParNom && <> · Référé par : <strong>{member.refereParNom}</strong></>}
+                </p>
+              </div>
+            )}
             {member.notes && (
               <div className="pt-3 border-t border-gray-100">
                 <span className="text-gray-400 block text-xs uppercase font-extrabold mb-1">Notes administratives ou médicales</span>

@@ -371,9 +371,28 @@ router.patch('/:id/statut', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER
   }
 });
 
-// DELETE /api/membres/:id (soft delete)
+// DELETE /api/membres/:id — désactivation (défaut) ou suppression DÉFINITIVE
+// (?definitif=1, ADMIN) pour les dossiers de test/doublons. Refusée si le membre
+// a des paiements encaissés (on ne détruit jamais un historique financier).
 router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
+    if (req.query.definitif === '1') {
+      if (req.user!.role !== 'ADMIN') {
+        return sendError(res, 'Suppression définitive réservée à l\'ADMIN.', 403);
+      }
+      const cible = await prisma.member.findUnique({
+        where: { id: req.params.id },
+        include: { versements: true },
+      });
+      if (!cible) return sendError(res, 'Membre introuvable', 404);
+      if (cible.versements.some((v) => v.datePaiement)) {
+        return sendError(res, 'Ce membre a des paiements encaissés : suppression définitive refusée. Utilisez plutôt le statut Inactif.', 409);
+      }
+      await prisma.member.delete({ where: { id: cible.id } });
+      logAudit(req, { action: 'DELETE', entity: 'Member', entityId: cible.id, description: `SUPPRESSION DÉFINITIVE de ${cible.firstName} ${cible.lastName} (doublon/test)` });
+      return sendSuccess(res, { ok: true, supprime: true });
+    }
+
     const member = await prisma.member.update({
       where: { id: req.params.id },
       data: { status: 'INACTIF' }

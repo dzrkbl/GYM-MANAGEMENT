@@ -87,6 +87,20 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
     const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
     if (!lead) return sendError(res, 'Prospect introuvable', 404);
 
+    // Si un membre du même nom existe déjà (ex. fiche d'inscription en ligne
+    // déjà soumise), on ne crée PAS de doublon : on marque simplement converti.
+    const deja = await prisma.member.findFirst({
+      where: {
+        firstName: { equals: lead.firstName, mode: 'insensitive' },
+        lastName: { equals: lead.lastName, mode: 'insensitive' },
+      },
+    });
+    if (deja) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED' } });
+      logAudit(req, { action: 'UPDATE', entity: 'Lead', entityId: lead.id, description: `Prospect ${lead.firstName} ${lead.lastName} lié au dossier membre existant` });
+      return sendSuccess(res, { membreId: deja.id, dejaExistant: true });
+    }
+
     const membre = await prisma.member.create({
       data: {
         firstName: lead.firstName,

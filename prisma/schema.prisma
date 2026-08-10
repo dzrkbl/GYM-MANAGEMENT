@@ -79,6 +79,10 @@ model Member {
   rabaisReferentPct      Float?
   rabaisReferentApplique Boolean     @default(false)
 
+  // Provenance (section 7 de la fiche d'inscription)
+  provenance             String?     // BOUCHE_A_OREILLE, RESEAUX_SOCIAUX, WEB, ECOLE, AUTRE
+  refereParNom           String?     // nom du membre référent tel que saisi sur la fiche
+
   // Consentement au règlement intérieur (inscription en ligne)
   reglementVersion       String?     // version du règlement acceptée
   reglementAccepteAt     DateTime?   // horodatage de l'acceptation

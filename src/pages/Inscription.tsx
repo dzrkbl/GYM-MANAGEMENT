@@ -27,6 +27,8 @@ export function Inscription() {
   const [accepte, setAccepte] = useState(false);
   // Autorisations de la fiche (toutes requises pour l'inscription en ligne)
   const [consentPhoto, setConsentPhoto] = useState<boolean | null>(null); // null = pas encore répondu
+  const [refereParNom, setRefereParNom] = useState('');
+  const [provenance, setProvenance] = useState('');
   const [consentUrgence, setConsentUrgence] = useState(false);
   const [consentCommunications, setConsentCommunications] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +68,8 @@ export function Inscription() {
           consentPhoto: true,
           consentUrgence,
           consentCommunications,
+          refereParNom: refereParNom || null,
+          provenance: provenance || null,
           reglementVersion: REGLEMENT_VERSION,
         }),
       });
@@ -182,6 +186,36 @@ export function Inscription() {
                 className="mt-2 w-full border border-gray-300 rounded-lg p-3 bg-white text-sm"
               />
             )}
+          </div>
+
+          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Provenance</h2>
+          <Input
+            label="Référé par (nom d'un membre actuel, s'il y a lieu)"
+            value={refereParNom}
+            onChange={(e) => setRefereParNom(e.target.value)}
+            placeholder="Ex. : Massil Abbout"
+          />
+          <div>
+            <p className="text-sm font-medium text-cshp-black mb-1.5">Comment avez-vous connu le centre ?</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+              {[
+                ['BOUCHE_A_OREILLE', 'Bouche-à-oreille'],
+                ['RESEAUX_SOCIAUX', 'Réseaux sociaux'],
+                ['WEB', 'Web'],
+                ['ECOLE', 'École'],
+                ['AUTRE', 'Autre'],
+              ].map(([code, label]) => (
+                <label key={code} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="radio"
+                    name="provenance"
+                    checked={provenance === code}
+                    onChange={() => setProvenance(code)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
           </div>
 
           <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Frais et conditions de paiement</h2>

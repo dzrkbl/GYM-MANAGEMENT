@@ -104,6 +104,8 @@ const inscriptionSchema = z.object({
   urgenceLien: z.string().optional().nullable(),
   urgenceTel: z.string().optional().nullable(),
   section: z.string().optional().nullable(),
+  refereParNom: z.string().optional().nullable(),
+  provenance: z.string().optional().nullable(),
   reglementVersion: z.string(),
   reglementSignataire: z.string().min(1, 'La signature (nom complet) est requise'),
   accepte: z.literal(true),
@@ -153,10 +155,27 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
       return sendError(res, 'Un courriel (parent ou athlète) est requis.', 400);
     }
 
-    const membre = await prisma.member.create({
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
+    // Anti-doublon : si le même nom existe déjà…
+    // - EN_ATTENTE (ex. prospect converti manuellement) → on COMPLÈTE ce dossier
+    //   avec la fiche au lieu d'en créer un deuxième ;
+    // - ACTIF/INACTIF → on refuse poliment (dossier déjà existant).
+    const existant = await prisma.member.findFirst({
+      where: {
+        firstName: { equals: data.firstName.trim(), mode: 'insensitive' },
+        lastName: { equals: data.lastName.trim(), mode: 'insensitive' },
+      },
+      include: { sections: true },
+    });
+    if (existant && existant.status !== 'EN_ATTENTE') {
+      return sendError(
+        res,
+        `Un dossier existe déjà au nom de ${data.firstName} ${data.lastName}. ` +
+        'Contactez-nous à l\'accueil ou par courriel pour le mettre à jour.',
+        409
+      );
+    }
+
+    const donneesFiche = {
         dateOfBirth: data.dob ? new Date(data.dob + 'T12:00:00') : null,
         gender: data.gender || null,
         phone: data.phone || null,
@@ -179,13 +198,49 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         consentPhoto: true,
         consentUrgence: true,
         consentCommunications: true,
-        sections: data.section
-          ? { create: [{ section: data.section, belt: 'Blanche' }] }
-          : undefined,
-      },
-    });
+        provenance: data.provenance || null,
+        refereParNom: data.refereParNom || null,
+    };
+
+    const membre = existant
+      ? await prisma.member.update({
+          where: { id: existant.id },
+          data: {
+            ...donneesFiche,
+            notes: [existant.notes, 'Fiche d\'inscription en ligne reçue.'].filter(Boolean).join(' — '),
+            sections: data.section && !existant.sections.some((s) => s.section === data.section)
+              ? { create: [{ section: data.section, belt: 'Blanche' }] }
+              : undefined,
+          },
+        })
+      : await prisma.member.create({
+          data: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            ...donneesFiche,
+            sections: data.section
+              ? { create: [{ section: data.section, belt: 'Blanche' }] }
+              : undefined,
+          },
+        });
 
     const nomComplet = `${data.firstName} ${data.lastName}`;
+
+    // Le prospect correspondant (même courriel ou même nom) est automatiquement
+    // marqué CONVERTI : plus besoin du bouton « Convertir », plus de doublon.
+    await prisma.lead.updateMany({
+      where: {
+        status: { in: ['NEW', 'CONTACTED'] },
+        OR: [
+          { email: { equals: destinataire, mode: 'insensitive' } },
+          {
+            firstName: { equals: data.firstName.trim(), mode: 'insensitive' },
+            lastName: { equals: data.lastName.trim(), mode: 'insensitive' },
+          },
+        ],
+      },
+      data: { status: 'CONVERTED' },
+    }).catch(() => { /* non critique */ });
 
     // Courriel de bienvenue au parent/athlète (non bloquant).
     sendEmailBackground({
@@ -209,6 +264,7 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
             <li>Athlète : ${nomComplet}</li>
             <li>Section : ${data.section || '—'}</li>
             <li>Parent : ${data.parentName || '—'} (${data.parentEmail || data.email || '—'}, ${data.parentPhone || data.phone || '—'})</li>
+            <li>Provenance : ${data.provenance || '—'}${data.refereParNom ? ' · Référé par : ' + data.refereParNom : ''}</li>
           </ul>
           <p>À valider dans la section Membres.</p>
         `,
