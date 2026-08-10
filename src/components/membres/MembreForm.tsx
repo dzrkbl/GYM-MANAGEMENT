@@ -280,7 +280,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       setErrorMessage("");
     }
     if (currentStep === 3) {
-      if (!areVersementsValid) {
+      // Un membre INACTIF ou EN ATTENTE n'a pas à avoir un échéancier équilibré
+      // (ex. départ en cours d'année : on ne va pas exiger un paiement futur).
+      if (status === 'ACTIF' && !areVersementsValid) {
         setErrorMessage("Le total des versements doit être exactement égal au montant final.");
         return;
       }
@@ -305,7 +307,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       return;
     }
 
-    if (!areVersementsValid) {
+    if (status === 'ACTIF' && !areVersementsValid) {
       setErrorMessage(`La somme des versements (${totalVersements.toFixed(2)} $) ne correspond pas au montant calculé (${montantFinalCalculated.toFixed(2)} $).`);
       setCurrentStep(3);
       return;

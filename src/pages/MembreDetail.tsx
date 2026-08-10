@@ -207,7 +207,31 @@ export function MembreDetail() {
               <h1 className="text-2xl font-extrabold text-gray-900 uppercase tracking-tight">
                 {member.lastName} <span className="font-normal capitalize text-gray-700">{member.firstName}</span>
               </h1>
-              <div className="inline-flex justify-center">{getStatusBadge(member.status)}</div>
+              <div className="inline-flex justify-center items-center gap-2">
+                {getStatusBadge(member.status)}
+                {/* Changement rapide de statut, sans passer par le formulaire complet */}
+                <select
+                  value={member.status}
+                  onChange={async (e) => {
+                    const nouveau = e.target.value;
+                    try {
+                      await apiFetch(`/membres/${member.id}/statut`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ status: nouveau }),
+                      });
+                      fetchMemberData();
+                    } catch (err: any) {
+                      alert(err?.message || 'Erreur lors du changement de statut');
+                    }
+                  }}
+                  className="text-xs border border-gray-300 rounded-md px-1.5 py-1 bg-white text-gray-600 hover:border-gray-400 cursor-pointer"
+                  title="Changer le statut"
+                >
+                  <option value="ACTIF">Actif</option>
+                  <option value="INACTIF">Inactif</option>
+                  <option value="EN_ATTENTE">En attente</option>
+                </select>
+              </div>
             </div>
 
             <div className="text-sm text-gray-500 flex flex-wrap gap-x-4 gap-y-1 justify-center sm:justify-start">

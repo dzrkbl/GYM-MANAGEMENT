@@ -39,17 +39,48 @@ export function configCourriel(): { provider: FournisseurCourriel; from: string;
   };
 }
 
-// Gabarit commun des courriels : logo (si APP_URL configurée) + en-tête + signature.
-export function htmlCourriel(contenu: string): string {
+// Adresse de réponse : le courriel général du club (les parents répondent là).
+const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || 'centrehp@outlook.com';
+
+/**
+ * Gabarit commun des courriels : salutation + contenu + signature officielle.
+ * `salutation` : par défaut « Chers parents et athlètes, » ; passer `null` pour les
+ * courriels internes (notifications à l'administration).
+ */
+export function htmlCourriel(contenu: string, options?: { salutation?: string | null }): string {
+  const salutation = options?.salutation === undefined
+    ? 'Chers parents et athlètes,'
+    : options.salutation;
   const logo = APP_URL
-    ? `<div style="text-align:center;margin-bottom:12px"><img src="${APP_URL}/logo.png" alt="Centre Sportif de Haute-Performance" style="height:72px"></div>`
+    ? `<div style="margin-bottom:16px"><img src="${APP_URL}/logo.png" alt="CSHP" style="height:64px"></div>`
     : '';
-  return `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 8px;">
-    ${logo}
-    <h2 style="color:#1a1a2e; text-align:center; margin:0 0 16px;">Centre Sportif de Haute-Performance</h2>
+  return `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 8px; color:#1a1a2e;">
+    ${salutation ? `<p style="margin:0 0 14px;">${salutation}</p>` : ''}
     ${contenu}
-    <p style="margin-top:20px;">Merci,<br><strong>L'équipe CSHP</strong></p>
+    <div style="margin-top:28px; padding-top:14px; border-top:2px solid #1a1a2e;">
+      ${logo}
+      <p style="margin:0 0 2px;"><strong>Administration</strong></p>
+      <p style="margin:0 0 2px;"><strong>Centre Sportif de Haute-Performance</strong></p>
+      <p style="margin:0 0 2px;">6498 Beaubien Est, Montréal, H1M 1A9</p>
+      <p style="margin:0 0 2px;">Tél : 514 747-5865</p>
+      <p style="margin:0;">Courriel général : <a href="mailto:centrehp@outlook.com" style="color:#1a1a2e;">centrehp@outlook.com</a></p>
+    </div>
   </div>`;
+}
+
+// Version texte brut (améliore la délivrabilité : les courriels HTML sans
+// alternative texte sont plus souvent classés indésirables).
+function htmlVersTexte(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function getResend(): Resend {
@@ -106,12 +137,15 @@ export async function sendEmail({ to, subject, html, attachments }: {
   if (destinataires.length === 0) throw new Error('Aucun destinataire courriel valide');
 
   const cfg = configCourriel();
+  const text = htmlVersTexte(html);
   if (cfg.provider === 'resend') {
     const { error } = await getResend().emails.send({
       from: EMAIL_FROM,
       to: destinataires,
+      replyTo: EMAIL_REPLY_TO,
       subject,
       html,
+      text,
       ...(attachments && attachments.length
         ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }
         : {}),
@@ -123,8 +157,10 @@ export async function sendEmail({ to, subject, html, attachments }: {
     await getSmtp().sendMail({
       from: EMAIL_FROM,
       to: destinataires,
+      replyTo: EMAIL_REPLY_TO,
       subject,
       html,
+      text,
       ...(attachments && attachments.length
         ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) }
         : {}),

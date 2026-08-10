@@ -30,7 +30,8 @@ export function Communications() {
   const { user } = useAuth();
   const { codes, getLabel } = useSections();
 
-  const [section, setSection] = useState('TOUS');
+  // Sections cochées ; vide = toutes les sections.
+  const [sectionsChoisies, setSectionsChoisies] = useState<string[]>([]);
   const [sujet, setSujet] = useState('');
   const [message, setMessage] = useState('');
   const [inclureInactifs, setInclureInactifs] = useState(false);
@@ -78,7 +79,7 @@ export function Communications() {
     try {
       const res = await apiFetch<ResultatEnvoi>('/communications', {
         method: 'POST',
-        body: JSON.stringify({ section, sujet, message, inclureInactifs }),
+        body: JSON.stringify({ sections: sectionsChoisies, sujet, message, inclureInactifs }),
       });
       setResult(res);
       if (res.echecs === 0) {
@@ -135,12 +136,37 @@ export function Communications() {
       <Card className="p-5 space-y-4">
         <div>
           <label className="block mb-1 text-sm font-medium text-cshp-black">Destinataires</label>
-          <select className={selectClass} value={section} onChange={(e) => setSection(e.target.value)}>
-            <option value="TOUS">Toutes les sections</option>
-            {codes.map((c) => (
-              <option key={c} value={c}>{getLabel(c)}</option>
-            ))}
-          </select>
+          <div className="border border-gray-300 rounded-lg p-3 bg-white space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-cshp-black">
+              <input
+                type="checkbox"
+                checked={sectionsChoisies.length === 0}
+                onChange={() => setSectionsChoisies([])}
+                className="w-4 h-4 rounded text-cshp-red focus:ring-cshp-red"
+              />
+              Toutes les sections
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-1">
+              {codes.map((c) => (
+                <label key={c} className="flex items-center gap-2 text-sm text-cshp-black">
+                  <input
+                    type="checkbox"
+                    checked={sectionsChoisies.includes(c)}
+                    onChange={(e) => {
+                      setSectionsChoisies((prev) =>
+                        e.target.checked ? [...prev, c] : prev.filter((x) => x !== c)
+                      );
+                    }}
+                    className="w-4 h-4 rounded text-cshp-red focus:ring-cshp-red"
+                  />
+                  {getLabel(c)}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-cshp-gray">
+              Cochez un ou plusieurs groupes — ou « Toutes les sections ». Chaque destinataire ne reçoit le courriel qu'une seule fois, même s'il est dans plusieurs groupes.
+            </p>
+          </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm text-cshp-black">

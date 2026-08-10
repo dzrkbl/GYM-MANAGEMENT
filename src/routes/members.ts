@@ -345,6 +345,32 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
   }
 });
 
+// PATCH /api/membres/:id/statut — changement rapide de statut, SANS passer par le
+// formulaire complet (qui exige un échéancier équilibré : bloquant pour rendre
+// inactif un membre parti).
+router.patch('/:id/statut', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { status } = z.object({ status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']) }).parse(req.body);
+
+    const member = await prisma.member.update({
+      where: { id: req.params.id },
+      data: { status },
+    });
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'Member',
+      entityId: member.id,
+      description: `Statut de ${member.firstName} ${member.lastName} → ${status}`,
+    });
+
+    return sendSuccess(res, member);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Statut invalide', 400, error.issues);
+    return sendError(res, 'Erreur de changement de statut', 500);
+  }
+});
+
 // DELETE /api/membres/:id (soft delete)
 router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {

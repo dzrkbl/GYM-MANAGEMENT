@@ -38,7 +38,8 @@ router.post('/test', authenticate, requireRole(['ADMIN']), async (req: Request, 
 });
 
 const schema = z.object({
-  section: z.string().optional().nullable(), // code de section, ou 'TOUS'/vide
+  section: z.string().optional().nullable(),            // rétrocompatibilité : un seul code, ou 'TOUS'
+  sections: z.array(z.string()).optional().nullable(),  // plusieurs codes de sections à la fois
   sujet: z.string().min(1, 'Sujet requis'),
   message: z.string().min(1, 'Message requis'),
   inclureInactifs: z.boolean().optional().default(false),
@@ -51,8 +52,14 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 
     const where: any = {};
     where.status = data.inclureInactifs ? { in: ['ACTIF', 'INACTIF'] } : 'ACTIF';
-    if (data.section && data.section !== 'TOUS') {
-      where.sections = { some: { section: data.section } };
+    // Sections visées : tableau `sections` (multi-groupes) prioritaire, sinon
+    // l'ancien champ `section` ; vide ou 'TOUS' = tous les membres.
+    const codes = (data.sections && data.sections.length > 0
+      ? data.sections
+      : data.section ? [data.section] : []
+    ).filter((c) => c && c !== 'TOUS');
+    if (codes.length > 0) {
+      where.sections = { some: { section: { in: codes } } };
     }
 
     const membres = await prisma.member.findMany({
@@ -91,7 +98,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     logAudit(req, {
       action: echecs > 0 && envoyes === 0 ? 'ERREUR' : 'CREATE',
       entity: 'Communication',
-      description: `Courriel groupé « ${data.sujet} » → ${envoyes} envoyé(s), ${echecs} échec(s)${data.section && data.section !== 'TOUS' ? ' (' + data.section + ')' : ''}${echecs > 0 ? ' — ' + echecsDetails[0].erreur : ''}`,
+      description: `Courriel groupé « ${data.sujet} » → ${envoyes} envoyé(s), ${echecs} échec(s)${codes.length > 0 ? ' (' + codes.join(', ') + ')' : ' (tous)'}${echecs > 0 ? ' — ' + echecsDetails[0].erreur : ''}`,
     });
 
     return sendSuccess(res, {

@@ -185,7 +185,6 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
     to: destinataire,
     subject: `Reçu de paiement — CSHP (no ${String(numero).padStart(5, '0')})`,
     html: htmlCourriel(`
-        <p>Bonjour,</p>
         <p>Vous trouverez en pièce jointe le reçu pour le paiement de
         <strong>${membreNom}</strong> (${formatMontant(versement.montant)}).</p>
       `),

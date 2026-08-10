@@ -95,7 +95,6 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
       const nom = `${v.member.firstName} ${v.member.lastName}`;
       const enRetard = niveau.type === 'PAIEMENT_RETARD';
       const html = htmlCourriel(`
-        <p>Bonjour,</p>
         <p>${enRetard
           ? `Un versement pour <strong>${nom}</strong> est <strong>en retard</strong>.`
           : `Ceci est un rappel concernant un paiement à venir (${niveau.libelle}) pour <strong>${nom}</strong>.`}</p>
@@ -128,7 +127,6 @@ export async function sendRenewalReminders(now = new Date()): Promise<Stat> {
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${m.finContrat.toISOString().slice(0, 10)}`;
     const html = htmlCourriel(`
-      <p>Bonjour,</p>
       <p>L'inscription de <strong>${nom}</strong> arrive à échéance le
       <strong>${formatDate(m.finContrat)}</strong>.</p>
       <p>Communiquez avec nous pour le renouvellement afin d'assurer la continuité de la saison.</p>`);
@@ -166,7 +164,6 @@ export async function sendAbsenceAlerts(now = new Date(), seuilJours = 14): Prom
     const nom = `${m.firstName} ${m.lastName}`;
     const refKey = `${m.id}:${semaine}`; // au plus une alerte par membre par semaine
     const html = htmlCourriel(`
-      <p>Bonjour,</p>
       <p>Nous avons remarqué que <strong>${nom}</strong> ne s'est pas présenté(e) aux
       entraînements depuis un certain temps.</p>
       <p>Nous espérons que tout va bien ! N'hésitez pas à nous contacter si nous pouvons aider.</p>`);
@@ -194,7 +191,7 @@ export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promi
       <p>Le prospect <strong>${l.firstName} ${l.lastName}</strong> (${l.sport}, ${l.requestType})
       n'a pas encore été contacté depuis sa demande du ${formatDate(l.createdAt)}.</p>
       <p>Coordonnées : ${l.phone || '—'} · ${l.email || '—'}</p>
-      <p>Pensez à effectuer un suivi.</p>`);
+      <p>Pensez à effectuer un suivi.</p>`, { salutation: null });
     const resultat = await envoyerAvecLog({
       type: 'LEAD_RELANCE', memberId: l.id, refKey: l.id,
       to: notif, subject: `Prospect à relancer — ${l.firstName} ${l.lastName}`, html,
