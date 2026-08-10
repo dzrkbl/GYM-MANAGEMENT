@@ -147,9 +147,31 @@ export function Membres() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Gérez vos athlètes, plans d'abonnements, cotisations et échéanciers.</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto bg-cshp-red hover:bg-red-700 text-white font-bold h-11 shadow-sm">
-          <Plus size={20} className="mr-2" /> Ajouter un membre
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const courriel = prompt("Courriel de la personne à inviter (elle recevra le lien de la fiche d'inscription en ligne) :");
+              if (!courriel || !courriel.trim()) return;
+              const prenom = prompt('Prénom (optionnel, pour personnaliser le courriel) :') || null;
+              try {
+                await apiFetch('/inscription/inviter', {
+                  method: 'POST',
+                  body: JSON.stringify({ courriel: courriel.trim(), prenom }),
+                });
+                alert(`Invitation envoyée à ${courriel.trim()} ✅`);
+              } catch (err: any) {
+                alert(err?.message || "Échec de l'envoi de l'invitation");
+              }
+            }}
+            className="w-full sm:w-auto h-11"
+          >
+            ✉️ Inviter à s'inscrire
+          </Button>
+          <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto bg-cshp-red hover:bg-red-700 text-white font-bold h-11 shadow-sm">
+            <Plus size={20} className="mr-2" /> Ajouter un membre
+          </Button>
+        </div>
       </div>
 
       {/* RECHERCHE ET FILTRES */}

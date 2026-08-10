@@ -84,6 +84,12 @@ model Member {
   reglementAccepteAt     DateTime?   // horodatage de l'acceptation
   reglementSignataire    String?     // nom complet saisi comme signature
 
+  // Autorisations de la fiche d'inscription (toutes obligatoires en ligne ;
+  // un refus du droit à l'image se règle en personne, jamais via le formulaire)
+  consentPhoto           Boolean     @default(false)  // droit à l'image (photos/vidéos promotionnelles)
+  consentUrgence         Boolean     @default(false)  // recours aux services médicaux d'urgence
+  consentCommunications  Boolean     @default(false)  // communications par courriel (rappels, reçus, horaires)
+
   // Relations
   sections      MemberSection[]
   attendances   Attendance[]

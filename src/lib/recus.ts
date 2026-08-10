@@ -181,12 +181,29 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
     methode,
   });
 
+  // Rappel du prochain engagement : versement suivant impayé, sinon fin de contrat.
+  const prochain = await prisma.paymentVersement.findFirst({
+    where: { membreId: versement.membreId, datePaiement: null },
+    orderBy: { datePrevue: 'asc' },
+  });
+  const finContrat = versement.member.finContrat;
+  const rappelProchain = prochain
+    ? `<p><strong>Prochain versement :</strong> ${formatMontant(prochain.montant)},
+       prévu le ${prochain.datePrevue.toLocaleDateString('fr-CA')}. Un rappel automatique
+       vous sera envoyé quelques jours avant l'échéance.</p>`
+    : finContrat
+      ? `<p><strong>Tous les versements sont réglés.</strong> L'inscription est valide
+         jusqu'au ${finContrat.toLocaleDateString('fr-CA')} — nous vous contacterons à
+         l'approche du renouvellement.</p>`
+      : '';
+
   await sendEmail({
     to: destinataire,
     subject: `Reçu de paiement — CSHP (no ${String(numero).padStart(5, '0')})`,
     html: htmlCourriel(`
         <p>Vous trouverez en pièce jointe le reçu pour le paiement de
         <strong>${membreNom}</strong> (${formatMontant(versement.montant)}).</p>
+        ${rappelProchain}
       `),
     attachments: [{ filename: `recu-${String(numero).padStart(5, '0')}.pdf`, content: pdf }],
   });

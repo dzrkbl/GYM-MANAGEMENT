@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { normalizeMethodePaiement } from '../lib/paiements';
+import { normalizeMethodePaiement, activerSiPremierPaiement } from '../lib/paiements';
 import { sendRecuVersementBackground } from '../lib/recus';
 import { logAudit } from '../lib/audit';
 
@@ -35,6 +35,12 @@ router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER'])
         ...(data.montant !== undefined && data.montant !== null ? { montant: data.montant } : {}),
       },
     });
+
+    // Premier paiement d'un membre EN_ATTENTE : l'inscription est confirmée.
+    const active = await activerSiPremierPaiement(versement.membreId);
+    if (active) {
+      logAudit(req, { action: 'UPDATE', entity: 'Member', entityId: versement.membreId, description: 'Activation automatique (premier paiement reçu)' });
+    }
 
     // Reçu automatique par courriel (sauf comptant) — ne bloque pas la réponse.
     sendRecuVersementBackground(id);

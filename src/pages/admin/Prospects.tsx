@@ -177,6 +177,27 @@ export function Prospects() {
                 <select className={selectClass} value={l.status} onChange={(e) => changerStatut(l.id, e.target.value)}>
                   {STATUTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
+                {l.email && l.status !== 'CONVERTED' && (
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await apiFetch('/inscription/inviter', {
+                          method: 'POST',
+                          body: JSON.stringify({ courriel: l.email, prenom: l.firstName, leadId: l.id }),
+                        });
+                        alert(`Lien d'inscription envoyé à ${l.email} ✅`);
+                        load();
+                      } catch (err: any) {
+                        alert(err?.message || "Échec de l'envoi");
+                      }
+                    }}
+                    className="!min-h-0 h-9 px-3 text-xs"
+                    title="Envoyer le lien de la fiche d'inscription en ligne"
+                  >
+                    ✉️ Lien d'inscription
+                  </Button>
+                )}
                 {l.status !== 'CONVERTED' && (
                   <Button variant="outline" onClick={() => convertir(l.id)} className="!min-h-0 h-9 px-3 text-xs">
                     <ArrowRightCircle size={16} className="mr-1" /> Convertir

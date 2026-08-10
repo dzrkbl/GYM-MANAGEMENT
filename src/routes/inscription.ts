@@ -2,12 +2,74 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
-import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
+import { sendEmail, sendEmailBackground, htmlCourriel } from '../lib/mailer';
+import { authenticate, requireRole } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
 import { REGLEMENT_VERSION } from '../lib/reglement';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
 
 const router = Router();
+
+// POST /api/inscription/inviter — envoie le lien d'inscription en ligne par
+// courriel (ADMIN / gestionnaire). Sert aussi de test de délivrabilité : si la
+// personne reçoit l'invitation et complète la fiche, ses rappels passeront.
+router.post('/inviter', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const data = z.object({
+      courriel: z.string().email('Adresse courriel invalide'),
+      prenom: z.string().optional().nullable(),
+      leadId: z.string().optional().nullable(), // si l'invitation part d'un prospect
+    }).parse(req.body);
+
+    const appUrl = process.env.APP_URL || '';
+    if (!appUrl) {
+      return sendError(res, "APP_URL n'est pas configurée : impossible de composer le lien d'inscription.", 500);
+    }
+    const lien = `${appUrl}/inscription`;
+
+    try {
+      await sendEmail({
+        to: data.courriel,
+        subject: 'Complétez votre inscription — Centre Sportif de Haute-Performance',
+        html: htmlCourriel(`
+          <p>${data.prenom ? `Bonjour ${data.prenom},` : 'Bonjour,'}</p>
+          <p>Merci de votre intérêt pour le Centre Sportif de Haute-Performance !
+          Pour compléter l'inscription, remplissez la fiche en ligne (environ 5 minutes) :</p>
+          <p style="text-align:center;margin:22px 0;">
+            <a href="${lien}" style="background:#1a1a2e;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold;">
+              Remplir la fiche d'inscription
+            </a>
+          </p>
+          <p>La fiche comprend le règlement intérieur à lire et à accepter, ainsi que les
+          autorisations habituelles (photos/vidéos, urgence médicale, communications).</p>
+          <p><strong>Petit conseil :</strong> si ce courriel est arrivé dans vos
+          indésirables, marquez-le « Fiable / Pas un spam » — c'est à cette adresse que
+          vous recevrez les reçus et les rappels de paiement.</p>
+        `, { salutation: null }),
+      });
+    } catch (e: any) {
+      const message = e instanceof Error ? e.message : String(e);
+      logAudit(req, { action: 'ERREUR', entity: 'Courriel', description: `Invitation d'inscription → ${data.courriel} : ${message}` });
+      return sendError(res, `Échec de l'envoi de l'invitation : ${message}`, 502);
+    }
+
+    // Si l'invitation part d'un prospect, marquer le suivi effectué.
+    if (data.leadId) {
+      await prisma.lead.updateMany({
+        where: { id: data.leadId, status: 'NEW' },
+        data: { status: 'CONTACTED' },
+      }).catch(() => { /* statut non critique */ });
+    }
+
+    logAudit(req, { action: 'CREATE', entity: 'Courriel', description: `Invitation d'inscription envoyée → ${data.courriel}` });
+    return sendSuccess(res, { ok: true, courriel: data.courriel });
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Error in POST /api/inscription/inviter:', error);
+    return sendError(res, "Erreur lors de l'envoi de l'invitation", 500);
+  }
+});
 
 // GET /api/inscription/sections — liste publique des sections actives (pour le formulaire)
 router.get('/sections', async (_req: Request, res: Response): Promise<any> => {
@@ -45,6 +107,11 @@ const inscriptionSchema = z.object({
   reglementVersion: z.string(),
   reglementSignataire: z.string().min(1, 'La signature (nom complet) est requise'),
   accepte: z.literal(true),
+  // Autorisations obligatoires (booléens libres ici : le refus du droit à
+  // l'image reçoit un message dédié dans le handler, pas une erreur Zod).
+  consentPhoto: z.boolean().optional().default(false),
+  consentUrgence: z.boolean().optional().default(false),
+  consentCommunications: z.boolean().optional().default(false),
   // Honeypot anti-spam : doit rester vide (rempli seulement par des robots).
   website: z.string().optional().nullable(),
 });
@@ -62,6 +129,23 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     // Le règlement affiché doit correspondre à la version courante.
     if (data.reglementVersion !== REGLEMENT_VERSION) {
       return sendError(res, 'Le règlement a été mis à jour. Veuillez recharger la page et réessayer.', 409);
+    }
+
+    // Droit à l'image : le centre ne peut pas filmer sélectivement. Un refus
+    // ne passe pas par le formulaire — il se discute en personne à l'accueil.
+    if (!data.consentPhoto) {
+      return sendError(
+        res,
+        "L'inscription en ligne requiert l'autorisation photos/vidéos (fins promotionnelles du centre). " +
+        'Si vous préférez la refuser, présentez-vous à l\'accueil : nous compléterons votre inscription en personne.',
+        409
+      );
+    }
+    if (!data.consentUrgence) {
+      return sendError(res, "L'autorisation de recours aux services médicaux d'urgence est requise.", 409);
+    }
+    if (!data.consentCommunications) {
+      return sendError(res, "L'acceptation des communications par courriel (rappels et reçus) est requise.", 409);
     }
 
     const destinataire = data.parentEmail || data.email;
@@ -92,6 +176,9 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         reglementVersion: REGLEMENT_VERSION,
         reglementAccepteAt: new Date(),
         reglementSignataire: data.reglementSignataire,
+        consentPhoto: true,
+        consentUrgence: true,
+        consentCommunications: true,
         sections: data.section
           ? { create: [{ section: data.section, belt: 'Blanche' }] }
           : undefined,

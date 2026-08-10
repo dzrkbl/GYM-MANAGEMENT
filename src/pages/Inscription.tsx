@@ -25,6 +25,10 @@ export function Inscription() {
   });
   const [problemeSante, setProblemeSante] = useState(false);
   const [accepte, setAccepte] = useState(false);
+  // Autorisations de la fiche (toutes requises pour l'inscription en ligne)
+  const [consentPhoto, setConsentPhoto] = useState<boolean | null>(null); // null = pas encore répondu
+  const [consentUrgence, setConsentUrgence] = useState(false);
+  const [consentCommunications, setConsentCommunications] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -43,13 +47,27 @@ export function Inscription() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!accepte) { setError('Vous devez lire et accepter le règlement intérieur.'); return; }
+    if (consentPhoto !== true) {
+      setError("L'inscription en ligne requiert l'autorisation photos/vidéos. Si vous préférez la refuser, passez nous voir à l'accueil : nous compléterons l'inscription en personne avec vous.");
+      return;
+    }
+    if (!consentUrgence) { setError("Veuillez autoriser le recours aux services médicaux d'urgence."); return; }
+    if (!consentCommunications) { setError('Veuillez accepter de recevoir les communications du centre par courriel (rappels et reçus).'); return; }
     if (!form.parentEmail && !form.email) { setError('Un courriel (parent ou athlète) est requis.'); return; }
     setError('');
     setIsLoading(true);
     try {
       await apiFetch('/inscription', {
         method: 'POST',
-        body: JSON.stringify({ ...form, problemeSante, accepte: true, reglementVersion: REGLEMENT_VERSION }),
+        body: JSON.stringify({
+          ...form,
+          problemeSante,
+          accepte: true,
+          consentPhoto: true,
+          consentUrgence,
+          consentCommunications,
+          reglementVersion: REGLEMENT_VERSION,
+        }),
       });
       setDone(true);
     } catch (err: any) {
@@ -186,6 +204,49 @@ export function Inscription() {
               className="w-5 h-5 mt-0.5 rounded text-cshp-red focus:ring-cshp-red"
             />
             <span>J'ai lu et j'accepte le règlement intérieur du Centre Sportif de Haute-Performance.</span>
+          </label>
+
+          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Autorisations</h2>
+
+          <div className="space-y-1.5">
+            <p className="text-sm text-cshp-black">
+              <strong>Droit à l'image</strong> — photos et vidéos à des fins promotionnelles du centre :
+            </p>
+            <div className="flex gap-6 items-center">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="photo" checked={consentPhoto === true} onChange={() => setConsentPhoto(true)} /> J'autorise
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="photo" checked={consentPhoto === false} onChange={() => setConsentPhoto(false)} /> Je refuse
+              </label>
+            </div>
+            {consentPhoto === false && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg p-3">
+                Lors des cours et événements, le centre ne peut pas filmer certains athlètes et pas
+                d'autres. <strong>L'inscription en ligne ne peut donc pas être complétée avec un
+                refus</strong> — passez nous voir à l'accueil et nous trouverons une solution ensemble.
+              </div>
+            )}
+          </div>
+
+          <label className="flex items-start gap-2 text-sm text-cshp-black">
+            <input
+              type="checkbox"
+              checked={consentUrgence}
+              onChange={(e) => setConsentUrgence(e.target.checked)}
+              className="w-5 h-5 mt-0.5 rounded text-cshp-red focus:ring-cshp-red"
+            />
+            <span><strong>Urgence médicale</strong> — j'autorise le centre à faire appel aux services médicaux d'urgence si nécessaire.</span>
+          </label>
+
+          <label className="flex items-start gap-2 text-sm text-cshp-black">
+            <input
+              type="checkbox"
+              checked={consentCommunications}
+              onChange={(e) => setConsentCommunications(e.target.checked)}
+              className="w-5 h-5 mt-0.5 rounded text-cshp-red focus:ring-cshp-red"
+            />
+            <span><strong>Communications</strong> — j'accepte de recevoir les communications du centre par courriel (rappels de paiement, reçus, horaires, événements).</span>
           </label>
 
           <Input

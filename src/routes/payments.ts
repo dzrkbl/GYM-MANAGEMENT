@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { normalizeMethodePaiement } from '../lib/paiements';
+import { normalizeMethodePaiement, activerSiPremierPaiement } from '../lib/paiements';
 import { sendRecuVersementBackground } from '../lib/recus';
 import { logAudit } from '../lib/audit';
 
@@ -170,6 +170,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
 
     // Reçu automatique si le versement est créé déjà payé (sauf comptant).
     if (payment.datePaiement) {
+      await activerSiPremierPaiement(payment.membreId);
       sendRecuVersementBackground(payment.id);
     }
 
@@ -213,6 +214,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
 
     // Reçu automatique si le paiement vient d'être marqué payé (sauf comptant).
     if (updateData.datePaiement) {
+      await activerSiPremierPaiement(payment.membreId);
       sendRecuVersementBackground(id);
     }
 
@@ -242,6 +244,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     });
 
     // Reçu automatique (sauf comptant) — ne bloque pas la réponse.
+    await activerSiPremierPaiement(updated.membreId);
     sendRecuVersementBackground(id);
 
     logAudit(req, { action: 'PAY', entity: 'PaymentVersement', entityId: id });

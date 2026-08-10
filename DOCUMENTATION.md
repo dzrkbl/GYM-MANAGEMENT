@@ -151,6 +151,7 @@ Toutes les routes `/api/*`. Réponses standardisées via `lib/api-response.ts`
 | `/api/leads` | leads.ts | `POST` **public** (essai), gestion ADMIN, `POST /:id/convert` |
 | `/api/communications` | communications.ts | `POST` : courriel groupé par section (ADMIN) |
 | `/api/audit` | audit.ts | `GET` journal (ADMIN) |
+| `/api/inscription/inviter` | inscription.ts | `POST` envoi du lien d'inscription par courriel (ADMIN/SM) — boutons « Inviter » (Membres) et « Lien d'inscription » (Prospects) |
 | `/api/cron/reminders` | server.ts | déclenché par un service externe avec `Authorization: Bearer <CRON_SECRET>` |
 
 ## 7. Logique métier (`src/lib/`)
@@ -164,8 +165,16 @@ Toutes les routes `/api/*`. Réponses standardisées via `lib/api-response.ts`
   (COMPTANT, INTERAC, CHÈQUE…) aux valeurs de l'enum.
 - **recus.ts** — génère le **reçu PDF** (avec logo + ventilation de taxes) et
   l'envoie par courriel **quand un versement passe payé, SAUF si la méthode est
-  CASH** (reçu papier manuel dans ce cas). Numérotation séquentielle. Idempotent
-  (`receiptSentAt`).
+  CASH** (reçu papier manuel dans ce cas). Le courriel mentionne le **prochain
+  versement impayé** (montant + date), ou la fin de contrat si tout est réglé.
+  Numérotation séquentielle. Idempotent (`receiptSentAt`).
+- **paiements.ts** — `activerSiPremierPaiement` : un membre **EN_ATTENTE devient
+  ACTIF automatiquement** dès qu'un paiement lui est enregistré (règle du centre :
+  l'inscription en ligne est confirmée par le premier paiement). Branché sur tous
+  les endpoints de paiement. Le formulaire public exige aussi **trois
+  autorisations** stockées sur Member (`consentPhoto`, `consentUrgence`,
+  `consentCommunications`) ; un refus du droit à l'image **bloque** l'inscription
+  en ligne (message : passer à l'accueil).
 - **reminders.ts** — relances : paiement (J-7, jour J, retard), renouvellement
   (J-30 avant `finContrat`), absence (aucune présence depuis 14 j), prospects (NEW
   sans suivi depuis 3 j → alerte admin). **Déduplication** via `ReminderLog`
