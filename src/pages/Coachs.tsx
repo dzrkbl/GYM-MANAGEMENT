@@ -27,6 +27,9 @@ export function Coachs() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingCoach, setEditingCoach] = useState<any>(null);
+  // Mot de passe temporaire renvoyé UNE seule fois par l'API à la création :
+  // on l'affiche jusqu'à ce que l'admin ferme le bandeau.
+  const [tempCred, setTempCred] = useState<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     fetchCoachs();
@@ -63,10 +66,13 @@ export function Coachs() {
           body: JSON.stringify(data)
         });
       } else {
-        await apiFetch('/coachs', {
+        const created = await apiFetch<any>('/coachs', {
           method: 'POST',
           body: JSON.stringify(data)
         });
+        if (created?.tempPassword) {
+          setTempCred({ email: created.email, password: created.tempPassword });
+        }
       }
       setIsModalOpen(false);
       fetchCoachs();
@@ -85,6 +91,22 @@ export function Coachs() {
           <Plus size={20} className="mr-2" /> Ajouter
         </Button>
       </div>
+
+      {tempCred && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1">
+          <p className="font-semibold text-emerald-800">Compte créé — mot de passe temporaire</p>
+          <p className="text-sm text-emerald-800">
+            Connexion : <strong>{tempCred.email}</strong> · Mot de passe :{' '}
+            <code className="px-1.5 py-0.5 bg-white border border-emerald-200 rounded font-mono">{tempCred.password}</code>
+          </p>
+          <p className="text-xs text-emerald-700">
+            Notez-le et transmettez-le maintenant : il ne sera plus jamais affiché. La personne pourra le changer ensuite.
+          </p>
+          <Button variant="outline" onClick={() => setTempCred(null)} className="mt-1">
+            J'ai noté le mot de passe
+          </Button>
+        </div>
+      )}
 
       {isLoading ? (
         <Spinner />
@@ -109,7 +131,7 @@ export function Coachs() {
                       <p className="text-sm text-cshp-gray">
                         {c.section 
                           ? c.section.split(',').map((s: string) => s.trim() === 'U8' ? 'Ninjas' : getLabel(s.trim())).join(', ') 
-                          : 'Toutes sections'} · {c.role === 'SECTION_MANAGER' ? 'Section Manager' : 'Coach'}
+                          : 'Toutes sections'} · {c.role === 'ADMIN' ? 'Administrateur' : c.role === 'SECTION_MANAGER' ? 'Section Manager' : 'Coach'}
                       </p>
                     </div>
                   </div>
@@ -147,7 +169,7 @@ export function Coachs() {
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => !isSubmitting && setIsModalOpen(false)} 
-        title={editingCoach ? "Modifier le coach" : "Ajouter un coach"} 
+        title={editingCoach ? "Modifier le compte" : "Ajouter un compte"}
         width="lg"
       >
         <CoachForm 
