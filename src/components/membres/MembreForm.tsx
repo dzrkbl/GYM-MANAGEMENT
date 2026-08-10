@@ -201,6 +201,13 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   }, [selectedReferentLabel]);
 
 
+  // Le trimestriel (250 $) se paie en UNE fois : pas de fractionnement 2/3.
+  useEffect(() => {
+    if (plan === 'TRIMESTRIEL' && (modeVersement === '2' || modeVersement === '3')) {
+      setModeVersement('1');
+    }
+  }, [plan, modeVersement]);
+
   // --- MISE À JOUR DE L'ÉCHÉANCIER AUTOMATIQUE ---
   useEffect(() => {
     if (modeVersement !== 'custom') {
@@ -707,13 +714,19 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
             <div>
               <label className="block text-sm font-medium text-cshp-black mb-2">Option de fractionnement</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { value: '1', label: '1 fois' },
-                  { value: '2', label: '2 fois' },
-                  { value: '3', label: '3 fois' },
-                  { value: 'custom', label: 'Perso.' },
-                ].map(opt => (
+              <div className={`grid ${plan === 'TRIMESTRIEL' ? 'grid-cols-2' : 'grid-cols-4'} gap-2`}>
+                {(plan === 'TRIMESTRIEL'
+                  ? [
+                      { value: '1', label: '1 fois' },
+                      { value: 'custom', label: 'Perso.' },
+                    ]
+                  : [
+                      { value: '1', label: '1 fois' },
+                      { value: '2', label: '2 fois' },
+                      { value: '3', label: '3 fois' },
+                      { value: 'custom', label: 'Perso.' },
+                    ]
+                ).map(opt => (
                   <button
                     key={opt.value}
                     type="button"

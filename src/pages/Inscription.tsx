@@ -24,6 +24,7 @@ export function Inscription() {
     website: '', // honeypot
   });
   const [problemeSante, setProblemeSante] = useState(false);
+  const [urgenceEstParent, setUrgenceEstParent] = useState(false);
   const [accepte, setAccepte] = useState(false);
   // Autorisations de la fiche (toutes requises pour l'inscription en ligne)
   const [consentPhoto, setConsentPhoto] = useState<boolean | null>(null); // null = pas encore répondu
@@ -45,6 +46,19 @@ export function Inscription() {
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [k]: e.target.value }));
+
+  // « Le contact d'urgence est le parent » : recopie les infos du parent et les
+  // garde synchronisées tant que la case est cochée.
+  useEffect(() => {
+    if (urgenceEstParent) {
+      setForm((prev) => ({
+        ...prev,
+        urgenceNom: prev.parentName,
+        urgenceLien: 'Parent',
+        urgenceTel: prev.parentPhone,
+      }));
+    }
+  }, [urgenceEstParent, form.parentName, form.parentPhone]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +129,7 @@ export function Inscription() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Athlète</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Athlète</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Prénom *" value={form.firstName} onChange={set('firstName')} required />
             <Input label="Nom *" value={form.lastName} onChange={set('lastName')} required />
@@ -141,7 +155,7 @@ export function Inscription() {
             </div>
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Parent / tuteur (pour les mineurs)</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Parent / tuteur (pour les mineurs)</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Nom du parent" value={form.parentName} onChange={set('parentName')} />
             <Input label="Téléphone du parent" value={form.parentPhone} onChange={set('parentPhone')} />
@@ -150,21 +164,30 @@ export function Inscription() {
             </div>
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Adresse</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Adresse</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2"><Input label="Adresse" value={form.adresse} onChange={set('adresse')} /></div>
             <Input label="Ville" value={form.ville} onChange={set('ville')} />
             <Input label="Code postal" value={form.codePostal} onChange={set('codePostal')} />
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Contact d'urgence (1er répondant)</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Contact d'urgence (1er répondant)</h2>
+          <label className="flex items-center gap-2 text-sm text-cshp-black">
+            <input
+              type="checkbox"
+              checked={urgenceEstParent}
+              onChange={(e) => setUrgenceEstParent(e.target.checked)}
+              className="w-5 h-5 rounded text-cshp-red focus:ring-cshp-red"
+            />
+            <span>Le contact d'urgence est le parent / tuteur indiqué ci-dessus</span>
+          </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input label="Nom et prénom" value={form.urgenceNom} onChange={set('urgenceNom')} />
-            <Input label="Lien avec l'athlète" value={form.urgenceLien} onChange={set('urgenceLien')} />
-            <Input label="Téléphone" value={form.urgenceTel} onChange={set('urgenceTel')} />
+            <Input label="Nom et prénom" value={form.urgenceNom} onChange={set('urgenceNom')} disabled={urgenceEstParent} className="disabled:bg-gray-100 disabled:text-gray-500" />
+            <Input label="Lien avec l'athlète" value={form.urgenceLien} onChange={set('urgenceLien')} disabled={urgenceEstParent} className="disabled:bg-gray-100 disabled:text-gray-500" />
+            <Input label="Téléphone" value={form.urgenceTel} onChange={set('urgenceTel')} disabled={urgenceEstParent} className="disabled:bg-gray-100 disabled:text-gray-500" />
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Santé</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Santé</h2>
           <div>
             <label className="block mb-2 text-sm font-medium text-cshp-black">
               Un problème de santé à porter à notre connaissance ?
@@ -188,7 +211,7 @@ export function Inscription() {
             )}
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Provenance</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Provenance</h2>
           <Input
             label="Référé par (nom d'un membre actuel, s'il y a lieu)"
             value={refereParNom}
@@ -218,19 +241,21 @@ export function Inscription() {
             </div>
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Frais et conditions de paiement</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">
+            Règlement intérieur <span className="text-xs font-normal text-cshp-gray">(version {REGLEMENT_VERSION})</span>
+          </h2>
           <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 text-sm space-y-2 text-gray-700">
+            <p className="font-bold text-cshp-red">L'essentiel à retenir</p>
+            <p><strong>Parents pendant les cours</strong> — pour le bon déroulement des séances et la sécurité de tous, la présence des parents est <strong>interdite à l'intérieur du dojo pendant les cours</strong> (sauf lors du cours d'essai).</p>
             <p><strong>Cotisation</strong> — selon la formule choisie (trimestrielle ou annuelle), payable en versements convenus à l'inscription. Le 1ᵉʳ versement est exigible à l'inscription.</p>
             <p><strong>Vacances</strong> — les forfaits comprennent 2 semaines de vacances durant l'hiver et 2 semaines durant l'été (fermeture du centre, déjà incluses dans la tarification).</p>
             <p><strong>Uniforme</strong> — obligatoire après le cours d'essai, payable au centre (montant selon la discipline et la taille). <strong>Non remboursable.</strong></p>
             <p><strong>Affiliation à la fédération</strong> — annuelle, payable au centre ; elle inclut l'assurance de l'athlète. <strong>Non remboursable.</strong></p>
-            <p><strong>Retard de paiement</strong> — tout retard de plus d'une semaine entraîne des frais de <strong>10 $ par semaine de retard</strong> (règlement, art. 6).</p>
+            <p><strong>Retard de paiement</strong> — tout retard de plus d'une semaine entraîne des frais de <strong>10 $ par semaine de retard</strong>.</p>
             <p><strong>Remboursement</strong> — aucune cotisation n'est remboursable après quatre (4) présences, ni après une présence pour un bloc de deux (2) cours par semaine.</p>
           </div>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">
-            Règlement intérieur <span className="text-xs font-normal text-cshp-gray">(version {REGLEMENT_VERSION})</span>
-          </h2>
+          <p className="text-sm font-medium text-cshp-black">Texte complet du règlement :</p>
           <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50 text-sm space-y-3">
             {REGLEMENT_ARTICLES.map((a) => (
               <div key={a.numero}>
@@ -250,7 +275,7 @@ export function Inscription() {
             <span>J'ai lu et j'accepte le règlement intérieur du Centre Sportif de Haute-Performance.</span>
           </label>
 
-          <h2 className="font-bold text-cshp-black border-b border-gray-100 pb-1">Autorisations</h2>
+          <h2 className="font-bold text-cshp-red border-b border-gray-100 pb-1">Autorisations</h2>
 
           <div className="space-y-1.5">
             <p className="text-sm text-cshp-black">
