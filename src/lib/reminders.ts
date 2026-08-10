@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import { sendEmail, htmlCourriel, configCourriel } from './mailer';
 import { fraisRetard, FRAIS_RETARD_PAR_SEMAINE } from './paiements';
+import { envoyerSauvegardeSiDue } from './sauvegarde';
 
 // ---------- Helpers de dates ----------
 function jourDebut(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
@@ -381,6 +382,8 @@ export async function runAllReminders(now = new Date()) {
   const prospects = await sendLeadFollowups(now);
   const enAttente = await sendEnAttenteAlerts(now);
   const retardsRepetes = await sendRetardRepeteAlerts(now);
+  // Sauvegarde quotidienne (classeur Excel + résumé du jour) — une fois par jour.
+  const sauvegarde = await envoyerSauvegardeSiDue(now);
 
   // Rendre les échecs visibles dans l'interface (journal d'audit).
   const totalErreurs =
@@ -397,5 +400,5 @@ export async function runAllReminders(now = new Date()) {
     }).catch((e) => console.error('Erreur audit rappels:', e));
   }
 
-  return { paiements, renouvellements, absences, prospects, enAttente, retardsRepetes };
+  return { paiements, renouvellements, absences, prospects, enAttente, retardsRepetes, sauvegarde };
 }

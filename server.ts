@@ -25,6 +25,7 @@ import inscriptionRouter from './src/routes/inscription';
 import auditRouter from './src/routes/audit';
 import communicationsRouter from './src/routes/communications';
 import leadsRouter from './src/routes/leads';
+import backupRouter from './src/routes/backup';
 
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
@@ -110,6 +111,7 @@ app.use('/api/inscription', inscriptionRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/leads', leadsRouter);
+app.use('/api/backup', backupRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {

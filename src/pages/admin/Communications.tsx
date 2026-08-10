@@ -46,6 +46,8 @@ export function Communications() {
   // Adresse de destination du test (mémorisée localement — le courriel du compte
   // admin peut être un simple identifiant, pas une vraie boîte).
   const [testTo, setTestTo] = useState(() => localStorage.getItem('cshp_test_email') || '');
+  const [backupEnCours, setBackupEnCours] = useState(false);
+  const [backupResultat, setBackupResultat] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (user?.role !== 'ADMIN') return;
@@ -149,6 +151,35 @@ export function Communications() {
             {testResultat.message}
           </p>
         )}
+        <div className="pt-2 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setBackupResultat(null);
+              setBackupEnCours(true);
+              try {
+                const res = await apiFetch<{ envoyeA: string }>('/backup', { method: 'POST' });
+                setBackupResultat({ ok: true, message: `Sauvegarde Excel envoyée à ${res.envoyeA}.` });
+              } catch (err: any) {
+                setBackupResultat({ ok: false, message: err?.message || 'Échec de la sauvegarde.' });
+              } finally {
+                setBackupEnCours(false);
+              }
+            }}
+            isLoading={backupEnCours}
+          >
+            📦 M'envoyer la sauvegarde Excel maintenant
+          </Button>
+          {backupResultat && (
+            <span className={`text-sm ${backupResultat.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+              {backupResultat.message}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-cshp-gray">
+          Une sauvegarde complète (Excel : résumé par groupe, membres, transactions) est aussi
+          envoyée automatiquement chaque jour au courriel du centre.
+        </p>
       </Card>
 
       <Card className="p-5 space-y-4">

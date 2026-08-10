@@ -50,7 +50,8 @@ Au démarrage (`server.ts`), si `DATABASE_URL` est défini :
 | `EMAIL_FROM` | Expéditeur des courriels (défaut : `CSHP <payements@centresportifhp.com>`) |
 | `APP_URL` | URL publique (logo dans les courriels, liens) |
 | `CRON_SECRET` | Protège `GET /api/cron/reminders` |
-| `INSCRIPTION_NOTIF_EMAIL` | Destinataire des avis d'inscription/prospects (optionnel) |
+| `INSCRIPTION_NOTIF_EMAIL` | Destinataire des avis d'inscription/prospects et des alertes admin (EN ATTENTE avant cours, retards répétés) |
+| `BACKUP_EMAIL` | Destinataire de la sauvegarde quotidienne Excel (défaut : `centrehp@outlook.com`) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Compte admin créé à l'amorçage (défaut : `ilyes@cshp.ca` / `Admin2026!`) |
 | `RECU_NOM` / `RECU_ADRESSE` / `RECU_TPS` / `RECU_TVQ` / `RECU_NEQ` | Coordonnées sur les reçus (numéros de taxes réels en valeurs par défaut) |
 
@@ -63,6 +64,8 @@ prisma/
   schema.prisma          Modèle de données
   migrations/            UNE baseline unique alignée sur le schéma (voir §8)
   seed.ts                Appelle seedInitialData()
+documents/               Documents imprimables du club (fiche d'inscription papier
+                         en HTML — modifier puis imprimer en PDF via le navigateur).
 marketing/               Gestion marketing du club (hors code) : playbook 90 jours,
                          suivi des campagnes/budget/créatifs, journal de décisions.
                          Point d'entrée : marketing/README.md
@@ -192,6 +195,13 @@ Toutes les routes `/api/*`. Réponses standardisées via `lib/api-response.ts`
 - **seedData.ts** — `seedInitialData` (admin, sections, cours, charges) +
   `bootstrapIfEmpty` (amorçage au démarrage si base vide).
 - **audit.ts** — `logAudit(req, …)` (non bloquant).
+- **sauvegarde.ts** — **sauvegarde quotidienne** : classeur Excel (Résumé par
+  groupe, Membres avec soldes, toutes les Transactions) + résumé du jour
+  (paiements encaissés, nouvelles inscriptions, retards) envoyés à `BACKUP_EMAIL`
+  une fois par jour via la tournée de rappels (dédup `ReminderLog
+  SAUVEGARDE_QUOTIDIENNE`). Envoi manuel : `POST /api/backup` (bouton dans la
+  page Communications). Objectif : pouvoir opérer hors application en cas de
+  perte totale (chaque fichier est une copie autonome).
 - **mailer.ts** — courriels à **double transport** : Resend si `RESEND_API_KEY`
   est défini, sinon SMTP (`SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`, ex. boîte
   Hostinger). `configCourriel()` expose le diagnostic (utilisé par
