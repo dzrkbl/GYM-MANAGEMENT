@@ -43,6 +43,9 @@ export function Communications() {
   const [config, setConfig] = useState<ConfigCourriel | null>(null);
   const [testEnCours, setTestEnCours] = useState(false);
   const [testResultat, setTestResultat] = useState<{ ok: boolean; message: string } | null>(null);
+  // Adresse de destination du test (mémorisée localement — le courriel du compte
+  // admin peut être un simple identifiant, pas une vraie boîte).
+  const [testTo, setTestTo] = useState(() => localStorage.getItem('cshp_test_email') || '');
 
   useEffect(() => {
     if (user?.role !== 'ADMIN') return;
@@ -56,13 +59,19 @@ export function Communications() {
   }
 
   const handleTest = async () => {
+    const adresse = testTo.trim();
+    if (!adresse || !adresse.includes('@')) {
+      setTestResultat({ ok: false, message: 'Entrez une adresse courriel valide pour recevoir le test.' });
+      return;
+    }
     setTestEnCours(true);
     setTestResultat(null);
     try {
       const res = await apiFetch<{ ok: boolean; details: string; to: string }>('/communications/test', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ to: adresse }),
       });
+      localStorage.setItem('cshp_test_email', adresse);
       setTestResultat({ ok: true, message: `Courriel de test envoyé à ${res.to} via ${res.details}. Vérifiez votre boîte de réception (et les indésirables).` });
     } catch (err: any) {
       setTestResultat({ ok: false, message: err?.message || 'Échec du test.' });
@@ -121,16 +130,25 @@ export function Communications() {
             <p className="mt-1">{config.details}</p>
           </div>
         )}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-[220px]">
+            <Input
+              label="Envoyer le test à"
+              type="email"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder="votre.adresse@gmail.com"
+            />
+          </div>
           <Button variant="secondary" onClick={handleTest} isLoading={testEnCours}>
             Envoyer un courriel de test
           </Button>
-          {testResultat && (
-            <span className={`text-sm ${testResultat.ok ? 'text-emerald-700' : 'text-red-700'}`}>
-              {testResultat.message}
-            </span>
-          )}
         </div>
+        {testResultat && (
+          <p className={`text-sm ${testResultat.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+            {testResultat.message}
+          </p>
+        )}
       </Card>
 
       <Card className="p-5 space-y-4">
