@@ -11,7 +11,8 @@ import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
 import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
-import { formatDateLocal, joursAvantEcheance } from '../lib/format';
+import { formatDateLocal } from '../lib/format';
+import { etatPaiement } from '../lib/echeances';
 
 export function Membres() {
   const { user } = useAuth();
@@ -71,64 +72,35 @@ export function Membres() {
     { value: 'EN_ATTENTE', label: 'En attente' }
   ];
 
-  // Helper pour calculer le statut complet du paiement en temps réel
+  // Statut de paiement en temps réel — tient compte de la fin de contrat :
+  // un échéancier soldé n'est « à jour » que tant que le contrat court.
   const getPaiementStatus = (member: any) => {
-    const versements = member.versements || [];
-    const finalAmount = member.montantFinal || 0;
-    
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    const totalPaid = versements
-      .filter((v: any) => v.datePaiement)
-      .reduce((sum: number, v: any) => sum + (v.montant || 0), 0);
-
-    const restToPay = finalAmount - totalPaid;
-    
-    if (finalAmount <= 0) {
-      return {
-        label: 'Gratuit',
-        colorClass: 'bg-gray-100 text-gray-700 border-gray-300'
-      };
+    const etat = etatPaiement(member);
+    switch (etat.type) {
+      case 'GRATUIT':
+        return { label: 'Gratuit', colorClass: 'bg-gray-100 text-gray-700 border-gray-300' };
+      case 'RETARD':
+        return { label: '⚠️ En retard', colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold' };
+      case 'RENOUVELLEMENT_DU':
+        return {
+          label: `🔄 Renouvellement dû depuis le ${formatDateLocal(etat.date, { day: 'numeric', month: 'short' })}${etat.reste ? ` · reste ${etat.reste} $` : ''}`,
+          colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold',
+        };
+      case 'ECHEANCE_PROCHE':
+        return { label: `🔵 Échéance dans ${etat.jours} j.`, colorClass: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'RESTE_SANS_ECHEANCE':
+        return {
+          label: `💰 Reste ${etat.reste} $ — aucune échéance planifiée`,
+          colorClass: 'bg-amber-50 text-amber-700 border-amber-200 font-bold',
+        };
+      case 'RENOUVELLEMENT_PROCHE':
+        return {
+          label: `🔄 Renouvellement le ${formatDateLocal(etat.date, { day: 'numeric', month: 'short' })}`,
+          colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+        };
+      default:
+        return { label: '✅ À jour (Soldé)', colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
-
-    if (restToPay <= 0) {
-      return {
-        label: '✅ À jour (Soldé)',
-        colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      };
-    }
-
-    // Vérifier si un versement passé n'est pas payé
-    const existsLate = versements.some((v: any) => {
-      if (v.datePaiement) return false;
-      return joursAvantEcheance(v.datePrevue) < 0;
-    });
-
-    if (existsLate) {
-      return {
-        label: '⚠️ En retard',
-        colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold'
-      };
-    }
-
-    // Trouver le prochain versement
-    const nextVersement = versements
-      .filter((v: any) => !v.datePaiement)
-      .sort((a: any, b: any) => new Date(a.datePrevue).getTime() - new Date(b.datePrevue).getTime())[0];
-
-    if (nextVersement) {
-      const diffDays = joursAvantEcheance(nextVersement.datePrevue);
-      return {
-        label: `🔵 Échéance dans ${diffDays} j.`,
-        colorClass: 'bg-blue-50 text-blue-700 border-blue-200'
-      };
-    }
-
-    return {
-      label: '✅ À jour',
-      colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    };
   };
 
   return (

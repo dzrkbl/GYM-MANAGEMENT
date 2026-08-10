@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
+import { etatPaiement } from '../lib/echeances';
 
 export function MembreDetail() {
   const { id } = useParams<{ id: string }>();
@@ -495,6 +496,38 @@ export function MembreDetail() {
       {/* 2. ONGLET PAIEMENTS */}
       {activeTab === 'paiements' && (
         <div className="space-y-6 animate-fadeIn">
+          {/* Alerte renouvellement / solde : l'échéancier soldé ne suffit pas si le contrat est terminé. */}
+          {(() => {
+            const etat = etatPaiement(member);
+            if (etat.type === 'RENOUVELLEMENT_DU') {
+              return (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-semibold">
+                  🔄 Contrat terminé le {formatDateLocal(etat.date)} — le renouvellement
+                  {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} est à percevoir.
+                  {etat.reste ? ` Il reste aussi ${formatMontant(etat.reste)} impayés sur l'ancien contrat.` : ''}
+                  {' '}Réinscrivez le membre (nouvelle date d'inscription + échéancier) via « Modifier ».
+                </div>
+              );
+            }
+            if (etat.type === 'RESTE_SANS_ECHEANCE') {
+              return (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 font-semibold">
+                  💰 Il reste {formatMontant(etat.reste!)} à percevoir sur ce contrat, mais aucun
+                  versement n'est planifié — ajoutez l'échéance via « Modifier ».
+                </div>
+              );
+            }
+            if (etat.type === 'RENOUVELLEMENT_PROCHE') {
+              return (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  🔄 Le contrat se termine le {formatDateLocal(etat.date)} — renouvellement
+                  {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} à prévoir.
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Fiche d'abonnement récapitulative */}
           <div className="bg-slate-900 text-white rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
             <div>

@@ -3,6 +3,8 @@ import { apiFetch } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { useSections } from '../hooks/useSections';
+import { formatDateLocal } from '../lib/format';
+import { etatPaiement } from '../lib/echeances';
 
 interface Course {
   id: string;
@@ -23,25 +25,46 @@ interface Member {
   firstName: string;
   lastName: string;
   belt?: string;
+  status?: string;
+  montantFinal?: number | null;
+  finContrat?: string | null;
   sections: { section: string; belt: string | null }[];
   versements?: Versement[];
 }
 
 // Rappel de paiement affiché au coach pendant la prise de présences :
-// prochain versement impayé, visible à partir de 7 jours avant l'échéance
-// et tant que le paiement est en retard.
-function rappelPaiement(member: Member): { montant: number; date: Date; enRetard: boolean; autres: number } | null {
-  const impayes = (member.versements || [])
-    .filter((v) => !v.datePaiement && v.montant > 0)
-    .sort((a, b) => a.datePrevue.localeCompare(b.datePrevue));
-  if (impayes.length === 0) return null;
-  const prochain = impayes[0];
-  const due = new Date(prochain.datePrevue.slice(0, 10) + 'T12:00:00');
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const diffJours = Math.round((due.getTime() - today.getTime()) / 86400000);
-  if (diffJours > 7) return null;
-  return { montant: prochain.montant, date: due, enRetard: diffJours < 0, autres: impayes.length - 1 };
+// versement impayé (visible 7 jours avant l'échéance, et tant qu'il est en
+// retard), renouvellement de contrat dû ou imminent, ou solde sans échéance.
+function rappelPaiement(member: Member): { texte: string; enRetard: boolean } | null {
+  const etat = etatPaiement(member, 7);
+  const dateCourte = (d?: string) => formatDateLocal(d, { day: 'numeric', month: 'short' });
+  switch (etat.type) {
+    case 'RETARD':
+      return {
+        texte: `${fmtMontant(etat.montant!)} $ · en retard depuis le ${dateCourte(etat.date)}${etat.autres ? ` (+${etat.autres})` : ''}`,
+        enRetard: true,
+      };
+    case 'RENOUVELLEMENT_DU':
+      return {
+        texte: `${etat.montant ? `${fmtMontant(etat.montant)} $ · ` : ''}renouvellement dû depuis le ${dateCourte(etat.date)}${etat.reste ? ` · reste ${fmtMontant(etat.reste)} $` : ''}`,
+        enRetard: true,
+      };
+    case 'ECHEANCE_PROCHE':
+      if (etat.jours! > 7) return null;
+      return {
+        texte: `${fmtMontant(etat.montant!)} $ · dû le ${dateCourte(etat.date)}${etat.autres ? ` (+${etat.autres})` : ''}`,
+        enRetard: false,
+      };
+    case 'RESTE_SANS_ECHEANCE':
+      return { texte: `${fmtMontant(etat.reste!)} $ · solde à régler`, enRetard: true };
+    case 'RENOUVELLEMENT_PROCHE':
+      return {
+        texte: `${etat.montant ? `${fmtMontant(etat.montant)} $ · ` : ''}renouvellement le ${dateCourte(etat.date)}`,
+        enRetard: false,
+      };
+    default:
+      return null;
+  }
 }
 
 const fmtMontant = (m: number) => (m % 1 === 0 ? m.toFixed(0) : m.toFixed(2));
@@ -283,9 +306,7 @@ export function Pointer() {
                             rappel.enRetard ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}
                         >
-                          {fmtMontant(rappel.montant)} $ · {rappel.enRetard ? 'en retard depuis le' : 'dû le'}{' '}
-                          {rappel.date.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
-                          {rappel.autres > 0 && ` (+${rappel.autres})`}
+                          {rappel.texte}
                         </span>
                       )}
                     </div>
