@@ -11,7 +11,7 @@ import { TPS_RATE, TVQ_RATE, DIVISEUR_TAXES } from './finances';
 
 const FACTURE_NOM = process.env.RECU_NOM || 'Centre Sportif de Haute-Performance';
 const FACTURE_ADRESSE = process.env.FACTURE_ADRESSE || '6498 rue Beaubien E, Montréal, H1M 1A9';
-const FACTURE_TEL = process.env.FACTURE_TEL || '(514) 747-6865';
+const FACTURE_TEL = process.env.FACTURE_TEL || '514 747-5865';
 const FACTURE_TPS = process.env.RECU_TPS || '763471679 RT0001';
 const FACTURE_TVQ = process.env.RECU_TVQ || '1226462895 TQ0001';
 const FACTURE_NEQ = process.env.RECU_NEQ || '1174455635';
