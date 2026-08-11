@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement, activerSiPremierPaiement } from '../lib/paiements';
 import { sendRecuVersementBackground } from '../lib/recus';
+import { dateAMidi } from '../lib/tarifs';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -162,7 +163,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         numeroVersement: currentCount + 1,
         montant: data.amount,
         datePrevue: finalDueDate,
-        datePaiement: data.paidDate ? new Date(data.paidDate) : (data.status === 'PAYÉ' ? new Date() : null),
+        datePaiement: data.paidDate ? dateAMidi(data.paidDate) : (data.status === 'PAYÉ' ? new Date() : null),
         methodePaiement: methodEnum,
         note: '',
       }
@@ -195,7 +196,7 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     if (dueDate) updateData.datePrevue = new Date(dueDate);
 
     if (paidDate !== undefined) {
-      updateData.datePaiement = paidDate ? new Date(paidDate) : null;
+      updateData.datePaiement = paidDate ? dateAMidi(paidDate) : null;
     } else if (status === 'PAYÉ') {
       updateData.datePaiement = new Date();
     } else if (status === 'EN_ATTENTE' || status === 'EN_RETARD') {
@@ -237,7 +238,7 @@ router.patch('/:id/payer', authenticate, requireRole(['ADMIN']), async (req: Req
     const updated = await prisma.paymentVersement.update({
       where: { id },
       data: {
-        datePaiement: datePaiement ? new Date(datePaiement) : new Date(),
+        datePaiement: datePaiement ? dateAMidi(datePaiement) : new Date(),
         methodePaiement: methodEnum,
         note: note || ''
       }

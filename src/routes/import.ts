@@ -130,7 +130,12 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
         const key = `${firstName} ${lastName}`;
 
-        const existing = await prisma.member.findFirst({ where: { firstName, lastName } });
+        const existing = await prisma.member.findFirst({
+          where: {
+            firstName: { equals: firstName, mode: 'insensitive' },
+            lastName: { equals: lastName, mode: 'insensitive' },
+          },
+        });
         if (existing) {
           nameToId.set(key, existing.id);
           membres.skipped++;

@@ -4,7 +4,7 @@ import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { createMembre, updateMembre, apiFetch } from '../../lib/api';
-import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../../lib/tarifs';
+import { calculerMontantFinal, calculerFinContrat, ajouterMoisISO, TARIFS } from '../../lib/tarifs';
 import { User, CreditCard, ChevronRight, ChevronLeft, Plus, Trash, Search, Check, AlertCircle } from 'lucide-react';
 import { useSections } from '../../hooks/useSections';
 import { formatDateLocal, todayLocalISO } from '../../lib/format';
@@ -65,6 +65,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [lastName, setLastName] = useState(membre?.lastName || '');
   const [email, setEmail] = useState(membre?.email || '');
   const [phone, setPhone] = useState(membre?.phone || '');
+  const [parentName, setParentName] = useState(membre?.parentName || '');
+  const [parentPhone, setParentPhone] = useState(membre?.parentPhone || '');
+  const [parentEmail, setParentEmail] = useState(membre?.parentEmail || '');
   const [dob, setDob] = useState(membre?.dateOfBirth ? membre.dateOfBirth.split('T')[0] : '');
   const [poids, setPoids] = useState<number | ''>(membre?.poids !== undefined && membre?.poids !== null ? membre.poids : '');
   const [groupe, setGroupe] = useState(membre?.sections?.[0]?.section || '');
@@ -218,18 +221,15 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       const roundedVersements = [];
 
       for (let i = 1; i <= parts; i++) {
-        const d = new Date(dateInscription);
-        d.setMonth(d.getMonth() + (i - 1));
-        
         // Ajuster le dernier versement pour pallier les arrondis
-        const montantStr = i === parts 
+        const montantStr = i === parts
           ? (montantFinalCalculated - (baseAmount * (parts - 1))).toFixed(2)
           : baseAmount.toFixed(2);
 
         roundedVersements.push({
           numeroVersement: i,
           montant: Number(montantStr),
-          datePrevue: d.toISOString().split('T')[0],
+          datePrevue: ajouterMoisISO(dateInscription, i - 1),
           datePaiement: null,
           methodePaiement: null,
           note: '',
@@ -241,15 +241,13 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
   const addCustomVersement = () => {
     const nextNum = versements.length + 1;
-    const d = new Date(dateInscription);
-    d.setMonth(d.getMonth() + (nextNum - 1));
 
     setVersements([
       ...versements,
       {
         numeroVersement: nextNum,
         montant: 0,
-        datePrevue: d.toISOString().split('T')[0],
+        datePrevue: ajouterMoisISO(dateInscription, nextNum - 1),
         datePaiement: null,
         methodePaiement: null,
         note: '',
@@ -325,6 +323,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         lastName,
         email: email || null,
         phone: phone || null,
+        parentName: parentName || null,
+        parentPhone: parentPhone || null,
+        parentEmail: parentEmail || null,
         dob: dob || null,
         poids: poids !== '' ? Number(poids) : null,
         sections: [{ section: groupe, belt: belt || "Blanche" }],
@@ -342,6 +343,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         referePar: referePar || null,
         rabaisReferentPct: rabaisReferentPct !== '' ? Number(rabaisReferentPct) : null,
         versements: versements.map(v => ({
+          // L'id (présent en modification) permet au backend de conserver
+          // l'historique du versement : reçus émis, exonérations, rappels envoyés.
+          ...(v.id ? { id: v.id } : {}),
           numeroVersement: v.numeroVersement,
           montant: Number(v.montant),
           datePrevue: v.datePrevue,
@@ -455,6 +459,38 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 onChange={e => setPhone(e.target.value)}
                 placeholder="Ex. 514-123-4567"
               />
+            </div>
+
+            {/* Parent / tuteur : c'est LE destinataire des rappels de paiement,
+                reçus et renouvellements pour les mineurs. */}
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-3">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Parent / tuteur (pour les mineurs)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Nom du parent"
+                  value={parentName}
+                  onChange={e => setParentName(e.target.value)}
+                  placeholder="Ex. Marie Dupont"
+                />
+                <Input
+                  label="Téléphone du parent"
+                  value={parentPhone}
+                  onChange={e => setParentPhone(e.target.value)}
+                  placeholder="Ex. 514-123-4567"
+                />
+              </div>
+              <div>
+                <Input
+                  label="Courriel du parent (rappels et reçus — ';' pour plusieurs)"
+                  value={parentEmail}
+                  onChange={e => setParentEmail(e.target.value)}
+                  placeholder="Ex. parent1@test.com; parent2@test.com"
+                />
+                <p className="text-xs text-cshp-gray mt-1">
+                  Les rappels de paiement, reçus et avis de renouvellement sont envoyés à cette
+                  adresse en priorité (sinon au courriel de l'athlète).
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

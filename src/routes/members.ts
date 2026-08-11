@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../lib/tarifs';
+import { calculerMontantFinal, calculerFinContrat, dateAMidi, TARIFS } from '../lib/tarifs';
 import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
@@ -36,6 +36,9 @@ const memberSchema = z.object({
   ).min(1, 'Au moins une section est requise'),
   parentName: z.string().optional().nullable(),
   parentPhone: z.string().optional().nullable(),
+  // Destinataire prioritaire des rappels et reçus (plusieurs adresses possibles,
+  // séparées par « ; »).
+  parentEmail: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   currentBelt: z.string().optional().nullable(),
   status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']).default('ACTIF'),
@@ -93,7 +96,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     const data = memberSchema.parse(req.body);
 
     let prixBase = data.prixBase;
-    let finContrat = data.finContrat ? new Date(data.finContrat) : null;
+    let finContrat = data.finContrat ? dateAMidi(data.finContrat) : null;
     let montantFinal = data.montantFinal;
 
     if (data.plan) {
@@ -116,12 +119,13 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         data: {
           firstName: data.firstName,
           lastName: data.lastName,
-          dateOfBirth: data.dob ? new Date(data.dob) : null,
+          dateOfBirth: data.dob ? dateAMidi(data.dob) : null,
           gender: data.gender,
           phone: data.phone,
           email: data.email,
           parentName: data.parentName,
           parentPhone: data.parentPhone,
+          parentEmail: data.parentEmail,
           notes: data.notes,
           currentBelt: data.currentBelt,
           status: data.status,
@@ -131,7 +135,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             )
           },
           poids: data.poids,
-          dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
+          dateInscription: data.dateInscription ? dateAMidi(data.dateInscription) : null,
           finContrat: finContrat,
           plan: data.plan,
           prixBase: prixBase,
@@ -147,8 +151,8 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             create: data.versements.map((v: any) => ({
               numeroVersement: v.numeroVersement,
               montant: v.montant,
-              datePrevue: new Date(v.datePrevue),
-              datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
+              datePrevue: dateAMidi(v.datePrevue),
+              datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
               methodePaiement: v.methodePaiement,
               note: v.note,
             }))
@@ -244,20 +248,20 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (data.dob) {
-      updateData.dateOfBirth = new Date(data.dob);
+      updateData.dateOfBirth = dateAMidi(data.dob);
     } else if (data.dob === null) {
       updateData.dateOfBirth = null;
     }
     delete updateData.dob;
 
     if (data.dateInscription) {
-      updateData.dateInscription = new Date(data.dateInscription);
+      updateData.dateInscription = dateAMidi(data.dateInscription);
     } else if (data.dateInscription === null) {
       updateData.dateInscription = null;
     }
 
     if (data.finContrat) {
-      updateData.finContrat = new Date(data.finContrat);
+      updateData.finContrat = dateAMidi(data.finContrat);
     } else if (data.finContrat === null) {
       updateData.finContrat = null;
     }
@@ -272,16 +276,38 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (data.versements) {
+      // Remplacement de l'échéancier SANS perdre l'historique système : on
+      // rapproche chaque nouveau versement d'un ancien (par id, sinon par
+      // numéro) pour conserver son id (les rappels déjà envoyés — journalisés
+      // par id de versement — ne repartent pas), son numéro de reçu, la date
+      // d'envoi du reçu et l'exonération des frais de retard. Sans cela,
+      // chaque modification de membre renvoyait les rappels de retard aux
+      // parents et réutilisait des numéros de reçus.
+      const anciens = await prisma.paymentVersement.findMany({ where: { membreId: req.params.id } });
+      const parId = new Map(anciens.map((a) => [a.id, a]));
+      const parNumero = new Map(anciens.map((a) => [a.numeroVersement, a]));
+      const idsRepris = new Set<string>();
+
       updateData.versements = {
         deleteMany: {},
-        create: data.versements.map((v: any) => ({
-          numeroVersement: v.numeroVersement,
-          montant: v.montant,
-          datePrevue: new Date(v.datePrevue),
-          datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
-          methodePaiement: v.methodePaiement,
-          note: v.note,
-        }))
+        create: data.versements.map((v: any) => {
+          let ancien = (v.id && parId.get(v.id)) || parNumero.get(v.numeroVersement) || null;
+          if (ancien && idsRepris.has(ancien.id)) ancien = null; // jamais deux fois le même id
+          if (ancien) idsRepris.add(ancien.id);
+          return {
+            ...(ancien ? { id: ancien.id } : {}),
+            numeroVersement: v.numeroVersement,
+            montant: v.montant,
+            datePrevue: dateAMidi(v.datePrevue),
+            datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
+            methodePaiement: v.methodePaiement,
+            note: v.note,
+            exonererFraisRetard: ancien?.exonererFraisRetard ?? false,
+            receiptNumber: ancien?.receiptNumber ?? null,
+            receiptSentAt: ancien?.receiptSentAt ?? null,
+            reminderSentAt: ancien?.reminderSentAt ?? null,
+          };
+        })
       };
     }
 
@@ -328,8 +354,8 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
           create: versementsData.map(v => ({
             numeroVersement: v.numeroVersement,
             montant: v.montant,
-            datePrevue: new Date(v.datePrevue),
-            datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
+            datePrevue: dateAMidi(v.datePrevue),
+            datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
             methodePaiement: v.methodePaiement,
             note: v.note,
           }))

@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement, activerSiPremierPaiement } from '../lib/paiements';
 import { sendRecuVersementBackground } from '../lib/recus';
+import { dateAMidi } from '../lib/tarifs';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -52,7 +53,7 @@ router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER'])
     const versement = await prisma.paymentVersement.update({
       where: { id },
       data: {
-        datePaiement: new Date(data.datePaiement),
+        datePaiement: dateAMidi(data.datePaiement),
         methodePaiement: methode,
         note: data.note,
         ...(data.montant !== undefined && data.montant !== null ? { montant: data.montant } : {}),
