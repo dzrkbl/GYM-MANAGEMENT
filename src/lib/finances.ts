@@ -19,6 +19,17 @@ export async function getLoyerPourAnnee(annee: number): Promise<number> {
   return Math.round(montant * 100) / 100;
 }
 
+// Masse salariale d'un mois : override MasseSalariale s'il existe, sinon la
+// somme des salaires actifs (« Gérer les coachs » du Module financier).
+// SOURCE UNIQUE : le Dashboard et le Module financier passent tous deux par ici
+// (avant, le Dashboard additionnait `User.remuneration` — un troisième chiffre).
+export async function masseSalarialePourMois(mois: number, annee: number): Promise<number> {
+  const override = await prisma.masseSalariale.findFirst({ where: { mois, annee } });
+  if (override) return override.montant;
+  const somme = await prisma.coachSalaire.aggregate({ _sum: { montant: true }, where: { actif: true } });
+  return somme._sum.montant ?? 0;
+}
+
 // Charges de la période (mois + annee)
 export async function getChargesPeriode(mois: number, annee: number) {
   // Charges fixes (mois: null = s'applique à tous les mois, ou mois précis)
@@ -33,13 +44,8 @@ export async function getChargesPeriode(mois: number, annee: number) {
   // Loyer (auto ou override)
   const loyer = await getLoyerPourAnnee(annee);
 
-  // Masse salariale : override MasseSalariale ou somme CoachSalaire
-  const masseSalarialeOverride = await prisma.masseSalariale.findFirst({
-    where: { mois, annee }
-  });
-  const masseSalariale = masseSalarialeOverride
-    ? masseSalarialeOverride.montant
-    : (await prisma.coachSalaire.aggregate({ _sum: { montant: true }, where: { actif: true } }))._sum.montant ?? 0;
+  // Masse salariale : source unique (override du mois sinon salaires actifs).
+  const masseSalariale = await masseSalarialePourMois(mois, annee);
 
   const totalFixes = fixes.reduce((acc, d) => acc + d.montant, 0);
   const totalCharges = totalFixes + loyer + masseSalariale;

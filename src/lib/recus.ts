@@ -40,7 +40,7 @@ export interface RecuData {
 }
 
 // Charge le logo du club depuis public/logo.png (ou .jpg) s'il existe.
-function chargerLogo(): { data: string; format: 'PNG' | 'JPEG' } | null {
+export function chargerLogo(): { data: string; format: 'PNG' | 'JPEG' } | null {
   const candidats: Array<[string, 'PNG' | 'JPEG', string]> = [
     ['logo.png', 'PNG', 'png'],
     ['logo.jpg', 'JPEG', 'jpeg'],

@@ -8,6 +8,7 @@ import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
 import { logAudit } from '../lib/audit';
+import { genererFactures } from '../lib/factures';
 
 const router = Router();
 
@@ -183,6 +184,35 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
       return sendError(res, 'Données invalides', 400, error.issues);
     }
     return sendError(res, 'Erreur de création', 500);
+  }
+});
+
+// POST /api/membres/factures — factures annuelles par famille.
+// Pour les membres cochés : une facture PAR FAMILLE (enfants liés, même
+// courriel ou même téléphone de parent), listant tous les montants VERSÉS
+// durant l'année civile demandée. Retourne un PDF encodé par famille.
+router.post('/factures', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const schema = z.object({
+      memberIds: z.array(z.string()).min(1, 'Sélectionnez au moins un membre'),
+      annee: z.number().int().min(2020).max(2100),
+    });
+    const { memberIds, annee } = schema.parse(req.body);
+
+    const factures = await genererFactures(memberIds, annee);
+    if (factures.length === 0) return sendError(res, 'Aucun membre trouvé pour cette sélection', 404);
+
+    logAudit(req, {
+      action: 'CREATE',
+      entity: 'Facture',
+      description: `${factures.length} facture(s) ${annee} — ${factures.map((f) => f.membres.join(' + ')).join(' | ')}`,
+    });
+
+    return sendSuccess(res, { annee, factures });
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Erreur génération factures:', error);
+    return sendError(res, 'Erreur lors de la génération des factures', 500);
   }
 });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
 import { formatMontant, formatDate, formatDateLocal, todayLocalISO } from '../lib/format';
@@ -41,9 +41,15 @@ export function Paiements() {
     { value: 'ALL', label: 'Tout' }
   ];
 
+  // Filtre initial via l'URL (?statut=EN_RETARD depuis la carte « Retards » du tableau de bord).
+  const [searchParams] = useSearchParams();
+  const statutInitial = searchParams.get('statut');
+
   const [periodFilter, setPeriodFilter] = useState(currentMonthValue);
   const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
-  const [statusFilter, setStatusFilter] = useState('TOUS');
+  const [statusFilter, setStatusFilter] = useState(
+    statutInitial && ['PAYÉ', 'EN_RETARD', 'EN_ATTENTE'].includes(statutInitial) ? statutInitial : 'TOUS'
+  );
   
   const [payments, setPayments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
