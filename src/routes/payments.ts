@@ -5,7 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { normalizeMethodePaiement, activerSiPremierPaiement } from '../lib/paiements';
 import { sendRecuVersementBackground } from '../lib/recus';
-import { dateAMidi } from '../lib/tarifs';
+import { dateAMidi, ajouterMoisISO } from '../lib/tarifs';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -20,19 +20,43 @@ const paymentSchema = z.object({
   status: z.enum(['PAYÉ', 'EN_ATTENTE', 'EN_RETARD']).default('EN_ATTENTE'),
 });
 
+// Jour et mois courants à Montréal (le serveur tourne en UTC : après 20 h,
+// « new Date() » est déjà demain — on compare donc des jours civils locaux).
+function aujourdhuiMontreal(): string {
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+}
+
 // GET /api/paiements
 router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { status, section, month } = req.query;
-    const today = new Date();
+    const aujourdhui = aujourdhuiMontreal();           // AAAA-MM-JJ
+    const moisCourant = aujourdhui.slice(0, 7);        // AAAA-MM
 
     let whereClause: any = {};
 
-    // Filtre par mois (sur datePrevue)
+    // Filtre par mois : ce qui était DÛ ce mois-là OU ce qui a été PAYÉ ce
+    // mois-là (avant, seul datePrevue comptait : un paiement encaissé en août
+    // pour une échéance de juin était invisible dans la vue d'août).
     if (month) {
-      const startDate = new Date(`${month}-01`);
-      const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0, 23, 59, 59);
-      whereClause.datePrevue = { gte: startDate, lte: endDate };
+      const startDate = new Date(`${month}-01T00:00:00Z`);
+      const debutMoisSuivant = new Date(`${ajouterMoisISO(`${month}-01`, 1)}T00:00:00Z`);
+      const endDate = new Date(debutMoisSuivant.getTime() - 1);
+      const dansLeMois: any[] = [
+        { datePrevue: { gte: startDate, lte: endDate } },
+        { datePaiement: { gte: startDate, lte: endDate } },
+      ];
+      // La vue du mois courant est la vue de travail : les impayés échus des
+      // mois précédents y restent visibles au lieu d'être cachés par le filtre
+      // (sauf ceux des membres INACTIF — les départs ne sont plus réclamés).
+      if (String(month) === moisCourant) {
+        dansLeMois.push({
+          datePaiement: null,
+          datePrevue: { lt: startDate },
+          member: { status: { not: 'INACTIF' } },
+        });
+      }
+      whereClause.OR = dansLeMois;
     }
 
     // Filtre par section (via les sections du membre)
@@ -50,6 +74,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
             id: true,
             firstName: true,
             lastName: true,
+            status: true,
             sections: { select: { section: true } }
           }
         }
@@ -57,12 +82,14 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       orderBy: { datePrevue: 'asc' }
     });
 
-    // Calculer le statut et mapper vers le format attendu par le frontend
+    // Calculer le statut et mapper vers le format attendu par le frontend.
+    // « En retard » = le jour d'échéance est entièrement passé (comparaison de
+    // jours civils, pas d'instants : une échéance du 15 n'est en retard que le 16).
     const mapped = versements.map(v => {
       let computedStatus: string;
       if (v.datePaiement) {
         computedStatus = 'PAYÉ';
-      } else if (v.datePrevue && v.datePrevue < today) {
+      } else if (v.datePrevue && v.datePrevue.toISOString().slice(0, 10) < aujourdhui) {
         computedStatus = 'EN_RETARD';
       } else {
         computedStatus = 'EN_ATTENTE';
@@ -101,12 +128,13 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
 // GET /api/paiements/retards
 router.get('/retards', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
-    const today = new Date();
-    // Overdue payments: non payés et datePrevue dépassée
+    // Impayés dont le jour d'échéance est entièrement passé (jour civil de
+    // Montréal) — les membres INACTIF (départs) sont exclus.
     const overdues = await prisma.paymentVersement.findMany({
       where: {
         datePaiement: null,
-        datePrevue: { lt: today }
+        datePrevue: { lt: new Date(aujourdhuiMontreal() + 'T00:00:00Z') },
+        member: { status: { not: 'INACTIF' } }
       },
       include: {
         member: { select: { firstName: true, lastName: true, email: true, phone: true } }

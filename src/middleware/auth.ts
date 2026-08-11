@@ -26,9 +26,22 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     if (!user) {
       return sendError(res, 'Utilisateur introuvable.', 401);
     }
+    // Un compte désactivé perd l'accès immédiatement (pas à l'expiration du jeton).
+    if (!user.actif) {
+      return sendError(res, 'Compte désactivé.', 401);
+    }
 
-    // On enrichit l'utilisateur courant avec son nom/courriel (utile pour l'audit).
-    req.user = { ...payload, email: user.email, firstName: user.firstName, lastName: user.lastName };
+    // Rôle et section lus depuis la BASE (source de vérité), pas depuis le jeton :
+    // un changement de rôle (ex. promotion en administrateur) prend effet à la
+    // requête suivante, sans devoir se déconnecter/reconnecter.
+    req.user = {
+      ...payload,
+      role: user.role,
+      section: user.section,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    };
     next();
   } catch (error) {
     return sendError(res, 'Jeton invalide ou expiré.', 401);
