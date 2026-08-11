@@ -165,6 +165,9 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
               raisonRabaisCustom: p[16]?.trim() || null,
               montantFinal: parseNum(p[17]),
               dateInscription: parseDate(p[18]),
+              // Ancienneté : à l'import, la première inscription connue est la
+              // date d'inscription du contrat (sinon la date d'import).
+              signupDate: parseDate(p[18]) ?? undefined,
               finContrat: parseDate(p[19]),
               currentBelt: ceinture.toUpperCase(),
               notes: p[21]?.trim() || null,

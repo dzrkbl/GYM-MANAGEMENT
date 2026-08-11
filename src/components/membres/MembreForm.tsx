@@ -15,7 +15,7 @@ interface MembreFormProps {
   onCancel: () => void;
 }
 
-const CEINTURES_LIST = [
+export const CEINTURES_LIST = [
   "Blanche",
   "Blanche-Jaune",
   "Jaune",

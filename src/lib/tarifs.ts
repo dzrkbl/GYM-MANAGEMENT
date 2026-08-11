@@ -11,17 +11,19 @@ export function calculerMontantFinal(params: {
   rabaisCustomPct?: number | null;
   prixBase?: number | null;
 }): number {
-  let prix = (params.prixBase !== undefined && params.prixBase !== null)
+  const prix = (params.prixBase !== undefined && params.prixBase !== null)
     ? params.prixBase
     : (TARIFS[params.plan]?.base ?? 0);
 
-  if (params.rabaisFamille) {
-    prix = prix * 0.90; // -10%
-  }
-  if (params.rabaisCustomPct) {
-    prix = prix * (1 - params.rabaisCustomPct / 100);
-  }
-  return Math.round(prix * 100) / 100;
+  // Les rabais s'ADDITIONNENT (règle du centre) : famille -10 % + manuel -X %
+  // sur le prix de base. Ex. 790 $ avec famille et -10 % manuel = 790 × 0,80
+  // = 632 $ (et non 790 × 0,90 × 0,90 = 639,90 $ comme avant).
+  let pct = 0;
+  if (params.rabaisFamille) pct += 10;
+  if (params.rabaisCustomPct) pct += params.rabaisCustomPct;
+  pct = Math.min(pct, 100);
+
+  return Math.round(prix * (1 - pct / 100) * 100) / 100;
 }
 
 // Ajoute des mois à une date « AAAA-MM-JJ » par simple arithmétique de

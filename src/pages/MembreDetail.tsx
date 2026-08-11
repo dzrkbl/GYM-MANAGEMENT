@@ -16,6 +16,9 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
 import { etatPaiement } from '../lib/echeances';
+import { CEINTURES_LIST } from '../components/membres/MembreForm';
+import { useSections } from '../hooks/useSections';
+import { Input } from '../components/ui/Input';
 
 export function MembreDetail() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +37,60 @@ export function MembreDetail() {
 
   // Modales
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // --- Édition rapide : les champs simples, sans passer par l'assistant en
+  // 4 étapes (le groupe, la ceinture, les coordonnées, les notes… se corrigent
+  // ici sans jamais toucher au plan ni à l'échéancier). ---
+  const { sections: sectionsDisponibles, getLabel: labelSection } = useSections();
+  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false);
+  const [quickEdit, setQuickEdit] = useState<any>({});
+  const [isQuickSaving, setIsQuickSaving] = useState(false);
+
+  const openQuickEdit = () => {
+    setQuickEdit({
+      groupe: member?.sections?.[0]?.section || '',
+      ceinture: member?.sections?.[0]?.belt || member?.currentBelt || 'Blanche',
+      phone: member?.phone || '',
+      email: member?.email || '',
+      parentName: member?.parentName || '',
+      parentPhone: member?.parentPhone || '',
+      parentEmail: member?.parentEmail || '',
+      dob: member?.dateOfBirth ? member.dateOfBirth.split('T')[0] : '',
+      membreDepuis: member?.signupDate ? member.signupDate.split('T')[0] : '',
+      poids: member?.poids ?? '',
+      notes: member?.notes || '',
+    });
+    setIsQuickEditOpen(true);
+  };
+
+  const saveQuickEdit = async () => {
+    setIsQuickSaving(true);
+    try {
+      await apiFetch(`/membres/${member.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          sections: [{ section: quickEdit.groupe, belt: quickEdit.ceinture || 'Blanche' }],
+          currentBelt: quickEdit.ceinture || 'Blanche',
+          phone: quickEdit.phone || null,
+          email: quickEdit.email || null,
+          parentName: quickEdit.parentName || null,
+          parentPhone: quickEdit.parentPhone || null,
+          parentEmail: quickEdit.parentEmail || null,
+          dob: quickEdit.dob || null,
+          membreDepuis: quickEdit.membreDepuis || null,
+          poids: quickEdit.poids !== '' ? Number(quickEdit.poids) : null,
+          notes: quickEdit.notes || null,
+        }),
+      });
+      setIsQuickEditOpen(false);
+      fetchMemberData();
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setIsQuickSaving(false);
+    }
+  };
+  const qe = (k: string) => (e: any) => setQuickEdit((p: any) => ({ ...p, [k]: e.target.value }));
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [selectedSection, setSelectedSection] = useState<{name: string, belt: string} | null>(null);
@@ -192,8 +249,11 @@ export function MembreDetail() {
           <ArrowLeft className="mr-2" size={20} /> Retour aux membres
         </button>
         <div className="flex items-center gap-2">
+          <Button onClick={openQuickEdit} className="min-h-[40px] text-sm py-1 bg-cshp-black hover:bg-gray-800 text-white">
+            <Edit3 size={16} className="mr-2" /> Édition rapide
+          </Button>
           <Button variant="outline" onClick={() => setIsEditModalOpen(true)} className="min-h-[40px] text-sm py-1 border-gray-300">
-            <Edit3 size={16} className="mr-2" /> Modifier le Profil
+            Profil complet
           </Button>
           {user?.role === 'ADMIN' && (
             <button
@@ -336,13 +396,19 @@ export function MembreDetail() {
                 </span>
               </div>
               <div className="space-y-1">
-                <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de début</span>
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Membre depuis</span>
+                <span className="text-gray-800 font-semibold text-sm">
+                  {member.signupDate ? formatDateLocal(member.signupDate) : '-'}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Début du contrat en cours</span>
                 <span className="text-gray-800 font-semibold text-sm">
                   {member.dateInscription ? formatDateLocal(member.dateInscription) : '-'}
                 </span>
               </div>
               <div className="space-y-1">
-                <span className="text-gray-400 block text-xs uppercase font-extrabold">Date de fin d'adhésion</span>
+                <span className="text-gray-400 block text-xs uppercase font-extrabold">Fin du contrat en cours</span>
                 <span className="text-gray-800 font-bold text-cshp-red text-sm">
                   {member.finContrat ? formatDateLocal(member.finContrat) : 'Indéfinie'}
                 </span>
@@ -788,6 +854,70 @@ export function MembreDetail() {
       )}
 
       {/* --- TOUTES LES MODALES --- */}
+
+      {/* MODALE ÉDITION RAPIDE : champs simples, sans toucher au plan ni à l'échéancier */}
+      <Modal isOpen={isQuickEditOpen} onClose={() => !isQuickSaving && setIsQuickEditOpen(false)} title="Édition rapide" width="lg">
+        <div className="space-y-4">
+          <p className="text-xs text-cshp-gray -mt-2">
+            Modifie les informations courantes sans passer par les étapes du profil complet.
+            Le plan, l'échéancier et les paiements ne sont pas touchés.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 text-sm font-medium text-cshp-black">Groupe</label>
+              <select
+                value={quickEdit.groupe}
+                onChange={qe('groupe')}
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
+              >
+                {sectionsDisponibles.map((s: any) => (
+                  <option key={s.code} value={s.code}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block mb-1 text-sm font-medium text-cshp-black">Ceinture</label>
+              <select
+                value={quickEdit.ceinture}
+                onChange={qe('ceinture')}
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
+              >
+                {CEINTURES_LIST.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+            <Input label="Téléphone (athlète)" value={quickEdit.phone} onChange={qe('phone')} />
+            <Input label="Courriel (athlète)" value={quickEdit.email} onChange={qe('email')} />
+            <Input label="Nom du parent" value={quickEdit.parentName} onChange={qe('parentName')} />
+            <Input label="Téléphone du parent" value={quickEdit.parentPhone} onChange={qe('parentPhone')} />
+            <div className="sm:col-span-2">
+              <Input label="Courriel du parent (rappels et reçus — ';' pour plusieurs)" value={quickEdit.parentEmail} onChange={qe('parentEmail')} />
+            </div>
+            <Input label="Date de naissance" type="date" value={quickEdit.dob} onChange={qe('dob')} />
+            <div>
+              <Input label="Membre depuis (1re inscription)" type="date" value={quickEdit.membreDepuis} onChange={qe('membreDepuis')} />
+              <p className="text-xs text-cshp-gray mt-1">L'ancienneté au club — ne change pas lors d'un renouvellement.</p>
+            </div>
+            <Input label="Poids (kg)" type="number" step="0.1" value={quickEdit.poids} onChange={qe('poids')} />
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium text-cshp-black">Notes</label>
+            <textarea
+              value={quickEdit.notes}
+              onChange={qe('notes')}
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg p-3 bg-white text-sm"
+            />
+          </div>
+          <div className="flex gap-3 pt-3 border-t border-gray-100">
+            <Button variant="outline" onClick={() => setIsQuickEditOpen(false)} className="flex-1" disabled={isQuickSaving}>
+              Annuler
+            </Button>
+            <Button onClick={saveQuickEdit} isLoading={isQuickSaving} className="flex-1">
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* MODALE ÉDITION DU PROFIL */}
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="" width="xl">

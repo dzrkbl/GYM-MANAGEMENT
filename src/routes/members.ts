@@ -45,7 +45,10 @@ const memberSchema = z.object({
   status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']).default('ACTIF'),
 
   poids: z.number().optional().nullable(),
+  // Début du contrat EN COURS (renouvelé à chaque renouvellement).
   dateInscription: z.string().optional().nullable(),
+  // Première inscription au club (ancienneté) — ne bouge pas au renouvellement.
+  membreDepuis: z.string().optional().nullable(),
   finContrat: z.string().optional().nullable(),
   plan: z.enum(['TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
   prixBase: z.number().optional().nullable(),
@@ -137,6 +140,10 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
           },
           poids: data.poids,
           dateInscription: data.dateInscription ? dateAMidi(data.dateInscription) : null,
+          // À la création, l'ancienneté démarre avec le premier contrat.
+          signupDate: data.membreDepuis
+            ? dateAMidi(data.membreDepuis)
+            : (data.dateInscription ? dateAMidi(data.dateInscription) : undefined),
           finContrat: finContrat,
           plan: data.plan,
           prixBase: prixBase,
@@ -283,6 +290,12 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
       updateData.dateOfBirth = null;
     }
     delete updateData.dob;
+
+    // « Membre depuis » (ancienneté) : modifiable explicitement, jamais recalculée.
+    if (data.membreDepuis) {
+      updateData.signupDate = dateAMidi(data.membreDepuis);
+    }
+    delete updateData.membreDepuis;
 
     if (data.dateInscription) {
       updateData.dateInscription = dateAMidi(data.dateInscription);
