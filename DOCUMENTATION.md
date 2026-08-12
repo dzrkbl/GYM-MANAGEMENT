@@ -89,9 +89,13 @@ bord, le digest admin hebdomadaire et le badge rouge « Renouvellement dû ». U
 membre dont l'échéancier est soldé n'est « à jour » **que si son contrat
 court encore** — c'était le bug le plus coûteux de l'histoire du projet (§10).
 
-**Renouveler un membre** = ouvrir « Profil complet » → nouvelle
-`dateInscription` (date du renouvellement) → nouvel échéancier. `signupDate`
-ne bouge pas ; `finContrat` se recalcule.
+**Renouveler un membre** = bouton « 🔄 Renouveler » sur la fiche (bannière ou
+carte de formule) : nouveau contrat + échéancier ajouté à la suite +
+encaissement immédiat optionnel (reçu sauf CASH). **Le nouveau contrat
+commence par défaut à la FIN de l'ancien** (continuité du service : l'athlète
+a continué à venir même si le parent paie avec quelques semaines de retard) —
+la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
+`signupDate` ne bouge jamais ; `finContrat` se recalcule.
 
 ### Paiements, reçus, frais de retard, factures
 - Un paiement = un **versement** (`PaymentVersement`). Statut **dérivé** :

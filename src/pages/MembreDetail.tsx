@@ -102,7 +102,10 @@ export function MembreDetail() {
   const openRenew = () => {
     const plan = member?.plan === 'ANNUEL' ? 'ANNUEL' : 'TRIMESTRIEL';
     setRenew({
-      dateDebut: todayLocalISO(),
+      // Continuité du service : le nouveau contrat commence à la FIN de
+      // l'ancien (règle du centre), pas au jour du paiement — modifiable si
+      // l'athlète a fait une vraie pause.
+      dateDebut: member?.finContrat ? member.finContrat.split('T')[0] : todayLocalISO(),
       plan,
       montant: member?.montantFinal || (plan === 'ANNUEL' ? 790 : 250),
       nbVersements: 1,
@@ -969,7 +972,13 @@ export function MembreDetail() {
               </select>
             </div>
             <Input label="Montant du contrat ($)" type="number" step="0.01" value={renew.montant} onChange={rn('montant')} />
-            <Input label="Début du nouveau contrat" type="date" value={renew.dateDebut} onChange={rn('dateDebut')} />
+            <div>
+              <Input label="Début du nouveau contrat" type="date" value={renew.dateDebut} onChange={rn('dateDebut')} />
+              <p className="text-xs text-cshp-gray mt-1">
+                Par défaut : la fin de l'ancien contrat (continuité du service). Modifie-la
+                seulement si l'athlète a fait une vraie pause.
+              </p>
+            </div>
             <div>
               <label className="block mb-1 text-sm font-medium text-cshp-black">Nombre de versements</label>
               {renew.plan === 'TRIMESTRIEL' ? (
