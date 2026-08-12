@@ -133,8 +133,7 @@ app.get('/api/cron/reminders', async (req, res) => {
   }
 });
 
-// For Vite and front-end integration (standard setup)
-import { createServer as createViteServer } from 'vite';
+import { existsSync } from 'fs';
 
 async function startServer() {
   // Toute route /api inconnue doit répondre en JSON (404) au lieu de recevoir
@@ -143,20 +142,9 @@ async function startServer() {
     res.status(404).json({ success: false, error: 'Endpoint API introuvable' });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
+  // OUVRIR LE PORT EN PREMIER. Render considère le déploiement échoué
+  // (« Timed Out ») si le port ne s'ouvre pas assez vite : tout ce qui est
+  // lent (migrations, montage du frontend) se fait APRÈS, jamais avant.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server is running on port ${PORT}`);
 
@@ -183,6 +171,27 @@ async function startServer() {
       });
     }
   });
+
+  // Frontend : en production (bundle dist/server.cjs, NODE_ENV=production ou
+  // build présent), on sert les fichiers statiques. Vite n'est chargé (import
+  // dynamique) qu'en développement (`npm run dev` via tsx) : le bundle de
+  // production ne dépend plus de lui au démarrage.
+  const enDev = process.env.NODE_ENV !== 'production'
+    && (process.argv[1] || '').endsWith('.ts'); // `npm run dev` exécute server.ts ; le build exécute dist/server.cjs
+  const distPath = path.join(process.cwd(), 'dist');
+  if (!enDev && existsSync(path.join(distPath, 'index.html'))) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
 }
 
 startServer();
