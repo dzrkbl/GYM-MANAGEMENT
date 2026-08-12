@@ -501,7 +501,7 @@ export function Finances() {
                           </span>
                           {dep.mois === null && (
                             <span className="px-1.5 py-0.5 text-[9px] font-bold bg-teal-100 text-teal-800 rounded">
-                              Annuelle récurrente
+                              Chaque mois (×12/an)
                             </span>
                           )}
                         </div>
@@ -650,8 +650,12 @@ export function Finances() {
                       checked={depenseForm.moisOption === 'all'}
                       onChange={() => setDepenseForm({ ...depenseForm, moisOption: 'all' })}
                     />
-                    Annuelle (s&apos;applique à chaque mois d&apos;activité)
+                    Récurrente — retranchée CHAQUE MOIS (×12 sur l&apos;année)
                   </label>
+                  <p className="text-xs text-amber-700 mt-1">
+                    ⚠️ Pour une charge annuelle (ex. assurance 2 400 $/an), saisissez le
+                    montant mensuel (200 $) ici, ou le montant complet sur un mois précis.
+                  </p>
                 </div>
               </div>
 

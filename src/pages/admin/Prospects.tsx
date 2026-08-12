@@ -159,18 +159,28 @@ export function Prospects() {
         <p className="text-sm text-gray-400 italic">Aucun prospect.</p>
       ) : (
         <div className="space-y-3">
-          {visibles.map((l) => (
-            <Card key={l.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {visibles.map((l) => {
+            // Ancienneté du prospect : un NEW qui traîne se voit tout de suite.
+            const joursDepuis = Math.floor((Date.now() - new Date(l.createdAt).getTime()) / 86_400_000);
+            const sansSuivi = l.status === 'NEW' && joursDepuis >= 3;
+            return (
+            <Card key={l.id} className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${sansSuivi ? 'border-l-4 border-l-cshp-red' : ''}`}>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-cshp-black uppercase">{l.lastName}</span>
                   <span className="text-gray-700">{l.firstName}</span>
                   <Badge variant={STATUTS.find((s) => s.value === l.status)?.variant || 'neutral'} className="text-[10px]">
                     {labelStatut(l.status)}
                   </Badge>
+                  {sansSuivi && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 rounded-full">
+                      ⏳ {joursDepuis} j sans suivi
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {l.sport} · {l.requestType} · {l.phone || '—'} · {l.email || '—'}
+                  {l.sport} · {l.requestType} · {l.phone || '—'} · {l.email || '—'} ·
+                  demande du {new Date(l.createdAt).toLocaleDateString('fr-CA')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -208,7 +218,8 @@ export function Prospects() {
                 </button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

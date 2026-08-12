@@ -61,7 +61,14 @@ export async function getChargesPeriode(mois: number, annee: number) {
   };
 }
 
-// Revenus de la période depuis PaymentVersement
+// Revenus de la période depuis PaymentVersement.
+// « En retard » selon le mode :
+//  - cumulatif (défaut) : TOUS les impayés échus à ce jour, quelle que soit la
+//    période consultée (la dette totale du centre).
+//  - période seulement : les échéances DE la période restées impayées et échues.
+// Avant, le bouton du Module financier ne changeait rien (le mode était reçu
+// puis ignoré), et les retards du mois courant disparaissaient de la case
+// rouge parce qu'ils étaient reclassés « en attente ».
 export async function getRevenusperiode(
   mois: number,
   annee: number,
@@ -69,6 +76,9 @@ export async function getRevenusperiode(
 ) {
   const debut = new Date(annee, mois - 1, 1);
   const fin   = new Date(annee, mois, 0, 23, 59, 59);
+  // Jour civil de Montréal : une échéance n'est « échue » que le lendemain.
+  const aujourdhuiISO = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+  const debutAujourdhui = new Date(aujourdhuiISO + 'T00:00:00Z');
 
   // Encaissé = datePaiement dans la période (identique dans les 2 vues)
   const versementsEncaisses = await prisma.paymentVersement.findMany({
@@ -76,26 +86,26 @@ export async function getRevenusperiode(
     include: { member: { include: { sections: true } } }
   });
 
-  // En attente = datePrevue dans la période, sans datePaiement (identique dans les 2 vues)
-  const versementsAttente = await prisma.paymentVersement.findMany({
+  // Impayés de la période (membres INACTIF exclus : un départ n'est pas une créance)
+  const impayesPeriode = await prisma.paymentVersement.findMany({
     where: {
       datePrevue: { gte: debut, lte: fin },
-      datePaiement: null
-    }
-  });
-
-  // En retard — basé sur datePaiement: null et dateEcheance < aujourd'hui
-  const aujourdhui = new Date();
-  const versementsRetard = await prisma.paymentVersement.findMany({
-    where: {
-      datePrevue: { lt: aujourdhui },
       datePaiement: null,
+      member: { status: { not: 'INACTIF' } },
     }
   });
+  // En attente = pas encore échu ; le reste de la période = en retard.
+  const versementsAttente = impayesPeriode.filter(v => v.datePrevue >= debutAujourdhui);
 
-  // Dédupliquer : un versement est soit "en attente" soit "en retard", pas les deux
-  const idsAttente = new Set(versementsAttente.map(v => v.id));
-  const retardsFiltres = versementsRetard.filter(v => !idsAttente.has(v.id));
+  const retardsFiltres = modeCumulatif
+    ? await prisma.paymentVersement.findMany({
+        where: {
+          datePrevue: { lt: debutAujourdhui },
+          datePaiement: null,
+          member: { status: { not: 'INACTIF' } },
+        }
+      })
+    : impayesPeriode.filter(v => v.datePrevue < debutAujourdhui);
 
   const encaisse  = versementsEncaisses.reduce((a, v) => a + v.montant, 0);
   const enAttente = versementsAttente.reduce((a, v) => a + v.montant, 0);

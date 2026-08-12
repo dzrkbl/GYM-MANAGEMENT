@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { masseSalarialePourMois } from '../lib/finances';
 import { getRevenusperiode, getChargesPeriode } from '../lib/finances';
 
 const DIVISEUR_TAXES = 1.14975;
@@ -125,9 +126,17 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     const startDate = new Date(from as string);
     const endDate = new Date(to as string);
     endDate.setHours(23, 59, 59, 999);
-    const today = new Date();
+    // Jour civil de Montréal : « échu » = le jour d'échéance est entièrement passé.
+    const aujourdhuiISO = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+    const debutAujourdhui = new Date(aujourdhuiISO + 'T00:00:00Z');
 
-    // 1. Revenus : Encaisse, En Attente, En Retard (ceux dû ou payé ou en attente) depuis PaymentVersement
+    // 1. Revenus de la période.
+    //    - Encaissé = payé PENDANT la période (datePaiement). Un versement payé
+    //      en juillet pour une échéance d'août ne compte que dans juillet —
+    //      avant, il comptait dans LES DEUX rapports (double comptage) et la
+    //      somme des 12 mois ne retombait jamais sur le rapport annuel.
+    //    - En attente / en retard = échéances DE la période encore impayées
+    //      (membres INACTIF exclus : un départ n'est pas une créance).
     const versements = await prisma.paymentVersement.findMany({
       where: {
         OR: [
@@ -141,6 +150,7 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
             id: true,
             firstName: true,
             lastName: true,
+            status: true,
             sections: { select: { section: true } }
           }
         }
@@ -157,8 +167,9 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
 
     versements.forEach(v => {
       const s = v.member.sections?.[0]?.section || 'INCONNU';
-      const isPaid = !!v.datePaiement;
-      const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < today;
+      const paidInPeriod = !!v.datePaiement && v.datePaiement >= startDate && v.datePaiement <= endDate;
+      const dueInPeriod = !!v.datePrevue && v.datePrevue >= startDate && v.datePrevue <= endDate;
+      const isLate = !v.datePaiement && v.datePrevue && v.datePrevue < debutAujourdhui;
 
       if (!sectionStats[s]) {
         sectionStats[s] = {
@@ -173,16 +184,20 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
         sectionStats[s].membres.add(v.member.id);
       }
 
-      if (isPaid) {
+      if (paidInPeriod) {
         encaisse += v.montant;
         sectionStats[s].encaisse += v.montant;
-      } else if (isLate) {
-        enRetard += v.montant;
-        sectionStats[s].enRetard += v.montant;
-      } else {
-        enAttente += v.montant;
-        sectionStats[s].enAttente += v.montant;
+      } else if (!v.datePaiement && dueInPeriod && v.member.status !== 'INACTIF') {
+        if (isLate) {
+          enRetard += v.montant;
+          sectionStats[s].enRetard += v.montant;
+        } else {
+          enAttente += v.montant;
+          sectionStats[s].enAttente += v.montant;
+        }
       }
+      // Payé hors période (mais dû dedans) : déjà compté dans le rapport du
+      // mois où l'argent est entré — rien à ajouter ici.
     });
 
     const total = encaisse + enAttente + enRetard;
@@ -223,33 +238,61 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
     });
 
     // Sections réellement présentes dans les données de la période (plus de liste figée).
+    // Taux = pointages / (séances tenues × effectif actif de la section) — la
+    // même définition que le tableau de bord. L'ancien calcul (PRESENT / total
+    // des pointages) affichait TOUJOURS 100 % puisque seuls les présents sont
+    // pointés, jamais les absents.
+    const effectifs = await prisma.memberSection.groupBy({
+      by: ['section'],
+      where: { member: { status: 'ACTIF' } },
+      _count: { _all: true },
+    });
+    const effectifDe = (sec: string) => effectifs.find(e => e.section === sec)?._count._all || 0;
+
     const sectionsPres = Array.from(
       new Set(attendances.map(a => a.course?.section).filter((s): s is string => !!s))
     );
     const presencesList = sectionsPres.map(sec => {
       const secAtts = attendances.filter(a => a.course?.section === sec);
-      const totalAtts = secAtts.length;
-      const presents = secAtts.filter(a => a.status === 'PRESENT').length;
+      const presents = secAtts.length;
+      const seances = new Set(secAtts.map(a => `${a.courseId}_${a.date.toISOString().slice(0, 10)}`)).size;
+      const possibles = seances * Math.max(effectifDe(sec), 1);
       return {
         section: sec,
-        taux: totalAtts > 0 ? (presents / totalAtts) * 100 : 0,
+        taux: possibles > 0 ? Math.min(100, (presents / possibles) * 100) : 0,
         presents,
-        total: totalAtts
+        total: possibles,
+        seances
       };
-    }).filter(p => p.total > 0);
+    }).filter(p => p.presents > 0);
 
-    // 3. Masse Salariale
-    const activeCoachs = await prisma.user.findMany({
-      where: { role: { in: ['COACH', 'SECTION_MANAGER'] }, actif: true }
-    });
-    const masseSalarialeMontant = activeCoachs.reduce((sum, c) => sum + (c.remuneration || 0), 0);
+    // 3. Masse salariale : MÊME source que le Module financier (override du mois
+    //    sinon « Gérer les coachs »), sommée sur les mois de la période DÉJÀ
+    //    écoulés — comparer 12 mois de salaires aux revenus de 8 mois donnait
+    //    des « 148 % des revenus » absurdes en cours d'année.
+    let masseSalarialeMontant = 0;
+    let moisComptes = 0;
+    {
+      const [ay, am] = aujourdhuiISO.split('-').map(Number);
+      const cur = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1));
+      const finPeriode = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
+      const moisCourant = new Date(Date.UTC(ay, am - 1, 1));
+      while (cur <= finPeriode && cur <= moisCourant) {
+        masseSalarialeMontant += await masseSalarialePourMois(cur.getUTCMonth() + 1, cur.getUTCFullYear());
+        moisComptes++;
+        cur.setUTCMonth(cur.getUTCMonth() + 1);
+      }
+      masseSalarialeMontant = Math.round(masseSalarialeMontant * 100) / 100;
+    }
     const pourcentageDuRevenu = encaisse > 0 ? (masseSalarialeMontant / encaisse) * 100 : 0;
 
-    // 4. Liste détaillée des retards cumulatifs (sans filtre de date)
+    // 4. Liste détaillée des retards cumulatifs (sans filtre de date).
+    //    Membres INACTIF exclus : un départ ne se relance pas.
     const allLatePayments = await prisma.paymentVersement.findMany({
       where: {
         datePaiement: null,
-        datePrevue: { lt: today }
+        datePrevue: { lt: debutAujourdhui },
+        member: { status: { not: 'INACTIF' } }
       },
       include: {
         member: {
@@ -273,21 +316,45 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
         section: v.member.sections?.[0]?.section || '',
         montant: v.montant,
         date: dateString,
-        joursRetard: Math.max(0, Math.floor((Date.now() - v.datePrevue.getTime()) / 86400000))
+        joursRetard: Math.max(0, Math.floor((debutAujourdhui.getTime() - v.datePrevue.getTime()) / 86400000))
       };
     });
 
     const totalRetard = retardsMapped.reduce((sum, r) => sum + r.montant, 0);
     const nombreDossiersRetard = retardsMapped.length;
 
+    // 5. Renouvellements échus : contrats terminés non renouvelés (membres
+    //    ACTIFS) — à relancer au même titre que les versements en retard.
+    const membresEchus = await prisma.member.findMany({
+      where: { status: 'ACTIF', finContrat: { lt: debutAujourdhui } },
+      include: { versements: true, sections: { select: { section: true } } },
+      orderBy: { finContrat: 'asc' },
+    });
+    const renouvellementsEchus = membresEchus.map(m => {
+      const paye = m.versements.filter(v => v.datePaiement).reduce((n, v) => n + v.montant, 0);
+      return {
+        membreId: m.id,
+        membreNom: `${m.lastName || ''} ${m.firstName || ''}`.trim(),
+        section: m.sections?.[0]?.section || '',
+        finContrat: m.finContrat!.toISOString(),
+        montant: m.montantFinal || 0,
+        resteAncienContrat: Math.max(0, Math.round(((m.montantFinal || 0) - paye) * 100) / 100),
+        telephone: m.parentPhone || m.phone || '',
+        joursEchus: Math.max(0, Math.floor((debutAujourdhui.getTime() - m.finContrat!.getTime()) / 86400000)),
+      };
+    });
+    const totalRenouvellements = renouvellementsEchus.reduce((n, r) => n + r.montant, 0);
+
     return sendSuccess(res, {
       revenus: { encaisse, enAttente, enRetard, total },
       parSection,
       presences: presencesList,
-      masseSalariale: { montant: masseSalarialeMontant, pourcentageDuRevenu },
+      masseSalariale: { montant: masseSalarialeMontant, moisComptes, pourcentageDuRevenu },
       retards: retardsMapped,
       totalRetard,
-      nombreDossiersRetard
+      nombreDossiersRetard,
+      renouvellementsEchus,
+      totalRenouvellements
     });
 
   } catch (error) {
