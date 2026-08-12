@@ -59,6 +59,10 @@ app.use(express.json({ limit: '2mb' }));
 // /api/cron/reminders reste recommandé (il réveille aussi l'application).
 let derniereTentativeRappels = 0;
 let rappelsEnCours = false;
+// La première tournée attend la fin des migrations : au déploiement d'une
+// nouvelle colonne, un ping entrant déclenchait la tournée quelques secondes
+// AVANT que « prisma migrate deploy » (en arrière-plan) ne l'ait créée.
+let basePrete = !process.env.DATABASE_URL;
 function heureMontreal(): number {
   return parseInt(
     new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })
@@ -69,7 +73,7 @@ function heureMontreal(): number {
 app.use((_req, _res, next) => {
   const maintenant = Date.now();
   const h = heureMontreal();
-  if (!rappelsEnCours && maintenant - derniereTentativeRappels > 6 * 3600_000 && h >= 8 && h < 20) {
+  if (basePrete && !rappelsEnCours && maintenant - derniereTentativeRappels > 6 * 3600_000 && h >= 8 && h < 20) {
     rappelsEnCours = true;
     derniereTentativeRappels = maintenant;
     runAllReminders()
@@ -152,6 +156,9 @@ async function startServer() {
     if (process.env.DATABASE_URL) {
       console.log('⏳ Running database migrations in the background...');
       exec('npx prisma migrate deploy', async (error, stdout, stderr) => {
+        // Dans tous les cas, libérer les rappels : le schéma est soit à jour,
+        // soit inchangé depuis le déploiement précédent.
+        basePrete = true;
         if (error) {
           console.error(`❌ Migration error: ${error.message}`);
           return;
