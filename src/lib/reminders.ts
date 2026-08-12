@@ -134,8 +134,9 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
       }
 
       const nom = `${v.member.firstName} ${v.member.lastName}`;
-      // Frais de retard courus (règlement art. 6), sauf si exonérés par l'admin.
-      const frais = enRetard ? fraisRetard(v, now) : 0;
+      // Frais de retard : le montant FIXÉ par l'admin s'il y en a un, sinon le
+      // compteur automatique (10 $/sem), sauf exonération.
+      const frais = enRetard ? (v.fraisRetardFactures ?? fraisRetard(v, now)) : 0;
       const html = htmlCourriel(`
         <p>${enRetard
           ? `Un versement pour <strong>${nom}</strong> est <strong>en retard</strong>.`
@@ -143,7 +144,9 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
         <div style="background:#f5f5f5;padding:15px;border-radius:8px;margin:20px 0;">
           <p><strong>Montant :</strong> ${formatMontant(v.montant)}</p>
           <p><strong>Échéance :</strong> ${formatDate(v.datePrevue)}</p>
-          ${frais > 0 ? `<p><strong>Frais de retard courus :</strong> ${formatMontant(frais)} (${FRAIS_RETARD_PAR_SEMAINE} $ par semaine de retard — règlement, art. 6)</p>` : ''}
+          ${frais > 0 ? (v.fraisRetardFactures != null
+            ? `<p><strong>Frais de retard :</strong> ${formatMontant(frais)}</p>`
+            : `<p><strong>Frais de retard courus :</strong> ${formatMontant(frais)} (${FRAIS_RETARD_PAR_SEMAINE} $ par semaine de retard — règlement, art. 6)</p>`) : ''}
         </div>
         ${enRetard ? `<p>Conformément au règlement intérieur, tout retard de plus d'une semaine entraîne des frais de ${FRAIS_RETARD_PAR_SEMAINE} $ par semaine. Merci de régulariser rapidement — contactez-nous en cas de difficulté.</p>` : ''}
         <p>Pour toute question : payements@centresportifhp.com</p>`);

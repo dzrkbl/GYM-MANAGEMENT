@@ -10,21 +10,46 @@ import { logAudit } from '../lib/audit';
 
 const router = Router();
 
-// PATCH /api/versements/:id/frais-retard — exonérer (ou rétablir) les frais de
-// retard d'un versement. Décision financière : ADMIN seulement.
+// PATCH /api/versements/:id/frais-retard — gérer les frais de retard d'un
+// versement. Décision financière : ADMIN seulement.
+//   { exonerer: true|false }        → exonérer / rétablir le compteur automatique
+//   { montantFacture: 10 }          → charger un montant CHOISI (remplace le
+//                                     compteur : 4 semaines = 40 $ courus, on
+//                                     peut ne charger que 10 $)
+//   { montantFacture: null }        → revenir au compteur automatique
 router.patch('/:id/frais-retard', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { exonerer } = z.object({ exonerer: z.boolean() }).parse(req.body);
+    const { exonerer, montantFacture } = z.object({
+      exonerer: z.boolean().optional(),
+      montantFacture: z.number().min(0).max(10_000).nullable().optional(),
+    }).refine((d) => d.exonerer !== undefined || d.montantFacture !== undefined,
+      { message: 'exonerer ou montantFacture requis' }).parse(req.body);
+
+    const data: any = {};
+    if (exonerer !== undefined) {
+      data.exonererFraisRetard = exonerer;
+      if (exonerer) data.fraisRetardFactures = null; // exonéré = aucun frais fixé
+    }
+    if (montantFacture !== undefined) {
+      data.fraisRetardFactures = montantFacture;
+      if (montantFacture !== null) data.exonererFraisRetard = false;
+    }
+
     const versement = await prisma.paymentVersement.update({
       where: { id: req.params.id },
-      data: { exonererFraisRetard: exonerer },
+      data,
       include: { member: { select: { firstName: true, lastName: true } } },
     });
+    const quoi = exonerer !== undefined
+      ? `Frais de retard ${exonerer ? 'EXONÉRÉS' : 'rétablis'}`
+      : montantFacture === null
+        ? 'Frais de retard remis au compteur automatique'
+        : `Frais de retard fixés à ${montantFacture} $`;
     logAudit(req, {
       action: 'UPDATE',
       entity: 'PaymentVersement',
       entityId: versement.id,
-      description: `Frais de retard ${exonerer ? 'EXONÉRÉS' : 'rétablis'} — ${versement.member.firstName} ${versement.member.lastName}, versement n°${versement.numeroVersement}`,
+      description: `${quoi} — ${versement.member.firstName} ${versement.member.lastName}, versement n°${versement.numeroVersement}`,
     });
     return sendSuccess(res, versement);
   } catch (error) {

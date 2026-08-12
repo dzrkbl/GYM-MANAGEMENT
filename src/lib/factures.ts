@@ -39,7 +39,7 @@ type MembreFacture = {
   parentEmail: string | null;
   parentPhone: string | null;
   membreFamilleId: string | null;
-  versements: { numeroVersement: number; montant: number; datePaiement: Date | null; methodePaiement: string | null }[];
+  versements: { numeroVersement: number; montant: number; datePaiement: Date | null; methodePaiement: string | null; fraisRetardFactures?: number | null }[];
 };
 
 // Regroupe les membres sélectionnés par famille (union-find) : lien explicite
@@ -193,6 +193,16 @@ export function genererFacturePdf(famille: MembreFacture[], annee: number): { fi
       doc.text(formatMontant(v.montant), right, y, { align: 'right' });
       sousTotal += v.montant;
       y += 6;
+      // Frais de retard CHARGÉS par l'admin sur ce versement (montant décidé,
+      // pas le compteur automatique) : ligne distincte sur la facture.
+      if (v.fraisRetardFactures && v.fraisRetardFactures > 0) {
+        nouvellePageSiBesoin();
+        doc.text(formatDate(v.datePaiement!), left, y);
+        doc.text(`Frais de retard — versement n°${v.numeroVersement}`, left + 30, y);
+        doc.text(formatMontant(v.fraisRetardFactures), right, y, { align: 'right' });
+        sousTotal += v.fraisRetardFactures;
+        y += 6;
+      }
     }
     if (famille.length > 1) {
       nouvellePageSiBesoin();
@@ -251,7 +261,7 @@ export async function genererFactures(memberIds: string[], annee: number) {
       id: true, firstName: true, lastName: true,
       parentName: true, parentEmail: true, parentPhone: true, membreFamilleId: true,
       versements: {
-        select: { numeroVersement: true, montant: true, datePaiement: true, methodePaiement: true },
+        select: { numeroVersement: true, montant: true, datePaiement: true, methodePaiement: true, fraisRetardFactures: true },
       },
     },
   });

@@ -660,28 +660,56 @@ export function MembreDetail() {
 
                         <div className="text-xs text-gray-500 space-y-1">
                           <p>Échéance prévue : <strong>{formatDateLocal(v.datePrevue, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></p>
-                          {isLate && (frais > 0 || v.exonererFraisRetard) && (
+                          {((isLate && (frais > 0 || v.exonererFraisRetard)) || v.fraisRetardFactures != null) && (
                             <p className={v.exonererFraisRetard ? 'text-gray-400' : 'text-red-600 font-semibold'}>
                               {v.exonererFraisRetard
                                 ? 'Frais de retard exonérés'
-                                : `Frais de retard courus : ${frais} $ (10 $/semaine)`}
+                                : v.fraisRetardFactures != null
+                                  ? <>Frais chargés : {v.fraisRetardFactures.toFixed(2)} $ <span className="text-gray-400 font-normal">(compteur : {frais} $)</span></>
+                                  : `Frais de retard courus : ${frais} $ (10 $/semaine)`}
                               {user?.role === 'ADMIN' && (
-                                <button
-                                  className="ml-2 underline text-[11px] text-gray-500 hover:text-gray-800"
-                                  onClick={async () => {
-                                    try {
-                                      await apiFetch(`/versements/${v.id}/frais-retard`, {
-                                        method: 'PATCH',
-                                        body: JSON.stringify({ exonerer: !v.exonererFraisRetard }),
-                                      });
-                                      fetchMemberData();
-                                    } catch (err: any) {
-                                      alert(err?.message || 'Erreur');
-                                    }
-                                  }}
-                                >
-                                  {v.exonererFraisRetard ? 'Rétablir les frais' : 'Exonérer'}
-                                </button>
+                                <>
+                                  <button
+                                    className="ml-2 underline text-[11px] text-gray-500 hover:text-gray-800"
+                                    onClick={async () => {
+                                      // Charger un montant CHOISI (ex. 4 sem = 40 $ courus, ne charger que 10 $).
+                                      const saisie = prompt(
+                                        `Frais de retard à charger pour ce versement\n(compteur automatique : ${frais} $ · vide = revenir à l'automatique · 0 = aucun frais)`,
+                                        v.fraisRetardFactures != null ? String(v.fraisRetardFactures) : ''
+                                      );
+                                      if (saisie === null) return;
+                                      const montant = saisie.trim() === '' ? null : Number(saisie.replace(',', '.'));
+                                      if (montant !== null && (isNaN(montant) || montant < 0)) { alert('Montant invalide'); return; }
+                                      try {
+                                        await apiFetch(`/versements/${v.id}/frais-retard`, {
+                                          method: 'PATCH',
+                                          body: JSON.stringify({ montantFacture: montant }),
+                                        });
+                                        fetchMemberData();
+                                      } catch (err: any) {
+                                        alert(err?.message || 'Erreur');
+                                      }
+                                    }}
+                                  >
+                                    {v.fraisRetardFactures != null ? 'Modifier le montant' : 'Charger un montant'}
+                                  </button>
+                                  <button
+                                    className="ml-2 underline text-[11px] text-gray-500 hover:text-gray-800"
+                                    onClick={async () => {
+                                      try {
+                                        await apiFetch(`/versements/${v.id}/frais-retard`, {
+                                          method: 'PATCH',
+                                          body: JSON.stringify({ exonerer: !v.exonererFraisRetard }),
+                                        });
+                                        fetchMemberData();
+                                      } catch (err: any) {
+                                        alert(err?.message || 'Erreur');
+                                      }
+                                    }}
+                                  >
+                                    {v.exonererFraisRetard ? 'Rétablir les frais' : 'Exonérer'}
+                                  </button>
+                                </>
                               )}
                             </p>
                           )}
