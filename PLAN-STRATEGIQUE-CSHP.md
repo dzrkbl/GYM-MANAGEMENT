@@ -802,7 +802,31 @@ Meta. TikTok Ads : pas avec un budget de 675 $ (minimums ~20 $/j par groupe d'an
 usure créative rapide) — organique seulement en 2026, test payant envisageable au T1 2027
 si le CPL Meta est bon.
 
-### 8.9 Mesure du succès dans VOTRE app (pas dans Ads Manager)
+### 8.9 Le système automatisé (n8n) — construit le 3 août 2026
+
+Deux workflows créés dans votre n8n (projet personnel), inactifs jusqu'à configuration :
+
+**« CSHP — Rapport Meta Ads + Analyse Claude »** — le moteur de feedback :
+lundi et jeudi 7 h → interroge l'API Meta (stats pub par pub, 7 jours) → calcule le CPL et
+applique automatiquement les kill rules du § 8.6 (COUPER / ALERTE / SCALER / GARDER) →
+journalise chaque pub dans le Google Sheet « CSHP Ads Performance » (onglet Journal) →
+Claude génère une analyse en français (verdict + action par pub + 3 priorités de la
+semaine) → onglet Analyses. Configuration requise : jeton Meta (utilisateur système,
+`ads_read`), ID du compte publicitaire dans l'URL, création du Google Sheet.
+
+**« CSHP — Lead Meta vers App + Journal »** — la capture :
+chaque nouveau lead d'un formulaire Meta → normalisation (nom, téléphone, sport, âge de
+l'enfant) → création du prospect dans l'application (POST /api/leads, pipeline
+NEW→CONTACTED→CONVERTED existant) → journal Sheets avec **la pub d'origine**, ce qui permet
+de mesurer la conversion par créatif et non seulement le coût par lead. Configuration
+requise : connexion OAuth Facebook dans n8n, choix page/formulaire, URL de l'app.
+
+**La boucle de feedback complète** : Meta → n8n → Google Sheets ↔ lu par Claude en session
+(connecteur Drive autorisé) → recommandations → vous ajustez dans Ads Manager (10 min,
+2×/sem.). Le Sheet sert de pont là où les connecteurs personnalisés sont bloqués.
+Coût du système : ~0 $ (n8n et Claude déjà payés par vos accès existants).
+
+### 8.10 Mesure du succès dans VOTRE app (pas dans Ads Manager)
 
 Le tableau de bord Meta mesure des leads ; votre app mesure des ventes. Rapport
 hebdomadaire (dimanche, 10 min, avec le bloc admin) : leads reçus par source → % contactés
