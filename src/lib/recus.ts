@@ -183,14 +183,21 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
 
   // Rappel du prochain engagement : versement suivant impayé, sinon fin de contrat.
   const prochain = await prisma.paymentVersement.findFirst({
-    where: { membreId: versement.membreId, datePaiement: null },
+    where: { membreId: versement.membreId, datePaiement: null, montant: { gt: 0 } },
     orderBy: { datePrevue: 'asc' },
   });
   const finContrat = versement.member.finContrat;
+  const aujourdhuiMtl = new Date(
+    new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date()) + 'T00:00:00Z'
+  );
   const rappelProchain = prochain
-    ? `<p><strong>Prochain versement :</strong> ${formatMontant(prochain.montant)},
-       prévu le ${prochain.datePrevue.toLocaleDateString('fr-CA')}. Un rappel automatique
-       vous sera envoyé quelques jours avant l'échéance.</p>`
+    ? (prochain.datePrevue < aujourdhuiMtl
+        ? `<p><strong>Versement restant :</strong> ${formatMontant(prochain.montant)},
+           échu depuis le ${prochain.datePrevue.toLocaleDateString('fr-CA')} — merci de le
+           régulariser dès que possible (contactez-nous en cas de question).</p>`
+        : `<p><strong>Prochain versement :</strong> ${formatMontant(prochain.montant)},
+           prévu le ${prochain.datePrevue.toLocaleDateString('fr-CA')}. Un rappel automatique
+           vous sera envoyé quelques jours avant l'échéance.</p>`)
     : finContrat
       ? `<p><strong>Tous les versements sont réglés.</strong> L'inscription est valide
          jusqu'au ${finContrat.toLocaleDateString('fr-CA')} — nous vous contacterons à

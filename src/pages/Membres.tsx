@@ -128,6 +128,10 @@ export function Membres() {
   // Statut de paiement en temps réel — tient compte de la fin de contrat :
   // un échéancier soldé n'est « à jour » que tant que le contrat court.
   const getPaiementStatus = (member: any) => {
+    // Un membre parti (INACTIF) n'est plus suivi : pas de faux « En retard ».
+    if (member.status === 'INACTIF') {
+      return { label: '— (parti)', colorClass: 'bg-gray-50 text-gray-400 border-gray-200' };
+    }
     const etat = etatPaiement(member);
     switch (etat.type) {
       case 'GRATUIT':

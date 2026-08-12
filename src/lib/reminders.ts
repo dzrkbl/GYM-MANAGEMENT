@@ -4,13 +4,20 @@ import { fraisRetard, FRAIS_RETARD_PAR_SEMAINE } from './paiements';
 import { envoyerSauvegardeSiDue } from './sauvegarde';
 
 // ---------- Helpers de dates ----------
-function jourDebut(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
-function jourFin(d: Date): Date { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
-function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+// Tout raisonne en JOUR CIVIL DE MONTRÉAL. Le serveur tourne en UTC : en hiver
+// (UTC-5), une tournée lancée à 19 h 30 à Montréal est déjà « demain » en UTC —
+// avec des jours UTC, les rappels J-7/J0 partaient un jour trop tôt et l'alerte
+// « cours demain » visait le surlendemain.
+function dateMontrealISO(d: Date): string {
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(d);
+}
+function jourDebut(d: Date): Date { return new Date(dateMontrealISO(d) + 'T00:00:00Z'); }
+function jourFin(d: Date): Date { return new Date(dateMontrealISO(d) + 'T23:59:59.999Z'); }
+function addDays(d: Date, n: number): Date { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; }
 function lundiDeLaSemaine(d: Date): Date {
   const x = jourDebut(d);
-  const décalage = (x.getDay() + 6) % 7; // 0 = lundi
-  x.setDate(x.getDate() - décalage);
+  const décalage = (x.getUTCDay() + 6) % 7; // 0 = lundi
+  x.setUTCDate(x.getUTCDate() - décalage);
   return x;
 }
 
@@ -84,18 +91,19 @@ export async function sendPaymentReminders(now = new Date()): Promise<Record<str
   // versements impayés restent dans leur dossier.
   const membreActif = { member: { status: { not: 'INACTIF' } } };
 
+  // montant > 0 : jamais de rappel pour un versement à 0 $ (lignes vides d'import).
   const niveaux: Array<{ type: string; libelle: string; where: any }> = [
     {
       type: 'PAIEMENT_J7', libelle: 'dans 7 jours',
-      where: { datePaiement: null, datePrevue: { gte: jourDebut(addDays(now, 7)), lte: jourFin(addDays(now, 7)) }, ...membreActif },
+      where: { datePaiement: null, montant: { gt: 0 }, datePrevue: { gte: jourDebut(addDays(now, 7)), lte: jourFin(addDays(now, 7)) }, ...membreActif },
     },
     {
       type: 'PAIEMENT_J0', libelle: "aujourd'hui",
-      where: { datePaiement: null, datePrevue: { gte: jourDebut(now), lte: jourFin(now) }, ...membreActif },
+      where: { datePaiement: null, montant: { gt: 0 }, datePrevue: { gte: jourDebut(now), lte: jourFin(now) }, ...membreActif },
     },
     {
       type: 'PAIEMENT_RETARD', libelle: 'en retard',
-      where: { datePaiement: null, datePrevue: { lt: jourDebut(now) }, ...membreActif },
+      where: { datePaiement: null, montant: { gt: 0 }, datePrevue: { lt: jourDebut(now) }, ...membreActif },
     },
   ];
 
@@ -360,9 +368,9 @@ export async function sendEnAttenteAlerts(now = new Date()): Promise<Stat> {
   const notif = process.env.INSCRIPTION_NOTIF_EMAIL;
   if (!notif) return s; // pas d'adresse admin configurée
 
-  const demain = addDays(now, 1);
-  const codeDemain = CODES_JOURS[demain.getDay()];
-  const dateDemain = `${demain.getFullYear()}-${String(demain.getMonth() + 1).padStart(2, '0')}-${String(demain.getDate()).padStart(2, '0')}`;
+  // « Demain » au sens du calendrier de Montréal (pas du fuseau du serveur).
+  const dateDemain = dateMontrealISO(addDays(now, 1));
+  const codeDemain = CODES_JOURS[new Date(dateDemain + 'T00:00:00Z').getUTCDay()];
 
   const [membres, cours] = await Promise.all([
     prisma.member.findMany({
@@ -468,7 +476,7 @@ export async function sendRetardRepeteAlerts(now = new Date()): Promise<Stat> {
     parMembre.set(v.membreId, entree);
   }
 
-  const mois = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const mois = dateMontrealISO(now).slice(0, 7); // mois civil de Montréal
   const recidivistes: Array<{ id: string; nom: string; tel: string; retards: number; du: number }> = [];
   for (const [id, e] of parMembre) {
     if (e.retards < 2) continue;
