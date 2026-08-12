@@ -806,24 +806,28 @@ si le CPL Meta est bon.
 
 Deux workflows créés dans votre n8n (projet personnel), inactifs jusqu'à configuration :
 
+Le stockage utilise les **Data Tables intégrées à n8n** (`cshp_ads_journal`,
+`cshp_ads_analyses`, `cshp_leads`) — zéro credential, zéro OAuth Google (l'instance n8n
+exige un client OAuth maison pour Google Sheets, donc abandonné). Les données se
+consultent dans n8n → Data tables, et Claude les lit en session via son accès n8n.
+
 **« CSHP — Rapport Meta Ads + Analyse Claude »** — le moteur de feedback :
 lundi et jeudi 7 h → interroge l'API Meta (stats pub par pub, 7 jours) → calcule le CPL et
 applique automatiquement les kill rules du § 8.6 (COUPER / ALERTE / SCALER / GARDER) →
-journalise chaque pub dans le Google Sheet « CSHP Ads Performance » (onglet Journal) →
-Claude génère une analyse en français (verdict + action par pub + 3 priorités de la
-semaine) → onglet Analyses. Configuration requise : jeton Meta (utilisateur système,
-`ads_read`), ID du compte publicitaire dans l'URL, création du Google Sheet.
+journalise chaque pub dans `cshp_ads_journal` → Claude génère une analyse en français
+(verdict + action par pub + 3 priorités de la semaine) → `cshp_ads_analyses`.
+Configuration requise : jeton Meta (utilisateur système, `ads_read`) + ID du compte
+publicitaire dans l'URL.
 
 **« CSHP — Lead Meta vers App + Journal »** — la capture :
 chaque nouveau lead d'un formulaire Meta → normalisation (nom, téléphone, sport, âge de
 l'enfant) → création du prospect dans l'application (POST /api/leads, pipeline
-NEW→CONTACTED→CONVERTED existant) → journal Sheets avec **la pub d'origine**, ce qui permet
+NEW→CONTACTED→CONVERTED existant) → `cshp_leads` avec **la pub d'origine**, ce qui permet
 de mesurer la conversion par créatif et non seulement le coût par lead. Configuration
 requise : connexion OAuth Facebook dans n8n, choix page/formulaire, URL de l'app.
 
-**La boucle de feedback complète** : Meta → n8n → Google Sheets ↔ lu par Claude en session
-(connecteur Drive autorisé) → recommandations → vous ajustez dans Ads Manager (10 min,
-2×/sem.). Le Sheet sert de pont là où les connecteurs personnalisés sont bloqués.
+**La boucle de feedback complète** : Meta → n8n → Data Tables ↔ lues par Claude en session
+(accès n8n autorisé) → recommandations → vous ajustez dans Ads Manager (10 min, 2×/sem.).
 Coût du système : ~0 $ (n8n et Claude déjà payés par vos accès existants).
 
 ### 8.10 Mesure du succès dans VOTRE app (pas dans Ads Manager)
