@@ -91,6 +91,52 @@ export function MembreDetail() {
     }
   };
   const qe = (k: string) => (e: any) => setQuickEdit((p: any) => ({ ...p, [k]: e.target.value }));
+
+  // --- Renouvellement en un geste : nouveau contrat + encaissement immédiat.
+  // Cas type : le parent passe payer le trimestre suivant — l'échéancier de
+  // l'ancien contrat est soldé, il n'y a donc RIEN à « encaisser » sans ça. ---
+  const [isRenewOpen, setIsRenewOpen] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
+  const [renew, setRenew] = useState<any>({});
+
+  const openRenew = () => {
+    const plan = member?.plan === 'ANNUEL' ? 'ANNUEL' : 'TRIMESTRIEL';
+    setRenew({
+      dateDebut: todayLocalISO(),
+      plan,
+      montant: member?.montantFinal || (plan === 'ANNUEL' ? 790 : 250),
+      nbVersements: 1,
+      encaisser: true,
+      methode: 'COMPTANT',
+      datePaiement: todayLocalISO(),
+    });
+    setIsRenewOpen(true);
+  };
+
+  const submitRenew = async () => {
+    setIsRenewing(true);
+    try {
+      await apiFetch(`/membres/${member.id}/renouveler`, {
+        method: 'POST',
+        body: JSON.stringify({
+          dateDebut: renew.dateDebut,
+          plan: renew.plan,
+          montant: Number(renew.montant),
+          nbVersements: renew.plan === 'TRIMESTRIEL' ? 1 : Number(renew.nbVersements),
+          premierPaiement: renew.encaisser
+            ? { methode: renew.methode, datePaiement: renew.datePaiement }
+            : null,
+        }),
+      });
+      setIsRenewOpen(false);
+      fetchMemberData();
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors du renouvellement');
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+  const rn = (k: string) => (e: any) => setRenew((p: any) => ({ ...p, [k]: e.target.value }));
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [selectedSection, setSelectedSection] = useState<{name: string, belt: string} | null>(null);
@@ -567,11 +613,15 @@ export function MembreDetail() {
             const etat = etatPaiement(member);
             if (etat.type === 'RENOUVELLEMENT_DU') {
               return (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-semibold">
-                  🔄 Contrat terminé le {formatDateLocal(etat.date)} — le renouvellement
-                  {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} est à percevoir.
-                  {etat.reste ? ` Il reste aussi ${formatMontant(etat.reste)} impayés sur l'ancien contrat.` : ''}
-                  {' '}Réinscrivez le membre (nouvelle date d'inscription + échéancier) via « Modifier ».
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <span>
+                    🔄 Contrat terminé le {formatDateLocal(etat.date)} — le renouvellement
+                    {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} est à percevoir.
+                    {etat.reste ? ` Il reste aussi ${formatMontant(etat.reste)} impayés sur l'ancien contrat.` : ''}
+                  </span>
+                  <Button onClick={openRenew} className="shrink-0 bg-cshp-red hover:bg-red-700 text-white h-10">
+                    🔄 Renouveler maintenant
+                  </Button>
                 </div>
               );
             }
@@ -585,9 +635,14 @@ export function MembreDetail() {
             }
             if (etat.type === 'RENOUVELLEMENT_PROCHE') {
               return (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                  🔄 Le contrat se termine le {formatDateLocal(etat.date)} — renouvellement
-                  {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} à prévoir.
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <span>
+                    🔄 Le contrat se termine le {formatDateLocal(etat.date)} — renouvellement
+                    {etat.montant ? ` (${formatMontant(etat.montant)})` : ''} à prévoir.
+                  </span>
+                  <Button variant="outline" onClick={openRenew} className="shrink-0 h-10 border-amber-300 text-amber-800">
+                    🔄 Renouveler
+                  </Button>
                 </div>
               );
             }
@@ -609,11 +664,17 @@ export function MembreDetail() {
                 {Number(member.rabaisCustomPct) > 0 && <p>• Rabais manuel appliqué : -{member.rabaisCustomPct}%</p>}
               </div>
             </div>
-            <div className="sm:text-right">
+            <div className="sm:text-right space-y-2">
               <span className="text-xs text-slate-400 block uppercase font-bold">Montant contractuel final :</span>
               <span className="text-3xl font-extrabold text-cshp-red block">
                 {member.montantFinal ? `${member.montantFinal.toFixed(2)} $` : '0.00 $'}
               </span>
+              <button
+                onClick={openRenew}
+                className="text-xs font-bold text-slate-300 hover:text-white underline underline-offset-2"
+              >
+                🔄 Renouveler le contrat
+              </button>
             </div>
           </div>
 
@@ -882,6 +943,98 @@ export function MembreDetail() {
       )}
 
       {/* --- TOUTES LES MODALES --- */}
+
+      {/* MODALE RENOUVELLEMENT : nouveau contrat + encaissement immédiat */}
+      <Modal isOpen={isRenewOpen} onClose={() => !isRenewing && setIsRenewOpen(false)} title="Renouveler le contrat" width="lg">
+        <div className="space-y-4">
+          <p className="text-xs text-cshp-gray -mt-2">
+            Crée le nouveau contrat ({renew.plan === 'ANNUEL' ? '12 mois' : '3 mois'}) et ajoute son
+            échéancier à la suite de l'historique — rien n'est effacé, l'ancienneté ne change pas.
+            Le reçu part automatiquement (sauf comptant).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-1 text-sm font-medium text-cshp-black">Formule</label>
+              <select
+                value={renew.plan}
+                onChange={(e) => setRenew((p: any) => ({
+                  ...p, plan: e.target.value,
+                  montant: e.target.value === 'ANNUEL' ? (member?.plan === 'ANNUEL' && member?.montantFinal ? member.montantFinal : 790) : (member?.plan === 'TRIMESTRIEL' && member?.montantFinal ? member.montantFinal : 250),
+                  nbVersements: 1,
+                }))}
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
+              >
+                <option value="TRIMESTRIEL">Trimestriel (3 mois)</option>
+                <option value="ANNUEL">Annuel (12 mois)</option>
+              </select>
+            </div>
+            <Input label="Montant du contrat ($)" type="number" step="0.01" value={renew.montant} onChange={rn('montant')} />
+            <Input label="Début du nouveau contrat" type="date" value={renew.dateDebut} onChange={rn('dateDebut')} />
+            <div>
+              <label className="block mb-1 text-sm font-medium text-cshp-black">Nombre de versements</label>
+              {renew.plan === 'TRIMESTRIEL' ? (
+                <div className="min-h-[44px] border border-gray-200 rounded-lg px-3 bg-gray-50 flex items-center text-sm text-cshp-gray">
+                  1 fois (règle du trimestriel)
+                </div>
+              ) : (
+                <select
+                  value={renew.nbVersements}
+                  onChange={rn('nbVersements')}
+                  className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
+                >
+                  <option value={1}>1 fois</option>
+                  <option value={2}>2 fois (1 par mois)</option>
+                  <option value={3}>3 fois (1 par mois)</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-cshp-black font-medium">
+            <input
+              type="checkbox"
+              checked={!!renew.encaisser}
+              onChange={(e) => setRenew((p: any) => ({ ...p, encaisser: e.target.checked }))}
+              className="w-5 h-5 rounded text-cshp-red focus:ring-cshp-red"
+            />
+            Encaisser le 1ᵉʳ versement maintenant
+          </label>
+          {renew.encaisser && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div>
+                <label className="block mb-1 text-sm font-medium text-cshp-black">Méthode</label>
+                <select
+                  value={renew.methode}
+                  onChange={rn('methode')}
+                  className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:outline-none focus:ring-2 focus:ring-cshp-red"
+                >
+                  <option value="COMPTANT">COMPTANT</option>
+                  <option value="VIREMENT">VIREMENT</option>
+                  <option value="CHEQUE">CHÈQUE</option>
+                  <option value="CARTE">CARTE</option>
+                </select>
+              </div>
+              <Input label="Date du paiement" type="date" value={renew.datePaiement} onChange={rn('datePaiement')} />
+            </div>
+          )}
+
+          <div className="text-xs text-cshp-gray bg-slate-50 border border-slate-200 rounded-lg p-3">
+            Résumé : contrat du <strong>{renew.dateDebut}</strong>, {renew.plan === 'ANNUEL' ? 'annuel' : 'trimestriel'},{' '}
+            <strong>{Number(renew.montant || 0).toFixed(2)} $</strong> en{' '}
+            {renew.plan === 'TRIMESTRIEL' ? 1 : renew.nbVersements} versement(s)
+            {renew.encaisser ? ' — 1ᵉʳ versement encaissé immédiatement.' : ' — aucun encaissement immédiat.'}
+          </div>
+
+          <div className="flex gap-3 pt-3 border-t border-gray-100">
+            <Button variant="outline" onClick={() => setIsRenewOpen(false)} className="flex-1" disabled={isRenewing}>
+              Annuler
+            </Button>
+            <Button onClick={submitRenew} isLoading={isRenewing} className="flex-1 bg-cshp-red hover:bg-red-700 text-white">
+              Confirmer le renouvellement
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* MODALE ÉDITION RAPIDE : champs simples, sans toucher au plan ni à l'échéancier */}
       <Modal isOpen={isQuickEditOpen} onClose={() => !isQuickSaving && setIsQuickEditOpen(false)} title="Édition rapide" width="lg">

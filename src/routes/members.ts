@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { calculerMontantFinal, calculerFinContrat, dateAMidi, TARIFS } from '../lib/tarifs';
+import { calculerMontantFinal, calculerFinContrat, dateAMidi, ajouterMoisISO, TARIFS } from '../lib/tarifs';
+import { activerSiPremierPaiement, normalizeMethodePaiement } from '../lib/paiements';
+import { sendRecuVersementBackground } from '../lib/recus';
 import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
@@ -366,6 +368,101 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     return sendError(res, 'Erreur de modification', 500);
+  }
+});
+
+// POST /api/membres/:id/renouveler — renouvellement de contrat en un geste.
+// Cas type : le parent passe payer le trimestre suivant. Crée le NOUVEAU
+// contrat (dateInscription = date choisie, finContrat recalculée, montantFinal
+// = montant convenu), AJOUTE le nouvel échéancier à la suite de l'historique
+// (rien n'est supprimé, l'ancienneté signupDate ne bouge pas) et, si demandé,
+// encaisse immédiatement le premier versement (reçu automatique sauf CASH).
+router.post('/:id/renouveler', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const schema = z.object({
+      dateDebut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide'),
+      plan: z.enum(['TRIMESTRIEL', 'ANNUEL']),
+      montant: z.number().positive('Le montant doit être positif'),
+      nbVersements: z.number().int().min(1).max(3).default(1),
+      premierPaiement: z.object({
+        methode: z.string(),
+        datePaiement: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }).optional().nullable(),
+    });
+    const data = schema.parse(req.body);
+
+    const membre = await prisma.member.findUnique({
+      where: { id: req.params.id },
+      include: { versements: true },
+    });
+    if (!membre) return sendError(res, 'Membre introuvable', 404);
+
+    // Le trimestriel se paie en une fois (règle du centre).
+    const nbVersements = data.plan === 'TRIMESTRIEL' ? 1 : data.nbVersements;
+
+    let methode: ReturnType<typeof normalizeMethodePaiement> = null;
+    if (data.premierPaiement) {
+      methode = normalizeMethodePaiement(data.premierPaiement.methode);
+      if (!methode) return sendError(res, 'Méthode de paiement invalide', 400);
+    }
+
+    // Échéancier : même répartition des arrondis que le formulaire membre
+    // (montant de base au cent inférieur, solde sur le dernier versement).
+    const base = Math.floor((data.montant / nbVersements) * 100) / 100;
+    const numeroDepart = membre.versements.reduce((max, v) => Math.max(max, v.numeroVersement), 0) + 1;
+    const nouveaux = Array.from({ length: nbVersements }, (_, i) => ({
+      membreId: membre.id,
+      numeroVersement: numeroDepart + i,
+      montant: i === nbVersements - 1
+        ? Math.round((data.montant - base * (nbVersements - 1)) * 100) / 100
+        : base,
+      datePrevue: dateAMidi(ajouterMoisISO(data.dateDebut, i)),
+      datePaiement: i === 0 && data.premierPaiement ? dateAMidi(data.premierPaiement.datePaiement) : null,
+      methodePaiement: i === 0 && data.premierPaiement ? methode : null,
+      note: `Renouvellement du ${data.dateDebut}`,
+    }));
+
+    const finContrat = calculerFinContrat(data.dateDebut, data.plan);
+
+    await prisma.$transaction([
+      prisma.member.update({
+        where: { id: membre.id },
+        data: {
+          plan: data.plan,
+          dateInscription: dateAMidi(data.dateDebut),
+          finContrat,
+          montantFinal: data.montant,
+          // Un membre parti ou en attente qui renouvelle est de retour.
+          ...(data.premierPaiement && membre.status !== 'ACTIF' ? { status: 'ACTIF' } : {}),
+        },
+      }),
+      prisma.paymentVersement.createMany({ data: nouveaux }),
+    ]);
+
+    if (data.premierPaiement) {
+      await activerSiPremierPaiement(membre.id);
+      const premier = await prisma.paymentVersement.findFirst({
+        where: { membreId: membre.id, numeroVersement: numeroDepart },
+      });
+      if (premier) sendRecuVersementBackground(premier.id);
+    }
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'Member',
+      entityId: membre.id,
+      description: `Renouvellement ${data.plan} ${data.montant} $ à partir du ${data.dateDebut} (${nbVersements} versement(s))${data.premierPaiement ? ` — 1er versement encaissé (${methode})` : ''} — ${membre.firstName} ${membre.lastName}`,
+    });
+
+    const aJour = await prisma.member.findUnique({
+      where: { id: membre.id },
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } },
+    });
+    return sendSuccess(res, aJour, 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Erreur renouvellement:', error);
+    return sendError(res, 'Erreur lors du renouvellement', 500);
   }
 });
 
