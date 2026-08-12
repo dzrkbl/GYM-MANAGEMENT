@@ -126,7 +126,7 @@ export function Dashboard() {
         {data.renouvellements && (
           <Card
             className="p-6 border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md hover:bg-amber-50/30 transition-all"
-            onClick={() => navigate('/membres')}
+            onClick={() => navigate('/membres?suivi=renouvellement')}
           >
             <div className="flex justify-between items-start">
               <div>
@@ -143,7 +143,7 @@ export function Dashboard() {
               <span className="text-amber-700 font-medium">
                 {formatMontant(data.renouvellements.montantARenouveler)}
               </span>
-              <span className="text-cshp-gray">à percevoir au renouvellement</span>
+              <span className="text-cshp-gray">à percevoir · cliquer pour voir qui →</span>
               {data.renouvellements.resteAnciensContrats > 0 && (
                 <span className="text-cshp-red text-xs font-medium">
                   + {formatMontant(data.renouvellements.resteAnciensContrats)} d'anciens contrats

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
@@ -42,6 +42,11 @@ export function Membres() {
     user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS'
   );
   const [statusFilter, setStatusFilter] = useState('ACTIF');
+
+  // Filtre de suivi via l'URL : ?suivi=renouvellement (carte « Renouvellements
+  // échus » du tableau de bord) montre uniquement les contrats terminés.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const suiviFilter = searchParams.get('suivi'); // 'renouvellement' | null
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -124,6 +129,12 @@ export function Membres() {
     { value: 'INACTIF', label: 'Inactif' },
     { value: 'EN_ATTENTE', label: 'En attente' }
   ];
+
+  // Liste affichée : applique le filtre de suivi (renouvellements échus).
+  const membersAffiches = useMemo(() => {
+    if (suiviFilter !== 'renouvellement') return members;
+    return members.filter((m) => etatPaiement(m).type === 'RENOUVELLEMENT_DU');
+  }, [members, suiviFilter]);
 
   // Statut de paiement en temps réel — tient compte de la fin de contrat :
   // un échéancier soldé n'est « à jour » que tant que le contrat court.
@@ -278,12 +289,25 @@ export function Membres() {
         </div>
       </Card>
 
+      {/* Filtre « renouvellements échus » actif (depuis le tableau de bord) */}
+      {suiviFilter === 'renouvellement' && (
+        <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold flex items-center justify-between">
+          <span>🔄 Filtre actif : renouvellements échus seulement ({membersAffiches.length} membre(s))</span>
+          <button
+            onClick={() => setSearchParams({})}
+            className="underline text-xs hover:text-amber-950"
+          >
+            ✕ Retirer le filtre
+          </button>
+        </div>
+      )}
+
       {/* TABLEAU / VUE LISTE ADMINISTRATIVE */}
       {error ? (
         <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-lg font-medium shadow-sm">{error}</div>
       ) : isLoading ? (
         <div className="py-12 flex justify-center"><Spinner /></div>
-      ) : members.length === 0 ? (
+      ) : membersAffiches.length === 0 ? (
         <Card className="text-center py-16 text-gray-500 border border-gray-100 shadow-sm">
           <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
           <p className="text-gray-700 font-medium">Aucun athlète dans cette sélection.</p>
@@ -310,7 +334,7 @@ export function Membres() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {members.map((member, index) => {
+                {membersAffiches.map((member, index) => {
                   const paiement = getPaiementStatus(member);
                   const totalPaid = (member.versements || [])
                     .filter((v: any) => v.datePaiement)
