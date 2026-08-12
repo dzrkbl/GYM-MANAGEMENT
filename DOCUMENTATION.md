@@ -503,3 +503,120 @@ similaire réapparaît, vérifier qu'une régression n'a pas réintroduit la cau
 - Les « restes » Daoud (185 $ / 165 $) n'ont volontairement **pas** de
   versement planifié (aucune date convenue) — ils apparaissent comme « Reste
   sans échéance » et dans le digest.
+
+## 13. Arborescence commentée du dépôt
+
+```
+server.ts                                 Point d'entrée : Express, montage des routes, port ouvert en premier, migrations+amorçage en arrière-plan, déclencheur intégré des rappels (gate migrations), route cron, service de la SPA (statique en prod, Vite dynamique en dev).
+package.json                              Scripts (dev/build/start/lint), dépendances ; postinstall = prisma generate ; "type": "module".
+package-lock.json                         Verrou des versions npm (Render fait npm install dessus).
+tsconfig.json                             Configuration TypeScript (typecheck : npx tsc --noEmit).
+vite.config.ts                            Configuration Vite (build de la SPA, alias, proxy dev).
+index.html                                Coquille HTML de la SPA (point d'entrée Vite).
+.env.example                              Gabarit des variables d'environnement (voir §4).
+.gitignore                                Exclusions git (node_modules, dist, .env…).
+README.md                                 Présentation courte du projet.
+DEVLOG.md                                 Journal de développement historique (contexte des premières décisions).
+DOCUMENTATION.md                          CE document — la référence de reprise.
+LOGO.jpg                                  Logo source du club (brut).
+public/logo.png                           Logo servi par l'app (courriels, reçus, factures — chargé par recus.ts::chargerLogo).
+public/README.md                          Note sur le contenu du dossier public.
+documents/fiche-inscription-2026-2027.html  Fiche d'inscription PAPIER (2 pages A4, règlement au verso) — ouvrir dans un navigateur et imprimer en PDF.
+marketing/                                Hors code : playbook marketing 90 jours (01-10), suivi/ (tableau de bord, campagnes, budget, apprentissages), templates/. Point d'entrée : marketing/README.md.
+
+prisma/schema.prisma                      Modèle de données (source de vérité — voir §5).
+prisma/migrations/20240101000000_init/    Baseline unique alignée sur le schéma d'origine.
+prisma/migrations/20260810160000_consentements_fiche/   + consentPhoto/consentUrgence/consentCommunications sur Member.
+prisma/migrations/20260810170000_frais_retard/          + exonererFraisRetard sur PaymentVersement.
+prisma/migrations/20260810190000_provenance/            + provenance et refereParNom sur Member.
+prisma/migrations/20260811150000_membre_depuis_backfill/  Rattrapage : signupDate ← dateInscription (ancienneté, voir §2).
+prisma/migrations/20260812010000_frais_retard_factures/   + fraisRetardFactures (frais chargés au choix de l'admin).
+prisma/migrations/migration_lock.toml     Verrou Prisma (provider postgresql).
+prisma/seed.ts                            Seed officiel : appelle seedInitialData (admin, sections, cours, charges).
+prisma/seed-test.ts                       Jeu de données de test local (membres/versements factices).
+prisma/seed-test-cleanup.ts               Nettoyage du jeu de test local.
+scripts/seed.ts                           Variante CLI du seed (usage ponctuel en dev).
+scripts/test-api.ts                       Petit banc d'essai HTTP de l'API en local (axios, localhost:3000).
+
+src/main.tsx                              Bootstrap React (monte <App/> dans index.html).
+src/App.tsx                               Routes React Router : toutes les pages, dont /inscription (publique) et /pointer.
+src/index.css                             Tailwind v4 + variables du thème (--color-cshp-red…).
+
+src/middleware/auth.ts                    authenticate (JWT + rôle lu EN BASE + refus des comptes désactivés) et requireRole.
+src/middleware/rateLimit.ts               Limiteur de débit maison (login 10/15 min, inscription publique 5/h).
+
+src/routes/auth.ts                        POST /login (JWT 7 j), GET /me.
+src/routes/members.ts                     CRUD membres (préservation des versements §3.5, parentEmail, membreDepuis), statut, suppression définitive protégée, POST /factures (factures annuelles par famille).
+src/routes/versements.ts                  PUT /:id/payer (activation + reçu), PATCH /:id/frais-retard (exonérer / charger un montant).
+src/routes/payments.ts                    GET /api/paiements (vue mensuelle de travail §6) + chemins de paiement historiques + /retards.
+src/routes/attendances.ts                 POST /pointer (présences en masse), stats de présence par section.
+src/routes/courses.ts                     CRUD des cours récurrents (jours de semaine).
+src/routes/grades.ts                      Passages de grade (+ mise à jour de la ceinture dans MemberSection).
+src/routes/sections.ts                    Catalogue des groupes (codes/labels), consommé par useSections.
+src/routes/dashboard.ts                   Agrégats du tableau de bord : résumé (retards, renouvellements échus, présences semaine, masse salariale), revenus, KPIs + prévision 3 mois.
+src/routes/rapports.ts                    /financier (mois+cumul OU plage from/to : revenus, relance retards+renouvellements, présences, masse salariale) et /export-csv.
+src/routes/coachs.ts                      Comptes du personnel Y COMPRIS administrateurs (mot de passe temporaire une fois, garde-fou dernier admin, audit).
+src/routes/masseSalariale.ts              Saisie de la masse salariale par mois (override).
+src/routes/coachSalaire.ts                Salaires individuels des coachs (source par défaut de la masse salariale).
+src/routes/depenses.ts                    Charges ponctuelles/mensuelles (rappel : mois=null → CHAQUE mois).
+src/routes/depenseConfigs.ts              Charges de base à hausse automatique annuelle (ex. LOYER).
+src/routes/import.ts                      Import CSV membres + versements (formats §9.3, dédoublonnage, coupures de noms composés).
+src/routes/inscription.ts                 Fiche en ligne publique (consentements bloquants, anti-doublon, conversion de lead, courriels) + /inviter + /sections.
+src/routes/leads.ts                       Prospects : création publique, gestion, conversion protégée contre les homonymes.
+src/routes/communications.ts              Config courriel (diagnostic), envoi de test, envoi groupé multi-sections.
+src/routes/backup.ts                      POST /api/backup : sauvegarde Excel immédiate.
+src/routes/audit.ts                       Lecture du journal d'audit.
+
+src/lib/prisma.ts                         Client Prisma singleton.
+src/lib/api-response.ts                   sendSuccess/sendError (format uniforme des réponses).
+src/lib/jwt.ts                            Signature/vérification des jetons.
+src/lib/audit.ts                          logAudit(req, …) non bloquant (traçabilité).
+src/lib/tarifs.ts                         TARIFS, calculerMontantFinal (rabais ADDITIFS), calculerFinContrat, ajouterMoisISO, dateAMidi — PARTAGÉ front/back (conventions §3.1-3.2).
+src/lib/paiements.ts                      fraisRetard (compteur 10 $/sem), activerSiPremierPaiement, normalizeMethodePaiement.
+src/lib/echeances.ts                      etatPaiement : LA définition du statut de paiement d'un membre côté interface (§3.6).
+src/lib/finances.ts                       Taxes (TPS/TVQ incluses), charges, masseSalarialePourMois (source unique), getRevenusperiode (cumul vs période).
+src/lib/reminders.ts                      TOUTES les relances automatiques (cadences/refKeys §7.1) + jour civil de Montréal.
+src/lib/recus.ts                          Reçu PDF par versement payé (sauf CASH), numérotation, idempotence, chargerLogo.
+src/lib/factures.ts                       Factures annuelles par famille (union-find de regroupement, lignes de frais chargés, référence stable).
+src/lib/sauvegarde.ts                     Classeur Excel quotidien (une feuille par groupe, formules vivantes §7.3) + résumé courriel + dédup quotidienne.
+src/lib/mailer.ts                         Double transport (Resend sinon SMTP), gabarit htmlCourriel (signature officielle), parseDestinataires (« a; b »), sendEmailBackground (échecs → audit).
+src/lib/bienvenue.ts                      Contenu du courriel de bienvenue (+ katas si Karaté).
+src/lib/katas.ts                          Programme de katas Heian par grade + liens vidéo + estKarate.
+src/lib/reglement.ts                      Règlement intérieur versionné (16 articles) — incrémenter REGLEMENT_VERSION à tout changement.
+src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
+src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
+src/lib/seedData.ts                       seedInitialData + bootstrapIfEmpty (amorçage automatique si base vide).
+
+src/contexts/AuthContext.tsx              Session côté client (token localStorage, re-lecture de /auth/me au chargement).
+src/hooks/useAuth.ts                      Accès au contexte d'authentification.
+src/hooks/useSections.ts                  Catalogue des sections (codes + labels) avec cache.
+src/hooks/useDebounce.ts                  Débounce générique (recherche).
+
+src/pages/Login.tsx                       Connexion.
+src/pages/Dashboard.tsx                   Tableau de bord (cartes cliquables : retards → Paiements filtrés, renouvellements → Membres filtrés ; prévision de trésorerie).
+src/pages/Membres.tsx                     Liste des membres : badges etatPaiement, filtres (?suivi=renouvellement), mode Factures (cases + année + génération).
+src/pages/MembreDetail.tsx                Fiche membre : Édition rapide / Profil complet, échéancier (encaisser, frais de retard), grades, présences, famille, suppression protégée.
+src/pages/Paiements.tsx                   Vue mensuelle de travail des versements (?statut=EN_RETARD), marquer payé.
+src/pages/Pointer.tsx                     Pointage coach : présences + badge de rappel de paiement/renouvellement par athlète.
+src/pages/Planning.tsx                    Horaire hebdomadaire des cours.
+src/pages/Sections.tsx                    Gestion du catalogue des groupes.
+src/pages/Coachs.tsx                      Gestion des comptes staff/admin (bandeau du mot de passe temporaire).
+src/pages/Rapports.tsx                    Rapports par période, masse salariale éditable par mois, liste de relance (retards + renouvellements) PDF/CSV.
+src/pages/Inscription.tsx                 Fiche d'inscription en ligne PUBLIQUE (consentements, urgence=parent, règlement intégré, provenance).
+src/pages/admin/Finances.tsx              Module financier (revenus/charges/marge, cumul vs période, taxes).
+src/pages/admin/Prospects.tsx             Leads : ancienneté + badge « X j sans suivi », conversion, invitation.
+src/pages/admin/Communications.tsx        Courriels : diagnostic transport, test, envoi groupé, bouton sauvegarde.
+src/pages/admin/Import.tsx                Import CSV (zones membres + versements, rapport d'erreurs par ligne).
+src/pages/admin/Audit.tsx                 Journal d'audit (y compris les erreurs de courriels).
+
+src/components/layout/AppLayout.tsx       Gabarit connecté (sidebar + contenu + nav mobile).
+src/components/layout/Sidebar.tsx         Menu latéral (entrées selon le rôle).
+src/components/layout/BottomNav.tsx       Navigation mobile.
+src/components/membres/MembreForm.tsx     Assistant membre en 4 étapes (protections §8) — exporte CEINTURES_LIST.
+src/components/forms/CoachForm.tsx        Formulaire de compte staff/admin (rôle, sections, mot de passe).
+src/components/forms/CourseForm.tsx       Formulaire de cours (section, jours, heures, coach).
+src/components/forms/GradeForm.tsx        Formulaire de passage de grade.
+src/components/forms/PaiementForm.tsx     Formulaire de paiement (chemins historiques).
+src/components/rapports/SectionPieChart.tsx  Camembert de répartition des revenus par groupe.
+src/components/ui/                        Primitifs partagés : Button, Input (label+erreur), Card, Badge, Modal, Spinner.
+```
