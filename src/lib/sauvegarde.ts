@@ -44,7 +44,8 @@ const STYLE_VERT = {
 interface DonneesSauvegarde {
   buffer: Buffer;
   resume: {
-    date: string;
+    date: string;          // jour d'envoi
+    jourCouvert: string;   // la VEILLE : la dernière journée complète
     paiementsDuJour: Array<{ membre: string; groupe: string; montant: number; methode: string }>;
     totalDuJour: number;
     nouveauxMembresDuJour: string[];
@@ -78,6 +79,11 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
   const groupesDe = (m: any) => (m.sections || []).map((s: any) => labelDe(s.section)).join(' + ') || '—';
   const aujourdhui = dateMontreal(now);
   const aujourdhuiUTC = new Date(aujourdhui + 'T00:00:00Z');
+  // Le résumé couvre la VEILLE : le courriel part le matin, donc « aujourd'hui »
+  // serait une journée à peine commencée (toujours 0 $) — et tout encaissement
+  // fait APRÈS l'envoi ne figurerait dans aucun résumé. La veille, elle, est
+  // complète et rapportée exactement une fois.
+  const hier = dateMontreal(new Date(now.getTime() - 86_400_000));
 
   // Nombre de référés : membres qui pointent vers ce membre (par id ou par nom).
   const nbReferes = (m: any) => {
@@ -106,7 +112,7 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
     { header: 'À payer (contrats)', key: 'apayer', width: 17 },
     { header: 'Total payé', key: 'paye', width: 13 },
     { header: 'Reste à percevoir', key: 'reste', width: 16 },
-    { header: 'Encaissé aujourd\'hui', key: 'jour', width: 19 },
+    { header: 'Encaissé hier', key: 'jour', width: 15 },
     { header: 'Renouvellements échus', key: 'renouv', width: 21 },
   ];
   wsResume.getRow(1).font = { bold: true };
@@ -126,7 +132,7 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
       for (const v of m.versements) {
         if (v.datePaiement) {
           paye += v.montant;
-          if (dateMontreal(v.datePaiement) === aujourdhui) jour += v.montant;
+          if (dateMontreal(v.datePaiement) === hier) jour += v.montant;
         }
       }
       if (m.status === 'ACTIF' && m.finContrat && m.finContrat < aujourdhuiUTC) renouv++;
@@ -363,10 +369,10 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
 
   // ---------- Résumé du jour (corps du courriel) ----------
   const paiementsDuJour = lignesTx
-    .filter((l) => l.paye === aujourdhui)
+    .filter((l) => l.paye === hier)
     .map((l) => ({ membre: l.membre, groupe: l.groupe, montant: l.montant, methode: l.methode || '—' }));
   const nouveauxMembresDuJour = membres
-    .filter((m) => dateMontreal(m.createdAt) === aujourdhui)
+    .filter((m) => dateMontreal(m.createdAt) === hier)
     .map((m) => `${m.firstName} ${m.lastName} (${groupesDe(m)})`);
   // Retards du résumé : mêmes règles que l'application (INACTIF exclus).
   const retards = lignesTx.filter((l) => l.statut === 'EN RETARD' && l._statutMembre !== 'INACTIF');
@@ -375,6 +381,7 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
     buffer,
     resume: {
       date: aujourdhui,
+      jourCouvert: hier,
       paiementsDuJour,
       totalDuJour: paiementsDuJour.reduce((s, p) => s + p.montant, 0),
       nouveauxMembresDuJour,
@@ -392,22 +399,22 @@ export async function envoyerSauvegarde(now = new Date()): Promise<{ envoyeA: st
   const lignesPaiements = resume.paiementsDuJour.length
     ? `<ul>${resume.paiementsDuJour.map((p) =>
         `<li><strong>${p.membre}</strong> (${p.groupe}) — ${fmt$(p.montant)} · ${p.methode}</li>`).join('')}</ul>`
-    : '<p>Aucun paiement encaissé aujourd\'hui.</p>';
+    : '<p>Aucun paiement encaissé cette journée-là.</p>';
   const lignesNouveaux = resume.nouveauxMembresDuJour.length
     ? `<ul>${resume.nouveauxMembresDuJour.map((n) => `<li>${n}</li>`).join('')}</ul>`
-    : '<p>Aucune nouvelle inscription aujourd\'hui.</p>';
+    : '<p>Aucune nouvelle inscription cette journée-là.</p>';
 
   await sendEmail({
     to: BACKUP_EMAIL,
-    subject: `📦 Sauvegarde CSHP — ${resume.date} (${fmt$(resume.totalDuJour)} encaissés)`,
+    subject: `📦 Sauvegarde CSHP — ${resume.date} (hier : ${fmt$(resume.totalDuJour)} encaissés)`,
     html: htmlCourriel(`
       <p>Bonjour,</p>
       <p>Voici la sauvegarde quotidienne. <strong>Le fichier Excel joint contient tout pour
       fonctionner sans l'application</strong> : une feuille par groupe (fiches complètes,
       paiements par personne et par date, suivi rouge/vert calculé par des formules qui
       restent actives), plus le résumé par groupe et le journal complet des transactions.</p>
-      <h3 style="margin:18px 0 6px;">Résumé du ${resume.date}</h3>
-      <p><strong>💰 Encaissé aujourd'hui : ${fmt$(resume.totalDuJour)}</strong></p>
+      <h3 style="margin:18px 0 6px;">Résumé de la journée d'hier (${resume.jourCouvert})</h3>
+      <p><strong>💰 Encaissé hier : ${fmt$(resume.totalDuJour)}</strong></p>
       ${lignesPaiements}
       <p><strong>🆕 Nouvelles inscriptions :</strong></p>
       ${lignesNouveaux}
