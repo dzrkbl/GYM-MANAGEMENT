@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { porteeStaff } from '../lib/portee';
 import { logAudit } from '../lib/audit';
 import { saisonCourante } from '../lib/saison';
 import { z } from 'zod';
@@ -23,10 +24,16 @@ const affiliationSchema = z.object({
 });
 
 // GET /api/affiliations?saison=&discipline=&membreId=
-router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// Staff : affiliations de sa discipline seulement.
+router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { saison, discipline, membreId } = req.query as Record<string, string>;
+    const portee = await porteeStaff(req.user!);
     const where: any = {};
+    if (!portee.admin) {
+      if (!portee.sport) return sendSuccess(res, { saisonCourante: saisonCourante(), affiliations: [] });
+      where.discipline = portee.sport;
+    }
     if (saison) where.saison = saison;
     if (discipline) where.discipline = discipline;
     if (membreId) where.membreId = membreId;
@@ -42,9 +49,14 @@ router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: 
 });
 
 // POST /api/affiliations
-router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.post('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = affiliationSchema.parse(req.body);
+    // Staff : uniquement des affiliations de sa discipline.
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && data.discipline !== portee.sport) {
+      return sendError(res, 'Vous ne pouvez affilier que dans votre discipline', 403);
+    }
     const membre = await prisma.member.findUnique({ where: { id: data.membreId }, select: { firstName: true, lastName: true } });
     if (!membre) return sendError(res, 'Membre introuvable', 404);
 
@@ -69,9 +81,17 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 });
 
 // PUT /api/affiliations/:id
-router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.put('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = affiliationSchema.partial().parse(req.body);
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin) {
+      const existante = await prisma.affiliation.findUnique({ where: { id: req.params.id } });
+      if (!existante) return sendError(res, 'Affiliation introuvable', 404);
+      if (existante.discipline !== portee.sport || (data.discipline && data.discipline !== portee.sport)) {
+        return sendError(res, 'Affiliation hors de votre discipline', 403);
+      }
+    }
     const updateData: any = { ...data };
     if (data.datePaiement !== undefined) {
       updateData.datePaiement = data.datePaiement ? new Date(`${data.datePaiement}T12:00:00Z`) : null;
@@ -93,8 +113,14 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
 });
 
 // DELETE /api/affiliations/:id
-router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.delete('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin) {
+      const existante = await prisma.affiliation.findUnique({ where: { id: req.params.id } });
+      if (!existante) return sendError(res, 'Affiliation introuvable', 404);
+      if (existante.discipline !== portee.sport) return sendError(res, 'Affiliation hors de votre discipline', 403);
+    }
     const affiliation = await prisma.affiliation.delete({
       where: { id: req.params.id },
       include: { member: { select: { firstName: true, lastName: true } } },

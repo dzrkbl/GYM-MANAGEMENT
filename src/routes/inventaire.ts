@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+import { porteeStaff, disciplineDansPortee } from '../lib/portee';
 import { z } from 'zod';
 
 // Inventaire d'équipements : kimonos, ceintures, protections, chandails…
@@ -61,10 +62,15 @@ const CATALOGUE_KARATE: Array<{ nom: string; categorie: (typeof CATEGORIES)[numb
 // ---------- Ventes (déclarées avant /:id pour éviter la capture de route) ----------
 
 // GET /api/inventaire/ventes?membreId=&articleId=&mois=AAAA-MM
-router.get('/ventes', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// Staff : ventes de sa discipline seulement (articles du sport ou « TOUS »).
+router.get('/ventes', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { membreId, articleId, mois } = req.query as { membreId?: string; articleId?: string; mois?: string };
+    const portee = await porteeStaff(req.user!);
     const where: any = {};
+    if (!portee.admin) {
+      where.article = { OR: [{ discipline: null }, { discipline: 'TOUS' }, ...(portee.sport ? [{ discipline: portee.sport }] : [])] };
+    }
     if (membreId) where.membreId = membreId;
     if (articleId) where.articleId = articleId;
     if (mois && /^\d{4}-\d{2}$/.test(mois)) {
@@ -87,17 +93,23 @@ router.get('/ventes', authenticate, requireRole(['ADMIN']), async (req: Request,
 });
 
 // POST /api/inventaire/ventes — enregistre une vente et décrémente le stock.
-router.post('/ventes', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// Staff : articles de sa discipline seulement, toujours au prix de vente affiché
+// (seul l'admin peut ajuster le prix au moment de la vente).
+router.post('/ventes', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = venteSchema.parse(req.body);
+    const portee = await porteeStaff(req.user!);
     const article = await prisma.articleInventaire.findUnique({ where: { id: data.articleId } });
     if (!article) return sendError(res, 'Article introuvable', 404);
+    if (!disciplineDansPortee(article.discipline, portee)) {
+      return sendError(res, "Cet article n'appartient pas à votre discipline", 403);
+    }
     if (data.membreId) {
       const membre = await prisma.member.findUnique({ where: { id: data.membreId }, select: { id: true } });
       if (!membre) return sendError(res, 'Membre introuvable', 404);
     }
 
-    const prixUnitaire = data.prixUnitaire ?? article.prixVente;
+    const prixUnitaire = portee.admin ? (data.prixUnitaire ?? article.prixVente) : article.prixVente;
     const [vente] = await prisma.$transaction([
       prisma.venteEquipement.create({
         data: {
@@ -201,18 +213,24 @@ router.post('/seed-karate', authenticate, requireRole(['ADMIN']), async (req: Re
 // ---------- Articles ----------
 
 // GET /api/inventaire?discipline=&categorie=&inclureInactifs=1
-router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// Staff : articles de sa discipline (+ « TOUS ») ; le coût de revient est
+// réservé aux administrateurs (interne club, jamais montré ailleurs).
+router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { discipline, categorie, inclureInactifs } = req.query as Record<string, string>;
+    const portee = await porteeStaff(req.user!);
     const where: any = {};
     if (!inclureInactifs) where.actif = true;
+    if (!portee.admin) {
+      where.OR = [{ discipline: null }, { discipline: 'TOUS' }, ...(portee.sport ? [{ discipline: portee.sport }] : [])];
+    }
     if (discipline) where.discipline = discipline;
     if (categorie) where.categorie = categorie;
     const articles = await prisma.articleInventaire.findMany({
       where,
       orderBy: [{ discipline: 'asc' }, { categorie: 'asc' }, { nom: 'asc' }, { taille: 'asc' }],
     });
-    return sendSuccess(res, articles);
+    return sendSuccess(res, portee.admin ? articles : articles.map(({ coutAchat: _c, ...reste }) => ({ ...reste, coutAchat: null })));
   } catch {
     return sendError(res, "Erreur de récupération de l'inventaire", 500);
   }

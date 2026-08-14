@@ -10,6 +10,7 @@ import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
 import { logAudit } from '../lib/audit';
+import { porteeStaff } from '../lib/portee';
 import { genererFactures } from '../lib/factures';
 
 const router = Router();
@@ -71,19 +72,23 @@ const memberSchema = z.object({
 router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { section, status } = req.query;
-    
-    // Logic for role-based section filtering:
-    // If user is SECTION_MANAGER, force the section filter to their section.
-    let filterSection = section as string | undefined;
-    if (req.user!.role === 'SECTION_MANAGER') {
-      filterSection = req.user!.section as string;
+
+    // Portée par discipline : un coach/responsable voit TOUS les groupes de
+    // son sport (jamais les autres disciplines) ; l'admin voit tout.
+    const portee = await porteeStaff(req.user!);
+    let filterSections: string[] | undefined;
+    if (!portee.admin && portee.sections) {
+      const demande = section ? String(section) : '';
+      filterSections = demande && portee.sections.includes(demande) ? [demande] : portee.sections;
+    } else if (section) {
+      filterSections = [String(section)];
     }
 
     const members = await prisma.member.findMany({
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
-        ...(filterSection ? {
-          sections: { some: { section: filterSection } }
+        ...(filterSections ? {
+          sections: { some: { section: { in: filterSections } } }
         } : {}),
       },
       include: { sections: true, versements: true },
@@ -234,6 +239,12 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
     });
 
     if (!member) return sendError(res, 'Membre introuvable', 404);
+
+    // Portée par discipline : un coach/responsable n'ouvre que les dossiers de son sport.
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && portee.sections && !member.sections.some((s) => portee.sections!.includes(s.section))) {
+      return sendError(res, "Ce membre n'appartient pas à votre discipline", 403);
+    }
 
     return sendSuccess(res, member);
   } catch (error) {

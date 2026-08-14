@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { porteeStaff, disciplineDansPortee } from '../lib/portee';
 import { logAudit } from '../lib/audit';
 import { saisonPourDate } from '../lib/saison';
 import { z } from 'zod';
@@ -101,11 +102,17 @@ async function admissibilite(evenement: { date: Date; discipline: string | null 
 }
 
 // GET /api/evenements — liste avec nombre d'inscrits.
-router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// Staff : événements de sa discipline + événements « TOUS » du club.
+router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { inclureInactifs } = req.query as Record<string, string>;
+    const portee = await porteeStaff(req.user!);
+    const where: any = inclureInactifs ? {} : { actif: true };
+    if (!portee.admin) {
+      where.OR = [{ discipline: null }, { discipline: 'TOUS' }, ...(portee.sport ? [{ discipline: portee.sport }] : [])];
+    }
     const evenements = await prisma.evenement.findMany({
-      where: inclureInactifs ? {} : { actif: true },
+      where,
       orderBy: { date: 'desc' },
       take: 200,
       include: { _count: { select: { inscriptions: true } } },
@@ -117,7 +124,7 @@ router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: 
 });
 
 // GET /api/evenements/:id — détail avec inscriptions + admissibilité calculée.
-router.get('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.get('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const evenement = await prisma.evenement.findUnique({
       where: { id: req.params.id },
@@ -129,6 +136,10 @@ router.get('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
       },
     });
     if (!evenement) return sendError(res, 'Événement introuvable', 404);
+    const porteeLecture = await porteeStaff(req.user!);
+    if (!disciplineDansPortee(evenement.discipline, porteeLecture)) {
+      return sendError(res, "Cet événement n'appartient pas à votre discipline", 403);
+    }
 
     const saisonRequise = saisonPourDate(evenement.date);
     const verifAffiliation = evenement.discipline === 'KARATE' || evenement.discipline === 'JUDO';
@@ -171,10 +182,14 @@ router.get('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
   }
 });
 
-// POST /api/evenements
-router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+// POST /api/evenements — le staff crée uniquement dans sa discipline.
+router.post('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = evenementSchema.parse(req.body);
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && data.discipline !== portee.sport) {
+      return sendError(res, 'Vous ne pouvez créer un événement que dans votre discipline', 403);
+    }
     const evenement = await prisma.evenement.create({
       data: { ...data, date: new Date(`${data.date}T12:00:00Z`) },
     });
@@ -192,9 +207,17 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 });
 
 // PUT /api/evenements/:id
-router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.put('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = evenementSchema.partial().parse(req.body);
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin) {
+      const existant = await prisma.evenement.findUnique({ where: { id: req.params.id } });
+      if (!existant) return sendError(res, 'Événement introuvable', 404);
+      if (existant.discipline !== portee.sport || (data.discipline && data.discipline !== portee.sport)) {
+        return sendError(res, 'Événement hors de votre discipline', 403);
+      }
+    }
     const updateData: any = { ...data };
     if (data.date) updateData.date = new Date(`${data.date}T12:00:00Z`);
     const evenement = await prisma.evenement.update({ where: { id: req.params.id }, data: updateData });
@@ -214,13 +237,17 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
 
 // DELETE /api/evenements/:id — suppression si aucune inscription, sinon
 // désactivation (l'historique des participations est conservé).
-router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.delete('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const evenement = await prisma.evenement.findUnique({
       where: { id: req.params.id },
       include: { _count: { select: { inscriptions: true } } },
     });
     if (!evenement) return sendError(res, 'Événement introuvable', 404);
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && evenement.discipline !== portee.sport) {
+      return sendError(res, 'Événement hors de votre discipline', 403);
+    }
 
     if (evenement._count.inscriptions > 0) {
       await prisma.evenement.update({ where: { id: evenement.id }, data: { actif: false } });
@@ -238,11 +265,15 @@ router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request,
 
 // POST /api/evenements/:id/inscriptions — inscrit un athlète et renvoie son
 // admissibilité (affiliation + solde) pour affichage immédiat.
-router.post('/:id/inscriptions', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.post('/:id/inscriptions', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { membreId, note } = z.object({ membreId: z.string().min(1), note: z.string().optional().nullable() }).parse(req.body);
     const evenement = await prisma.evenement.findUnique({ where: { id: req.params.id } });
     if (!evenement) return sendError(res, 'Événement introuvable', 404);
+    const porteeIns = await porteeStaff(req.user!);
+    if (!porteeIns.admin && evenement.discipline !== porteeIns.sport) {
+      return sendError(res, "Inscriptions réservées à l'admin pour cet événement", 403);
+    }
     const membre = await prisma.member.findUnique({ where: { id: membreId }, select: { firstName: true, lastName: true } });
     if (!membre) return sendError(res, 'Membre introuvable', 404);
 
@@ -266,9 +297,14 @@ router.post('/:id/inscriptions', authenticate, requireRole(['ADMIN']), async (re
 });
 
 // PATCH /api/evenements/:id/inscriptions/:inscriptionId — frais remis / note.
-router.patch('/:id/inscriptions/:inscriptionId', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.patch('/:id/inscriptions/:inscriptionId', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = z.object({ fraisPaye: z.boolean().optional(), note: z.string().optional().nullable() }).parse(req.body);
+    const porteePatch = await porteeStaff(req.user!);
+    if (!porteePatch.admin) {
+      const evt = await prisma.evenement.findUnique({ where: { id: req.params.id }, select: { discipline: true } });
+      if (!evt || evt.discipline !== porteePatch.sport) return sendError(res, 'Événement hors de votre discipline', 403);
+    }
     const inscription = await prisma.evenementInscription.update({
       where: { id: req.params.inscriptionId },
       data,
@@ -291,8 +327,13 @@ router.patch('/:id/inscriptions/:inscriptionId', authenticate, requireRole(['ADM
 });
 
 // DELETE /api/evenements/:id/inscriptions/:inscriptionId
-router.delete('/:id/inscriptions/:inscriptionId', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+router.delete('/:id/inscriptions/:inscriptionId', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
+    const porteeDel = await porteeStaff(req.user!);
+    if (!porteeDel.admin) {
+      const evt = await prisma.evenement.findUnique({ where: { id: req.params.id }, select: { discipline: true } });
+      if (!evt || evt.discipline !== porteeDel.sport) return sendError(res, 'Événement hors de votre discipline', 403);
+    }
     const inscription = await prisma.evenementInscription.delete({
       where: { id: req.params.inscriptionId },
       include: { member: { select: { firstName: true, lastName: true } }, evenement: { select: { titre: true } } },

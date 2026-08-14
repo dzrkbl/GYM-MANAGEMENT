@@ -9,6 +9,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { saisonCourante, saisonsChoix } from '../../lib/saison';
+import { useSections } from '../../hooks/useSections';
 import { Trophy, Plus, Pencil, Trash2, ArrowLeft, UserPlus, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface Evenement {
@@ -140,6 +141,7 @@ function BadgesAdmissibilite({ adm }: { adm: Admissibilite }) {
 
 export function Evenements() {
   const { user } = useAuth();
+  const { sections: toutesSections } = useSections();
   const [onglet, setOnglet] = useState<'evenements' | 'affiliations'>('evenements');
   const [evenements, setEvenements] = useState<Evenement[]>([]);
   const [detail, setDetail] = useState<EvenementDetail | null>(null);
@@ -191,14 +193,14 @@ export function Evenements() {
   };
 
   useEffect(() => {
-    if (user?.role === 'ADMIN') {
+    if (user) {
       loadEvenements();
       apiFetch<MembreLight[]>('/membres').then(setMembres).catch(() => {});
     }
   }, [user]);
 
   useEffect(() => {
-    if (user?.role === 'ADMIN' && onglet === 'affiliations') loadAffiliations();
+    if (user && onglet === 'affiliations') loadAffiliations();
   }, [user, onglet, saisonSel]);
 
   const { aVenir, passes } = useMemo(() => {
@@ -213,13 +215,22 @@ export function Evenements() {
     [affiliations, filtreDisciplineAff]
   );
 
-  if (user?.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
+  if (!user) return <Navigate to="/dashboard" replace />;
+  // Personnel non admin : portée limitée à SA discipline (le serveur refuse le reste).
+  const estAdmin = user.role === 'ADMIN';
+  const codeStaff = (user.section || '').toUpperCase();
+  const sportStaff = estAdmin
+    ? null
+    : (toutesSections.find((s) => s.code.toUpperCase() === codeStaff)?.sport
+       || (toutesSections.some((s) => s.sport.toUpperCase() === codeStaff) ? codeStaff : null));
+  const peutGerer = (discipline: string | null) => estAdmin || (!!sportStaff && discipline === sportStaff);
+  const disciplinesForm = estAdmin ? DISCIPLINES : DISCIPLINES.filter((d) => d.value === sportStaff);
 
   // ---------- Événements ----------
 
   const ouvrirCreation = () => {
     setEditId(null);
-    setForm({ ...FORM_EVENEMENT_VIDE, date: todayLocalISO() });
+    setForm({ ...FORM_EVENEMENT_VIDE, discipline: sportStaff || FORM_EVENEMENT_VIDE.discipline, date: todayLocalISO() });
     setModalEvenement(true);
   };
 
@@ -399,7 +410,9 @@ export function Evenements() {
         {onglet === 'evenements' ? (
           <Button onClick={ouvrirCreation} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvel événement</Button>
         ) : (
-          <Button onClick={() => { setAffForm({ ...affForm, saison: saisonSel }); setModalAffiliation(true); }} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvelle affiliation</Button>
+          (estAdmin || sportStaff === 'KARATE' || sportStaff === 'JUDO') ? (
+            <Button onClick={() => { setAffForm({ ...affForm, discipline: estAdmin ? affForm.discipline : (sportStaff as string), saison: saisonSel }); setModalAffiliation(true); }} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvelle affiliation</Button>
+          ) : <span />
         )}
       </div>
 
@@ -452,10 +465,12 @@ export function Evenements() {
                     <p className="text-xs text-gray-400 mt-1">Affiliation requise : saison {detail.saisonRequise}</p>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => ouvrirEdition(detail)} className="!min-h-0 h-9 text-sm"><Pencil size={15} className="mr-1" /> Modifier</Button>
-                  <Button variant="secondary" onClick={() => supprimerEvenement(detail)} className="!min-h-0 h-9 text-sm !text-red-600"><Trash2 size={15} className="mr-1" /> Supprimer</Button>
-                </div>
+                {peutGerer(detail.discipline) && (
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => ouvrirEdition(detail)} className="!min-h-0 h-9 text-sm"><Pencil size={15} className="mr-1" /> Modifier</Button>
+                    <Button variant="secondary" onClick={() => supprimerEvenement(detail)} className="!min-h-0 h-9 text-sm !text-red-600"><Trash2 size={15} className="mr-1" /> Supprimer</Button>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -463,10 +478,12 @@ export function Evenements() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-bold text-cshp-black">Participants ({detail.inscriptions.length})</h3>
               </div>
-              <div className="max-w-md">
-                <label className="block text-sm font-medium text-gray-600 mb-1"><UserPlus size={14} className="inline mr-1 -mt-0.5" />Inscrire un athlète</label>
-                <RechercheMembre membres={membres.filter((m) => !detail.inscriptions.some((i) => i.membreId === m.id))} onChoisir={inscrire} />
-              </div>
+              {peutGerer(detail.discipline) && (
+                <div className="max-w-md">
+                  <label className="block text-sm font-medium text-gray-600 mb-1"><UserPlus size={14} className="inline mr-1 -mt-0.5" />Inscrire un athlète</label>
+                  <RechercheMembre membres={membres.filter((m) => !detail.inscriptions.some((i) => i.membreId === m.id))} onChoisir={inscrire} />
+                </div>
+              )}
 
               {detail.inscriptions.length > 0 && (
                 <div className="overflow-x-auto">
@@ -492,10 +509,10 @@ export function Evenements() {
                           <td className="py-2.5 pr-3 text-gray-500">{i.member.sections.map((s) => s.section).join(', ') || '—'}</td>
                           <td className="py-2.5 pr-3"><BadgesAdmissibilite adm={i.admissibilite} /></td>
                           <td className="py-2.5 pr-3 text-center">
-                            <input type="checkbox" checked={i.fraisPaye} onChange={() => basculerFrais(i)} className="w-4 h-4 accent-cshp-red cursor-pointer" />
+                            <input type="checkbox" checked={i.fraisPaye} disabled={!peutGerer(detail.discipline)} onChange={() => basculerFrais(i)} className="w-4 h-4 accent-cshp-red cursor-pointer disabled:cursor-default" />
                           </td>
                           <td className="py-2.5 text-right">
-                            <button onClick={() => retirerInscription(i)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Retirer"><Trash2 size={15} /></button>
+                            {peutGerer(detail.discipline) && <button onClick={() => retirerInscription(i)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Retirer"><Trash2 size={15} /></button>}
                           </td>
                         </tr>
                       ))}
@@ -603,8 +620,8 @@ export function Evenements() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Discipline</label>
-              <select className={selectClass} value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })}>
-                {DISCIPLINES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              <select className={selectClass} value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })} disabled={!estAdmin}>
+                {disciplinesForm.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
             <Input label="Date *" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -636,9 +653,10 @@ export function Evenements() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Discipline *</label>
-              <select className={selectClass} value={affForm.discipline} onChange={(e) => setAffForm({ ...affForm, discipline: e.target.value })}>
-                <option value="KARATE">Karaté</option>
-                <option value="JUDO">Judo</option>
+              <select className={selectClass} value={affForm.discipline} onChange={(e) => setAffForm({ ...affForm, discipline: e.target.value })} disabled={!estAdmin}>
+                {(estAdmin ? ['KARATE', 'JUDO'] : ['KARATE', 'JUDO'].filter((d) => d === sportStaff)).map((d) => (
+                  <option key={d} value={d}>{d === 'KARATE' ? 'Karaté' : 'Judo'}</option>
+                ))}
               </select>
             </div>
             <div>

@@ -167,7 +167,7 @@ export function MembreDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (user?.role === 'ADMIN' && id) {
+    if (user && id) {
       fetchAffiliations();
       apiFetch<any[]>(`/inventaire/ventes?membreId=${id}`).then(setAchats).catch(() => {});
     }
@@ -667,7 +667,7 @@ export function MembreDetail() {
           )}
 
           {/* Affiliations fédération — déterminent l'admissibilité aux compétitions (saison sept. → août) */}
-          {user?.role === 'ADMIN' && (
+          {user && (
             <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b pb-1">
                 <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Affiliations fédération</h3>
@@ -947,7 +947,7 @@ export function MembreDetail() {
           </Card>
 
           {/* Achats d'équipement — tracés au dossier, JAMAIS ajoutés automatiquement à la facture annuelle */}
-          {user?.role === 'ADMIN' && achats.length > 0 && (
+          {user && achats.length > 0 && (
             <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Achats d'équipement</h3>
               <div className="space-y-2">

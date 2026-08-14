@@ -104,7 +104,7 @@ export function Inventaire() {
     setIsLoading(true);
     try {
       const [arts, vts] = await Promise.all([
-        apiFetch<Article[]>('/inventaire?inclureInactifs=1'),
+        apiFetch<Article[]>(user?.role === 'ADMIN' ? '/inventaire?inclureInactifs=1' : '/inventaire'),
         apiFetch<Vente[]>('/inventaire/ventes'),
       ]);
       setArticles(arts);
@@ -117,7 +117,7 @@ export function Inventaire() {
   };
 
   useEffect(() => {
-    if (user?.role === 'ADMIN') {
+    if (user) {
       load();
       apiFetch<MembreLight[]>('/membres').then(setMembres).catch(() => {});
     }
@@ -142,7 +142,10 @@ export function Inventaire() {
       .slice(0, 8);
   }, [membres, venteForm.rechercheMembre]);
 
-  if (user?.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
+  if (!user) return <Navigate to="/dashboard" replace />;
+  // Le personnel non admin voit sa discipline (filtrée par le serveur), peut
+  // vendre au prix affiché, mais ne gère ni articles, ni stock, ni coûts.
+  const estAdmin = user.role === 'ADMIN';
 
   const badgeStock = (a: Article) => {
     if (a.quantite <= 0) return <Badge variant="danger">{a.quantite}</Badge>;
@@ -297,14 +300,16 @@ export function Inventaire() {
             Kimonos, ceintures, protections… Le <strong>coût de revient est interne au club</strong> : seuls les prix de vente peuvent être montrés aux parents.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={chargerCatalogueKarate} className="!min-h-0 h-10">
-            <Package size={18} className="mr-1" /> Catalogue karaté
-          </Button>
-          <Button onClick={ouvrirCreation} className="!min-h-0 h-10">
-            <Plus size={18} className="mr-1" /> Nouvel article
-          </Button>
-        </div>
+        {estAdmin && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={chargerCatalogueKarate} className="!min-h-0 h-10">
+              <Package size={18} className="mr-1" /> Catalogue karaté
+            </Button>
+            <Button onClick={ouvrirCreation} className="!min-h-0 h-10">
+              <Plus size={18} className="mr-1" /> Nouvel article
+            </Button>
+          </div>
+        )}
       </div>
 
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg border border-red-100 text-sm">{error}</div>}
@@ -361,7 +366,7 @@ export function Inventaire() {
                   <th className="py-3 px-4">Article</th>
                   <th className="py-3 px-2">Discipline</th>
                   <th className="py-3 px-2">Catégorie</th>
-                  <th className="py-3 px-2 text-right" title="Coût de revient — interne club, jamais montré aux parents">Coût (interne)</th>
+                  {estAdmin && <th className="py-3 px-2 text-right" title="Coût de revient — interne club, jamais montré aux parents">Coût (interne)</th>}
                   <th className="py-3 px-2 text-right">Prix de vente</th>
                   <th className="py-3 px-2 text-center">Stock</th>
                   <th className="py-3 px-2 text-right">Actions</th>
@@ -369,7 +374,7 @@ export function Inventaire() {
               </thead>
               <tbody>
                 {visibles.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-gray-400">Aucun article. Ajoutez-en un ou chargez le catalogue karaté.</td></tr>
+                  <tr><td colSpan={estAdmin ? 7 : 6} className="py-8 text-center text-gray-400">{estAdmin ? 'Aucun article. Ajoutez-en un ou chargez le catalogue karaté.' : 'Aucun article dans votre discipline pour le moment.'}</td></tr>
                 )}
                 {visibles.map((a) => (
                   <tr key={a.id} className={`border-b border-gray-50 ${a.actif ? '' : 'opacity-45'}`}>
@@ -380,21 +385,21 @@ export function Inventaire() {
                     </td>
                     <td className="py-2.5 px-2">{labelDiscipline(a.discipline)}</td>
                     <td className="py-2.5 px-2">{labelCategorie(a.categorie)}</td>
-                    <td className="py-2.5 px-2 text-right text-gray-500">{a.coutAchat != null ? fmtMontant(a.coutAchat) : <span className="text-amber-600 text-xs">à saisir</span>}</td>
+                    {estAdmin && <td className="py-2.5 px-2 text-right text-gray-500">{a.coutAchat != null ? fmtMontant(a.coutAchat) : <span className="text-amber-600 text-xs">à saisir</span>}</td>}
                     <td className="py-2.5 px-2 text-right font-semibold">{fmtMontant(a.prixVente)}</td>
                     <td className="py-2.5 px-2 text-center">
                       <div className="inline-flex items-center gap-1.5">
-                        <button onClick={() => ajusterStock(a, -1)} className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500" title="−1 (perte, correction)"><Minus size={14} /></button>
+                        {estAdmin && <button onClick={() => ajusterStock(a, -1)} className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500" title="−1 (perte, correction)"><Minus size={14} /></button>}
                         {badgeStock(a)}
-                        <button onClick={() => ajusterStock(a, 1)} className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500" title="+1 (réception)"><Plus size={14} /></button>
+                        {estAdmin && <button onClick={() => ajusterStock(a, 1)} className="p-1 rounded hover:bg-gray-100 cursor-pointer text-gray-500" title="+1 (réception)"><Plus size={14} /></button>}
                       </div>
                     </td>
                     <td className="py-2.5 px-2">
                       <div className="flex justify-end gap-1">
                         <button onClick={() => ouvrirVente(a)} className="p-2 rounded-lg hover:bg-green-50 text-green-700 cursor-pointer" title="Vendre"><ShoppingCart size={16} /></button>
-                        <button onClick={() => ouvrirEdition(a)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 cursor-pointer" title="Modifier"><Pencil size={16} /></button>
-                        <button onClick={() => ouvrirEdition(a, true)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 cursor-pointer" title="Dupliquer (autre taille)"><Copy size={16} /></button>
-                        <button onClick={() => supprimerArticle(a)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Supprimer"><Trash2 size={16} /></button>
+                        {estAdmin && <button onClick={() => ouvrirEdition(a)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 cursor-pointer" title="Modifier"><Pencil size={16} /></button>}
+                        {estAdmin && <button onClick={() => ouvrirEdition(a, true)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 cursor-pointer" title="Dupliquer (autre taille)"><Copy size={16} /></button>}
+                        {estAdmin && <button onClick={() => supprimerArticle(a)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Supprimer"><Trash2 size={16} /></button>}
                       </div>
                     </td>
                   </tr>
@@ -430,7 +435,7 @@ export function Inventaire() {
                   <td className="py-2.5 px-2 text-right font-semibold">{fmtMontant(v.prixUnitaire * v.quantite)}</td>
                   <td className="py-2.5 px-2">{METHODES.find((m) => m.value === v.methode)?.label || '—'}</td>
                   <td className="py-2.5 px-2 text-right">
-                    <button onClick={() => annulerVente(v)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Annuler la vente (réajuste le stock)"><Undo2 size={16} /></button>
+                    {estAdmin && <button onClick={() => annulerVente(v)} className="p-2 rounded-lg hover:bg-red-50 text-red-500 cursor-pointer" title="Annuler la vente (réajuste le stock)"><Undo2 size={16} /></button>}
                   </td>
                 </tr>
               ))}
@@ -513,7 +518,14 @@ export function Inventaire() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input label="Quantité" inputMode="numeric" value={venteForm.quantite} onChange={(e) => setVenteForm({ ...venteForm, quantite: e.target.value })} />
-              <Input label="Prix unitaire $" inputMode="decimal" value={venteForm.prixUnitaire} onChange={(e) => setVenteForm({ ...venteForm, prixUnitaire: e.target.value })} />
+              {estAdmin ? (
+                <Input label="Prix unitaire $" inputMode="decimal" value={venteForm.prixUnitaire} onChange={(e) => setVenteForm({ ...venteForm, prixUnitaire: e.target.value })} />
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Prix unitaire</label>
+                  <div className="min-h-[44px] flex items-center px-3 bg-gray-50 rounded-lg font-semibold">{fmtMontant(modalVente.prixVente)}</div>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">Méthode</label>
                 <select className={selectClass} value={venteForm.methode} onChange={(e) => setVenteForm({ ...venteForm, methode: e.target.value })}>

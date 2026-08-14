@@ -304,6 +304,18 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 Réponses : `{ success, data }` / `{ success:false, error }`. Auth : JWT Bearer
 (7 j, localStorage `cshp_token`). Rôles vérifiés par `requireRole`.
 
+**Portée par discipline (`src/lib/portee.ts`)** : les ADMIN voient tout ; un
+COACH ou SECTION_MANAGER voit **toute sa discipline** — la section de son
+compte (ex. JUDO_GR1) résout vers le sport (table Section.sport) et couvre
+tous les groupes du même sport. Concrètement pour le staff non admin :
+membres (liste + fiche) limités au sport ; inventaire en lecture (coût de
+revient MASQUÉ, réservé admin) + vente au prix affiché uniquement (prix forcé
+côté serveur) ; affiliations et événements (CRUD + inscriptions) limités à sa
+discipline (les événements « TOUS » sont visibles mais gérés par l'admin
+seulement). Création/édition/suppression d'articles, ajustements de stock,
+annulation de vente, catalogue : admin seulement. Un compte staff sans
+section reconnue garde un filtre strict sur sa valeur de section.
+
 | Route | Accès | Points clés |
 |---|---|---|
 | `POST /api/auth/login`, `GET /api/auth/me` | public / connecté | me lit la base (rôle à jour) |
@@ -654,6 +666,7 @@ src/lib/bienvenue.ts                      Contenu du courriel de bienvenue (+ ka
 src/lib/katas.ts                          Programme de katas Heian par grade + liens vidéo + estKarate.
 src/lib/reglement.ts                      Règlement intérieur versionné (16 articles) — incrémenter REGLEMENT_VERSION à tout changement.
 src/lib/saison.ts                         Saison fédération (1er sept. → 31 août) : saisonPourDate/saisonCourante/saisonsChoix — PARTAGÉ front/back.
+src/lib/portee.ts                         Portée par discipline du personnel : porteeStaff (ADMIN = tout ; coach/SM = tous les groupes de SON sport) + disciplineDansPortee.
 src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
 src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
 src/lib/seedData.ts                       seedInitialData + bootstrapIfEmpty (amorçage automatique si base vide).

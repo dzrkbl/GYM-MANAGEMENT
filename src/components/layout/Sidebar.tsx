@@ -13,8 +13,10 @@ export function Sidebar() {
     { to: '/pointer', icon: CheckSquare, label: 'Pointage' },
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Paiements' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin/finances', icon: Coins, label: 'Finances' }] : []),
-    ...(user?.role === 'ADMIN' ? [{ to: '/admin/inventaire', icon: Package, label: 'Inventaire' }] : []),
-    ...(user?.role === 'ADMIN' ? [{ to: '/admin/evenements', icon: Trophy, label: 'Événements' }] : []),
+    // Inventaire et Événements : accessibles à tout le personnel — le serveur
+    // limite chacun à SA discipline (un coach judo voit tout le judo).
+    { to: '/admin/inventaire', icon: Package, label: 'Inventaire' },
+    { to: '/admin/evenements', icon: Trophy, label: 'Événements' },
     ...(user?.role === 'ADMIN' ? [{ to: '/rapports', icon: FileText, label: 'Rapports' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/coachs', icon: UserCog, label: 'Coachs' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/sections', icon: Tag, label: 'Sections' }] : []),
