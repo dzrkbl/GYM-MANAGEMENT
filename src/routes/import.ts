@@ -26,9 +26,11 @@ const router = Router();
  * Muselage anti-rattrapage : un import d'historique ne doit JAMAIS déclencher
  * de courriels rétroactifs aux parents. Si la fin du contrat importé est déjà
  * passée ou tombe dans la fenêtre des rappels (≤ 30 jours), les trois étages
- * de renouvellement (R30/R7/ÉCHU) sont marqués comme envoyés. Le cycle normal
- * reprend au contrat suivant (le renouvellement crée de nouvelles clés).
- * Les retards importés de plus de 90 jours sont déjà silencieux par design.
+ * de renouvellement (R30/R7/ÉCHU) sont marqués comme envoyés. Même chose pour
+ * un versement importé déjà en retard : ses trois relances (S0/S1/S2) sont
+ * marquées envoyées — l'admin le voit dans les badges et la liste de relance,
+ * les parents ne reçoivent rien. Le cycle normal reprend sur les échéances et
+ * contrats suivants (nouvelles clés).
  */
 
 const importSchema = z.object({
@@ -122,6 +124,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     const membres = emptyStat();
     membres.rappelsMuseles = 0;
     const versements = emptyStat();
+    versements.rappelsMuseles = 0;
     const nameToId = new Map<string, string>();
 
     // --- MEMBRES ---
@@ -266,7 +269,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
 
         try {
-          await prisma.paymentVersement.create({
+          const created = await prisma.paymentVersement.create({
             data: {
               membreId: memberId,
               numeroVersement: numero,
@@ -278,6 +281,20 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
             },
           });
           versements.inserted++;
+
+          // Muselage anti-rattrapage (voir en-tête) : un versement importé
+          // déjà en retard ne déclenche aucune relance rétroactive aux parents.
+          if (!datePaiement && montant > 0 && datePrevue < new Date()) {
+            await prisma.reminderLog.createMany({
+              data: [
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: created.id },
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: `${created.id}:S1` },
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: `${created.id}:S2` },
+              ],
+              skipDuplicates: true,
+            });
+            versements.rappelsMuseles = (versements.rappelsMuseles || 0) + 1;
+          }
         } catch (err: any) {
           versements.errors++;
           versements.errorDetails.push({ ligne, nom: fullName, error: err?.message || String(err) });
