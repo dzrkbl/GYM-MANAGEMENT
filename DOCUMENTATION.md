@@ -455,12 +455,21 @@ passe vide = temporaire affiché une fois. Changement de rôle effectif au
 rafraîchissement (rôle lu en base).
 
 ### 9.3 Import CSV (page Import, ADMIN)
-- **Membres** (22 colonnes) : `prenom,nom,dateNaissance,genre,courriel,telephone,
+- **Membres** (23 colonnes) : `prenom,nom,dateNaissance,genre,courriel,telephone,
   nomParent,telephoneParent,courrielParent,statut,section,plan,prixBase,
   rabaisFamille,membreFamille,rabaisCustomPct,raisonRabais,montantFinal,
-  dateInscription,finContrat,ceinture,notes`. Dédoublonné par nom complet
-  (insensible à la casse) — un existant est **ignoré**, jamais modifié.
-  `signupDate` est initialisée avec `dateInscription`.
+  dateInscription,finContrat,ceinture,notes,membreDepuis`. Dédoublonné par nom
+  complet (insensible à la casse) — un existant est **ignoré**, jamais modifié
+  (⚠️ ses versements du fichier s'attacheraient au dossier existant : importer
+  les membres D'ABORD, vérifier « ignorés = 0 », puis les versements).
+  `signupDate` = `membreDepuis` si fournie, sinon `dateInscription`.
+- **Muselage anti-rattrapage (automatique)** : pour tout membre importé dont la
+  fin de contrat est passée ou à ≤ 30 jours, les trois étages de renouvellement
+  (R30/R7/ÉCHU) sont marqués envoyés dans ReminderLog — un import d'historique
+  ne déclenche JAMAIS de courriels rétroactifs aux parents (l'admin gère ces
+  cas en personne ; le cycle normal reprend au contrat suivant). Les retards
+  importés > 90 jours sont déjà silencieux par design. Le rapport d'import
+  renvoie `rappelsMuseles`.
 - **Versements** : `nomComplet,numero,montant,datePrevue,datePaiement,methode,note`.
   `datePaiement` vide = à percevoir. Rattachement par nom complet en essayant
   **toutes les coupures prénom/nom** (noms composés). Dédoublonné par
