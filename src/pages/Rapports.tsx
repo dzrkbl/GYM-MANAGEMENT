@@ -75,6 +75,10 @@ export function Rapports() {
 
   // Saisie et suivi manuel des salaires fixes des coachs (Masse Salariale A+B)
   const [coachs, setCoachs] = useState<{ id: string; nom: string; montant: number }[]>([]);
+  // Salaires saisis sur les COMPTES (page Coachs) — inclus dans la masse
+  // salariale automatiquement ; affichés ici en lecture seule pour éviter
+  // qu'on saisisse la même personne deux fois.
+  const [salairesComptes, setSalairesComptes] = useState<{ id: string; nom: string; montant: number }[]>([]);
   const [showCoachConfig, setShowCoachConfig] = useState(false);
   const [editingCoach, setEditingCoach] = useState<Record<string, string>>({});
   const [newCoach, setNewCoach] = useState({ nom: '', montant: '' });
@@ -83,11 +87,18 @@ export function Rapports() {
     apiFetch<any[]>('/coach-salaire')
       .then(setCoachs)
       .catch(console.error);
+    apiFetch<any[]>('/coachs')
+      .then((cs) => setSalairesComptes(
+        (cs || [])
+          .filter((c: any) => c.actif && Number(c.remuneration) > 0)
+          .map((c: any) => ({ id: c.id, nom: `${c.firstName} ${c.lastName}`, montant: Number(c.remuneration) }))
+      ))
+      .catch(console.error);
   }, []);
 
   const totalDefaut = useMemo(() => {
-    return coachs.reduce((s, c) => s + c.montant, 0);
-  }, [coachs]);
+    return coachs.reduce((s, c) => s + c.montant, 0) + salairesComptes.reduce((s, c) => s + c.montant, 0);
+  }, [coachs, salairesComptes]);
 
   useEffect(() => {
     fetchReport();
@@ -699,9 +710,21 @@ export function Rapports() {
 
               {showCoachConfig && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
-                  <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-2">Salaire fixe par coach</div>
+                  {salairesComptes.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider">Comptes du personnel (gérés dans la page Coachs)</div>
+                      {salairesComptes.map((c) => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm justify-between bg-white p-2 rounded-lg border border-gray-100 opacity-80">
+                          <span className="font-semibold text-cshp-black">👤 {c.nom}</span>
+                          <span className="text-xs font-bold text-cshp-black">{c.montant.toFixed(2)} $/m <span className="text-cshp-gray font-normal">· compte</span></span>
+                        </div>
+                      ))}
+                      <p className="text-[11px] text-cshp-gray italic">Inclus automatiquement dans la masse salariale — ne pas les ressaisir ci-dessous.</p>
+                    </div>
+                  )}
+                  <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-2">Salaires SANS compte dans l'app (aides, contractuels…)</div>
                   {coachs.length === 0 ? (
-                    <p className="text-xs text-cshp-gray italic">Aucun coach fixe enregistré.</p>
+                    <p className="text-xs text-cshp-gray italic">Aucune ligne — les salaires des comptes ci-dessus suffisent.</p>
                   ) : (
                     <div className="space-y-2">
                       {coachs.map(c => (

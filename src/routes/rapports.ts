@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { masseSalarialePourMois } from '../lib/finances';
+import { masseSalarialePourMois, getLoyerPourAnnee } from '../lib/finances';
 import { getRevenusperiode, getChargesPeriode } from '../lib/finances';
 
 const DIVISEUR_TAXES = 1.14975;
@@ -82,6 +82,100 @@ router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Requ
     return res.status(400).json({ error: 'Type de rapport inconnu' });
   } catch (error) {
     return sendError(res, 'Erreur lors de l\'export', 500);
+  }
+});
+
+// GET /api/rapports/rentabilite — hypothèse « effectif constant » :
+// si les membres ACTIFS d'aujourd'hui restent et renouvellent aux mêmes
+// conditions, le club est-il rentable sur un an ?
+//  - Revenu annualisé : ANNUEL = montantFinal ; TRIMESTRIEL = ×4 (MENSUEL ×12,
+//    fossile). Ramené NET de taxes (prix taxes incluses → ÷ 1,14975).
+//  - Charges : (masse salariale + loyer + charges récurrentes) du mois courant
+//    × 12, plus les dépenses ponctuelles des 12 derniers mois (indicatif).
+//  - Ventes d'équipement, affiliations et frais fédération : EXCLUS (pas des
+//    revenus de cotisations ; marge équipement marginale).
+router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
+  try {
+    const isoAuj = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+    const annee = Number(isoAuj.slice(0, 4));
+    const mois = Number(isoAuj.slice(5, 7));
+
+    const [sections, membres] = await Promise.all([
+      prisma.section.findMany(),
+      prisma.member.findMany({
+        where: { status: 'ACTIF' },
+        select: { firstName: true, lastName: true, plan: true, montantFinal: true, sections: { select: { section: true } } },
+      }),
+    ]);
+    const sportDe = new Map(sections.map((s) => [s.code, (s.sport || 'AUTRE').toUpperCase()]));
+
+    let revenuAnnuelBrut = 0;
+    const parSport = new Map<string, { sport: string; membres: number; revenuAnnuelBrut: number }>();
+    const sansContrat: string[] = [];
+    for (const m of membres) {
+      const mf = m.montantFinal || 0;
+      const annuel = m.plan === 'ANNUEL' ? mf : m.plan === 'TRIMESTRIEL' ? mf * 4 : m.plan === 'MENSUEL' ? mf * 12 : 0;
+      if (annuel <= 0) {
+        sansContrat.push(`${m.firstName} ${m.lastName}`);
+        continue;
+      }
+      revenuAnnuelBrut += annuel;
+      const sport = sportDe.get(m.sections[0]?.section || '') || 'AUTRE';
+      const e = parSport.get(sport) || { sport, membres: 0, revenuAnnuelBrut: 0 };
+      e.membres += 1;
+      e.revenuAnnuelBrut += annuel;
+      parSport.set(sport, e);
+    }
+    revenuAnnuelBrut = Math.round(revenuAnnuelBrut * 100) / 100;
+    const revenuAnnuelNet = Math.round((revenuAnnuelBrut / DIVISEUR_TAXES) * 100) / 100;
+
+    const masseSalarialeMensuelle = await masseSalarialePourMois(mois, annee);
+    const loyerMensuel = await getLoyerPourAnnee(annee);
+    const recurrentes = await prisma.depense.findMany({ where: { annee, mois: null, isOverride: false } });
+    const depensesRecurrentesMensuelles = Math.round(recurrentes.reduce((a, d) => a + d.montant, 0) * 100) / 100;
+    const chargesMensuelles = Math.round((masseSalarialeMensuelle + loyerMensuel + depensesRecurrentesMensuelles) * 100) / 100;
+    const chargesAnnuelles = Math.round(chargesMensuelles * 12 * 100) / 100;
+
+    // Dépenses ponctuelles des 12 derniers mois (fenêtre glissante).
+    const cle = (a: number, m: number) => a * 12 + m;
+    const ponctuelles = await prisma.depense.findMany({ where: { mois: { not: null }, isOverride: false } });
+    const ponctuelles12Mois = Math.round(
+      ponctuelles
+        .filter((d) => d.mois !== null && cle(d.annee, d.mois) > cle(annee, mois) - 12 && cle(d.annee, d.mois) <= cle(annee, mois))
+        .reduce((a, d) => a + d.montant, 0) * 100
+    ) / 100;
+
+    const resultatRecurrent = Math.round((revenuAnnuelNet - chargesAnnuelles) * 100) / 100;
+    const resultatPrudent = Math.round((resultatRecurrent - ponctuelles12Mois) * 100) / 100;
+    const membresPayants = membres.length - sansContrat.length;
+    const revenuMoyenNetParMembre = membresPayants > 0 ? Math.round((revenuAnnuelNet / membresPayants) * 100) / 100 : 0;
+    const membresNecessaires = revenuMoyenNetParMembre > 0
+      ? Math.ceil((chargesAnnuelles + ponctuelles12Mois) / revenuMoyenNetParMembre)
+      : null;
+
+    return sendSuccess(res, {
+      calculeLe: isoAuj,
+      membresActifs: membres.length,
+      membresPayants,
+      sansContrat,
+      revenuAnnuelBrut,
+      revenuAnnuelNet,
+      parSport: [...parSport.values()].sort((a, b) => b.revenuAnnuelBrut - a.revenuAnnuelBrut),
+      masseSalarialeMensuelle,
+      loyerMensuel,
+      depensesRecurrentesMensuelles,
+      chargesMensuelles,
+      chargesAnnuelles,
+      ponctuelles12Mois,
+      resultatRecurrent,
+      resultatPrudent,
+      margePct: revenuAnnuelNet > 0 ? Math.round((resultatPrudent / revenuAnnuelNet) * 1000) / 10 : 0,
+      revenuMoyenNetParMembre,
+      membresNecessaires,
+    });
+  } catch (error) {
+    console.error('Error in GET /api/rapports/rentabilite:', error);
+    return sendError(res, "Erreur du calcul de rentabilité", 500);
   }
 });
 

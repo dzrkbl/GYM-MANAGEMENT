@@ -20,14 +20,22 @@ export async function getLoyerPourAnnee(annee: number): Promise<number> {
 }
 
 // Masse salariale d'un mois : override MasseSalariale s'il existe, sinon la
-// somme des salaires actifs (« Gérer les coachs » du Module financier).
-// SOURCE UNIQUE : le Dashboard et le Module financier passent tous deux par ici
-// (avant, le Dashboard additionnait `User.remuneration` — un troisième chiffre).
+// somme de DEUX saisies complémentaires :
+//  - les rémunérations des COMPTES du personnel (page Coachs, User.remuneration,
+//    $/mois) — là où l'admin saisit naturellement les salaires ;
+//  - les lignes « Gérer les coachs » de Rapports (CoachSalaire) — pour les
+//    payes SANS compte dans l'app (aide ponctuelle, etc.).
+// Ne pas saisir la même personne aux deux endroits (le bloc de Rapports
+// affiche les salaires des comptes en lecture seule pour éviter le doublon).
+// SOURCE UNIQUE : Dashboard, Module financier et Rapports passent tous par ici.
 export async function masseSalarialePourMois(mois: number, annee: number): Promise<number> {
   const override = await prisma.masseSalariale.findFirst({ where: { mois, annee } });
   if (override) return override.montant;
-  const somme = await prisma.coachSalaire.aggregate({ _sum: { montant: true }, where: { actif: true } });
-  return somme._sum.montant ?? 0;
+  const [lignes, comptes] = await Promise.all([
+    prisma.coachSalaire.aggregate({ _sum: { montant: true }, where: { actif: true } }),
+    prisma.user.aggregate({ _sum: { remuneration: true }, where: { actif: true } }),
+  ]);
+  return (lignes._sum.montant ?? 0) + (comptes._sum.remuneration ?? 0);
 }
 
 // Charges de la période (mois + annee)
