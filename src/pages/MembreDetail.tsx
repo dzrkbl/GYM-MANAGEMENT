@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
 import { etatPaiement } from '../lib/echeances';
+import { saisonCourante, saisonsChoix } from '../lib/saison';
 import { CEINTURES_LIST } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
 import { Input } from '../components/ui/Input';
@@ -152,11 +153,70 @@ export function MembreDetail() {
   const [payNote, setPayNote] = useState('');
   const [isPayingVersement, setIsPayingVersement] = useState(false);
 
+  // Affiliations fédération + achats d'équipement (endpoints ADMIN seulement).
+  const [affiliations, setAffiliations] = useState<any[]>([]);
+  const [achats, setAchats] = useState<any[]>([]);
+  const [showAffForm, setShowAffForm] = useState(false);
+  const [affForm, setAffForm] = useState({ discipline: 'KARATE', saison: saisonCourante(), numero: '', montant: '', datePaiement: '', note: '' });
+  const [isAffSaving, setIsAffSaving] = useState(false);
+
   useEffect(() => {
     fetchMemberData();
     fetchGrades();
     fetchAllMembres();
   }, [id]);
+
+  useEffect(() => {
+    if (user?.role === 'ADMIN' && id) {
+      fetchAffiliations();
+      apiFetch<any[]>(`/inventaire/ventes?membreId=${id}`).then(setAchats).catch(() => {});
+    }
+  }, [id, user]);
+
+  async function fetchAffiliations() {
+    try {
+      const res = await apiFetch<{ affiliations: any[] }>(`/affiliations?membreId=${id}`);
+      setAffiliations(res.affiliations);
+    } catch (err) {
+      console.warn('Erreur chargement affiliations', err);
+    }
+  }
+
+  const ajouterAffiliation = async () => {
+    setIsAffSaving(true);
+    try {
+      const montant = affForm.montant.trim() === '' ? null : parseFloat(affForm.montant.replace(',', '.'));
+      await apiFetch('/affiliations', {
+        method: 'POST',
+        body: JSON.stringify({
+          membreId: id,
+          discipline: affForm.discipline,
+          saison: affForm.saison,
+          numero: affForm.numero.trim() || null,
+          montant: montant != null && !isNaN(montant) ? montant : null,
+          datePaiement: affForm.datePaiement || null,
+          note: affForm.note.trim() || null,
+        }),
+      });
+      setShowAffForm(false);
+      setAffForm({ discipline: 'KARATE', saison: saisonCourante(), numero: '', montant: '', datePaiement: '', note: '' });
+      await fetchAffiliations();
+    } catch (err: any) {
+      alert(err?.message || "Erreur lors de l'ajout de l'affiliation");
+    } finally {
+      setIsAffSaving(false);
+    }
+  };
+
+  const supprimerAffiliation = async (a: any) => {
+    if (!confirm(`Supprimer l'affiliation ${a.discipline} ${a.saison} ?`)) return;
+    try {
+      await apiFetch(`/affiliations/${a.id}`, { method: 'DELETE' });
+      await fetchAffiliations();
+    } catch (err: any) {
+      alert(err?.message || 'Erreur de suppression');
+    }
+  };
 
   async function fetchGrades() {
     try {
@@ -605,6 +665,86 @@ export function MembreDetail() {
               </div>
             </Card>
           )}
+
+          {/* Affiliations fédération — déterminent l'admissibilité aux compétitions (saison sept. → août) */}
+          {user?.role === 'ADMIN' && (
+            <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b pb-1">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Affiliations fédération</h3>
+                <button
+                  onClick={() => setShowAffForm((v) => !v)}
+                  className="text-xs font-bold text-cshp-red hover:underline cursor-pointer"
+                >
+                  {showAffForm ? 'Fermer' : '+ Ajouter'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">
+                L'affiliation de la saison détermine l'admissibilité aux compétitions. Le montant va à la fédération : <strong>pas un revenu du club</strong>.
+              </p>
+
+              {showAffForm && (
+                <div className="p-3 bg-slate-50 rounded-xl space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Discipline</label>
+                      <select
+                        className="min-h-[40px] w-full border border-gray-300 rounded-lg px-2 bg-white text-sm"
+                        value={affForm.discipline}
+                        onChange={(e) => setAffForm({ ...affForm, discipline: e.target.value })}
+                      >
+                        <option value="KARATE">Karaté</option>
+                        <option value="JUDO">Judo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Saison</label>
+                      <select
+                        className="min-h-[40px] w-full border border-gray-300 rounded-lg px-2 bg-white text-sm"
+                        value={affForm.saison}
+                        onChange={(e) => setAffForm({ ...affForm, saison: e.target.value })}
+                      >
+                        {saisonsChoix().map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <Input label="N° fédération" value={affForm.numero} onChange={(e: any) => setAffForm({ ...affForm, numero: e.target.value })} />
+                    <Input label="Montant $ (fédé)" inputMode="decimal" value={affForm.montant} onChange={(e: any) => setAffForm({ ...affForm, montant: e.target.value })} />
+                    <Input label="Payée le" type="date" value={affForm.datePaiement} onChange={(e: any) => setAffForm({ ...affForm, datePaiement: e.target.value })} />
+                    <Input label="Note" value={affForm.note} onChange={(e: any) => setAffForm({ ...affForm, note: e.target.value })} />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={ajouterAffiliation} disabled={isAffSaving} className="!min-h-0 h-9 text-sm">
+                      {isAffSaving ? 'Ajout…' : "Ajouter l'affiliation"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {affiliations.length > 0 ? (
+                <div className="space-y-2">
+                  {affiliations.map((a: any) => (
+                    <div key={a.id} className="p-3 border border-gray-100 rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={a.saison === saisonCourante() ? 'success' : 'neutral'}>
+                          {a.discipline === 'KARATE' ? 'Karaté' : 'Judo'} {a.saison}
+                        </Badge>
+                        {a.saison === saisonCourante() && <span className="text-xs text-emerald-600 font-bold">Saison courante ✓</span>}
+                        {a.numero && <span className="text-xs text-gray-500">n° {a.numero}</span>}
+                        {a.montant != null && <span className="text-xs text-gray-500">{formatMontant(a.montant)} (fédé)</span>}
+                        {a.datePaiement && <span className="text-xs text-gray-400">payée le {formatDateLocal(a.datePaiement)}</span>}
+                      </div>
+                      <button onClick={() => supprimerAffiliation(a)} className="text-red-400 hover:text-red-600 cursor-pointer" title="Supprimer">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 italic">
+                  Aucune affiliation enregistrée — cet athlète n'est pas admissible aux compétitions {saisonCourante()}.
+                </p>
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -805,6 +945,30 @@ export function MembreDetail() {
               <p className="text-xs text-gray-400 italic">Aucun échéancier de paiement disponible pour ce membre.</p>
             )}
           </Card>
+
+          {/* Achats d'équipement — tracés au dossier, JAMAIS ajoutés automatiquement à la facture annuelle */}
+          {user?.role === 'ADMIN' && achats.length > 0 && (
+            <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Achats d'équipement</h3>
+              <div className="space-y-2">
+                {achats.map((v: any) => (
+                  <div key={v.id} className="p-3 border border-gray-100 rounded-xl flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div>
+                      <span className="font-semibold text-gray-900">
+                        {v.quantite > 1 ? `${v.quantite} × ` : ''}
+                        {[v.article?.nom, v.article?.marque, v.article?.couleur, v.article?.taille ? `t. ${v.article.taille}` : null].filter(Boolean).join(' · ')}
+                      </span>
+                      <span className="text-xs text-gray-400 block">{formatDateLocal(v.date)}{v.note ? ` — ${v.note}` : ''}</span>
+                    </div>
+                    <span className="font-bold text-gray-900">{formatMontant(v.prixUnitaire * v.quantite)}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 italic">
+                Ces achats ne sont pas ajoutés automatiquement à la facture annuelle ni aux revenus de cotisations (ajout manuel si souhaité).
+              </p>
+            </Card>
+          )}
         </div>
       )}
 

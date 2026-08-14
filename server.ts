@@ -26,6 +26,9 @@ import auditRouter from './src/routes/audit';
 import communicationsRouter from './src/routes/communications';
 import leadsRouter from './src/routes/leads';
 import backupRouter from './src/routes/backup';
+import inventaireRouter from './src/routes/inventaire';
+import evenementsRouter from './src/routes/evenements';
+import affiliationsRouter from './src/routes/affiliations';
 
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
@@ -116,6 +119,9 @@ app.use('/api/audit', auditRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/backup', backupRouter);
+app.use('/api/inventaire', inventaireRouter);
+app.use('/api/evenements', evenementsRouter);
+app.use('/api/affiliations', affiliationsRouter);
 
 // Basic health check
 app.get('/api/health', (req, res) => {

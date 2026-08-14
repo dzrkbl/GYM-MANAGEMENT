@@ -129,6 +129,24 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
   `REGLEMENT_VERSION`) ; la version acceptée + signature + horodatage sont
   stockés sur le membre. **Si le texte change, incrémenter la version.**
 
+### Inventaire, événements et affiliations (règles d'argent STRICTES)
+- **Coût de revient (`coutAchat`) = interne club.** Il n'apparaît que sur la
+  page admin Inventaire. Ne JAMAIS l'inclure dans un document destiné aux
+  parents — seul `prixVente` est montrable.
+- **Les ventes d'équipement ne s'ajoutent JAMAIS automatiquement à la facture
+  annuelle** (le propriétaire les ajoute manuellement s'il le souhaite) et
+  n'entrent pas dans les revenus de cotisations.
+- **Affiliations et frais de compétition ne sont PAS des revenus du club** :
+  l'argent transite vers la fédération. Ils ne doivent JAMAIS apparaître dans
+  le tableau de bord ni les rapports financiers (garanti structurellement :
+  rapports/dashboard ne lisent que `PaymentVersement`).
+- **Saison d'affiliation = 1er septembre → 31 août** (« 2026-2027 »). C'est
+  l'affiliation qui rend un athlète admissible aux compétitions — l'app
+  **signale** (badge rouge) mais ne bloque jamais une inscription.
+- À l'inscription d'un athlète à un événement, l'app **flag aussi tout solde
+  dû au club** sur l'abonnement (retard, reste impayé, renouvellement échu) —
+  demande explicite du propriétaire pour percevoir au passage.
+
 ### Divers
 - Ne **jamais** stocker d'ethnicité ou donnée sensible équivalente (Loi 25) —
   le marketing (dossier `marketing/`, hors code) cible par contenu, pas par attribut.
@@ -256,6 +274,27 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
   courriel `action='ERREUR', entity='Courriel'`), **ReminderLog** (§3.4),
   finances (**MasseSalariale**, **CoachSalaire**, **DepenseConfig**, **Depense**
   — ATTENTION : `Depense.mois = null` signifie « retranchée CHAQUE mois »).
+- **ArticleInventaire** — équipement en stock (`nom`, `categorie` KIMONO/GANTS/
+  PROTEGE_TIBIAS/PROTEGE_DENTS/CEINTURE/COQUILLE/CHANDAIL/PANTALON/AUTRE,
+  `discipline?`, `taille?`, `couleur?`, `marque?`, `quantite`, `seuilAlerte?`).
+  **`coutAchat` = coût de revient INTERNE club (jamais montré aux parents) ;
+  `prixVente` = seul prix montrable/facturable.** Tout est modifiable dans l'UI.
+- **VenteEquipement** — trace « qui a acheté quoi » (`membreId?` null = vente
+  comptoir, `prixUnitaire` copié au moment de la vente, `methode?`). La vente
+  décrémente le stock ; l'annulation (DELETE) le réincrémente. **JAMAIS ajoutée
+  automatiquement à la facture annuelle, JAMAIS comptée dans les revenus**
+  (rapports/dashboard ne lisent que PaymentVersement).
+- **Affiliation** — affiliation fédération par athlète/discipline (KARATE|JUDO)
+  et par **saison « AAAA-AAAA » (1er sept. → 31 août**, calcul dans
+  `src/lib/saison.ts`). Unique (membreId+discipline+saison). `montant` = remis
+  à la fédération : **PAS un revenu club**. Détermine l'admissibilité aux
+  compétitions.
+- **Evenement** / **EvenementInscription** — compétitions, passages de grade,
+  autres (`fraisInscription` transite vers la fédération). Inscription unique
+  (evenementId+membreId), `fraisPaye` = frais remis. L'admissibilité est
+  calculée à la volée : affiliation valide pour la **saison de la DATE de
+  l'événement** + flag « solde dû au club » (versements en retard, reste
+  impayé, renouvellement échu) — on signale, on ne bloque jamais.
 - Migrations : baseline unique + migrations additives datées. Nouvelle colonne
   → `prisma/migrations/<timestamp>_<nom>/migration.sql` écrit à la main +
   champ dans schema.prisma (le déploiement l'applique au démarrage).
@@ -289,6 +328,10 @@ Réponses : `{ success, data }` / `{ success:false, error }`. Auth : JWT Bearer
 | `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) |
 | `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections ; test vers adresse au choix ; diagnostic transport |
 | `POST /api/backup` | ADMIN | sauvegarde Excel immédiate |
+| `GET/POST/PUT/DELETE /api/inventaire` + `POST /:id/stock {delta}` | ADMIN | CRUD articles ; DELETE = suppression si aucune vente, sinon désactivation ; `POST /api/inventaire/seed-karate` = catalogue karaté idempotent (prix de VENTE fournis par le club, coût de revient à saisir) |
+| `GET/POST /api/inventaire/ventes`, `DELETE /ventes/:id` | ADMIN | vente (décrémente stock, prix copié, membre optionnel), annulation (réincrémente) ; `?membreId=` → achats d'un dossier |
+| `GET/POST/PUT/DELETE /api/affiliations` | ADMIN | par membre/discipline/saison (doublon → 400) ; GET renvoie aussi `saisonCourante` |
+| `GET/POST/PUT/DELETE /api/evenements` + `/:id/inscriptions` | ADMIN | détail = participants avec `admissibilite` calculée (affiliation de la saison de l'événement + `solde` dû au club) ; PATCH inscription `{fraisPaye}` ; DELETE événement = archivage si inscriptions |
 | `GET /api/audit` | ADMIN | journal (cherchez `ERREUR / Courriel` pour les envois ratés) |
 | `GET /api/health` | public | ping UptimeRobot |
 | `GET /api/cron/reminders` | Bearer CRON_SECRET | tournée à la demande |
@@ -385,6 +428,16 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   attention au sens de « récurrente = chaque mois »), taxes.
 - **Coachs** : comptes staff **et administrateurs** (garde-fou dernier admin),
   mot de passe temporaire affiché une seule fois.
+- **Inventaire** (ADMIN) : stock filtrable (discipline/catégorie), coût interne
+  vs prix de vente, ± stock, Vendre (recherche membre, prix ajustable),
+  Dupliquer (déclinaison par taille), onglet Ventes (« qui a acheté quoi »,
+  annulation = stock réajusté), bouton « Catalogue karaté » (seed idempotent).
+- **Événements** (ADMIN) : onglet Événements (à venir/passés, détail avec
+  participants + badges admissibilité : affilié ✓/✗ pour la saison de
+  l'événement, « Doit X $ au club », « Renouvellement échu », frais remis) ;
+  onglet Affiliations (par saison/discipline, ajout avec recherche d'athlète).
+  La fiche membre (profil) a sa carte « Affiliations fédération » et l'onglet
+  Paiements liste les « Achats d'équipement ».
 - **Courriels** (Communications) : config transport, test, envoi groupé, backup.
 - **Import**, **Audit**, **Sections**, **Planning**, **Inscription** (publique).
 
@@ -535,6 +588,7 @@ prisma/migrations/20260810170000_frais_retard/          + exonererFraisRetard su
 prisma/migrations/20260810190000_provenance/            + provenance et refereParNom sur Member.
 prisma/migrations/20260811150000_membre_depuis_backfill/  Rattrapage : signupDate ← dateInscription (ancienneté, voir §2).
 prisma/migrations/20260812010000_frais_retard_factures/   + fraisRetardFactures (frais chargés au choix de l'admin).
+prisma/migrations/20260813100000_inventaire_evenements/    + ArticleInventaire, VenteEquipement, Affiliation, Evenement, EvenementInscription (modules inventaire & événements).
 prisma/migrations/migration_lock.toml     Verrou Prisma (provider postgresql).
 prisma/seed.ts                            Seed officiel : appelle seedInitialData (admin, sections, cours, charges).
 prisma/seed-test.ts                       Jeu de données de test local (membres/versements factices).
@@ -570,6 +624,9 @@ src/routes/leads.ts                       Prospects : création publique, gestio
 src/routes/communications.ts              Config courriel (diagnostic), envoi de test, envoi groupé multi-sections.
 src/routes/backup.ts                      POST /api/backup : sauvegarde Excel immédiate.
 src/routes/audit.ts                       Lecture du journal d'audit.
+src/routes/inventaire.ts                  Inventaire : CRUD articles (coût interne vs prix de vente), ± stock, seed catalogue karaté idempotent, ventes (décrément/réincrément du stock, membre optionnel).
+src/routes/evenements.ts                  Événements + inscriptions avec admissibilité calculée (affiliation de la saison de l'événement + solde dû au club — bilanSoldeGym) ; archivage si inscriptions.
+src/routes/affiliations.ts                Affiliations fédération par membre/discipline/saison (unicité, montants = fédé, pas revenus club).
 
 src/lib/prisma.ts                         Client Prisma singleton.
 src/lib/api-response.ts                   sendSuccess/sendError (format uniforme des réponses).
@@ -587,6 +644,7 @@ src/lib/mailer.ts                         Double transport (Resend sinon SMTP), 
 src/lib/bienvenue.ts                      Contenu du courriel de bienvenue (+ katas si Karaté).
 src/lib/katas.ts                          Programme de katas Heian par grade + liens vidéo + estKarate.
 src/lib/reglement.ts                      Règlement intérieur versionné (16 articles) — incrémenter REGLEMENT_VERSION à tout changement.
+src/lib/saison.ts                         Saison fédération (1er sept. → 31 août) : saisonPourDate/saisonCourante/saisonsChoix — PARTAGÉ front/back.
 src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
 src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
 src/lib/seedData.ts                       seedInitialData + bootstrapIfEmpty (amorçage automatique si base vide).
@@ -612,6 +670,8 @@ src/pages/admin/Prospects.tsx             Leads : ancienneté + badge « X j san
 src/pages/admin/Communications.tsx        Courriels : diagnostic transport, test, envoi groupé, bouton sauvegarde.
 src/pages/admin/Import.tsx                Import CSV (zones membres + versements, rapport d'erreurs par ligne).
 src/pages/admin/Audit.tsx                 Journal d'audit (y compris les erreurs de courriels).
+src/pages/admin/Inventaire.tsx            Inventaire : stock filtrable (coût interne / prix de vente, ± stock, Dupliquer par taille), modal Vendre avec recherche de membre, onglet Ventes (annulation), bouton Catalogue karaté.
+src/pages/admin/Evenements.tsx            Événements (détail : participants + badges affiliation/solde/renouvellement, frais remis) et Affiliations (par saison/discipline, ajout par recherche d'athlète).
 
 src/components/layout/AppLayout.tsx       Gabarit connecté (sidebar + contenu + nav mobile).
 src/components/layout/Sidebar.tsx         Menu latéral (entrées selon le rôle).
