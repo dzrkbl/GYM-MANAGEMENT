@@ -310,8 +310,17 @@ export function Membres() {
       ) : membersAffiches.length === 0 ? (
         <Card className="text-center py-16 text-gray-500 border border-gray-100 shadow-sm">
           <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-700 font-medium">Aucun athlète dans cette sélection.</p>
-          <p className="text-xs text-gray-400 mt-1">Créez un profil pour commencer à faire le suivi.</p>
+          {user && user.role !== 'ADMIN' && !user.section ? (
+            <>
+              <p className="text-gray-700 font-medium">Aucune section n'est attitrée à votre compte.</p>
+              <p className="text-xs text-gray-400 mt-1">Demandez à un administrateur de vous assigner vos groupes (page Coachs) pour voir les membres de votre discipline.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-700 font-medium">Aucun athlète dans cette sélection.</p>
+              <p className="text-xs text-gray-400 mt-1">Créez un profil pour commencer à faire le suivi.</p>
+            </>
+          )}
         </Card>
       ) : (
         <Card className="shadow-sm border border-gray-100 overflow-hidden bg-white">

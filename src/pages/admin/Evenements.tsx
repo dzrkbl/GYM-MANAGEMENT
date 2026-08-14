@@ -216,21 +216,30 @@ export function Evenements() {
   );
 
   if (!user) return <Navigate to="/dashboard" replace />;
-  // Personnel non admin : portée limitée à SA discipline (le serveur refuse le reste).
+  // Personnel non admin : portée limitée à SES disciplines (sections attitrées,
+  // séparées par des virgules sur le compte) — le serveur refuse le reste.
   const estAdmin = user.role === 'ADMIN';
-  const codeStaff = (user.section || '').toUpperCase();
-  const sportStaff = estAdmin
-    ? null
-    : (toutesSections.find((s) => s.code.toUpperCase() === codeStaff)?.sport
-       || (toutesSections.some((s) => s.sport.toUpperCase() === codeStaff) ? codeStaff : null));
-  const peutGerer = (discipline: string | null) => estAdmin || (!!sportStaff && discipline === sportStaff);
-  const disciplinesForm = estAdmin ? DISCIPLINES : DISCIPLINES.filter((d) => d.value === sportStaff);
+  const sportsConnus = new Set(toutesSections.map((s) => (s.sport || '').toUpperCase()));
+  const sportsStaff = estAdmin ? [] : [...new Set(
+    (user.section || '')
+      .split(/[;,]/)
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean)
+      .map((code) => {
+        const propre = toutesSections.find((s) => s.code.toUpperCase() === code);
+        const racine = code.split(/[_\s-]/)[0];
+        return propre ? (propre.sport || '').toUpperCase() : sportsConnus.has(code) ? code : sportsConnus.has(racine) ? racine : null;
+      })
+      .filter(Boolean) as string[]
+  )];
+  const peutGerer = (discipline: string | null) => estAdmin || (!!discipline && sportsStaff.includes(discipline));
+  const disciplinesForm = estAdmin ? DISCIPLINES : DISCIPLINES.filter((d) => sportsStaff.includes(d.value));
 
   // ---------- Événements ----------
 
   const ouvrirCreation = () => {
     setEditId(null);
-    setForm({ ...FORM_EVENEMENT_VIDE, discipline: sportStaff || FORM_EVENEMENT_VIDE.discipline, date: todayLocalISO() });
+    setForm({ ...FORM_EVENEMENT_VIDE, discipline: (estAdmin ? FORM_EVENEMENT_VIDE.discipline : sportsStaff[0]) || FORM_EVENEMENT_VIDE.discipline, date: todayLocalISO() });
     setModalEvenement(true);
   };
 
@@ -410,8 +419,8 @@ export function Evenements() {
         {onglet === 'evenements' ? (
           <Button onClick={ouvrirCreation} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvel événement</Button>
         ) : (
-          (estAdmin || sportStaff === 'KARATE' || sportStaff === 'JUDO') ? (
-            <Button onClick={() => { setAffForm({ ...affForm, discipline: estAdmin ? affForm.discipline : (sportStaff as string), saison: saisonSel }); setModalAffiliation(true); }} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvelle affiliation</Button>
+          (estAdmin || sportsStaff.some((d) => d === 'KARATE' || d === 'JUDO')) ? (
+            <Button onClick={() => { setAffForm({ ...affForm, discipline: estAdmin ? affForm.discipline : (sportsStaff.find((d) => d === 'KARATE' || d === 'JUDO') as string), saison: saisonSel }); setModalAffiliation(true); }} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Nouvelle affiliation</Button>
           ) : <span />
         )}
       </div>
@@ -620,7 +629,7 @@ export function Evenements() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Discipline</label>
-              <select className={selectClass} value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })} disabled={!estAdmin}>
+              <select className={selectClass} value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value })} disabled={!estAdmin && disciplinesForm.length <= 1}>
                 {disciplinesForm.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
@@ -653,8 +662,8 @@ export function Evenements() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Discipline *</label>
-              <select className={selectClass} value={affForm.discipline} onChange={(e) => setAffForm({ ...affForm, discipline: e.target.value })} disabled={!estAdmin}>
-                {(estAdmin ? ['KARATE', 'JUDO'] : ['KARATE', 'JUDO'].filter((d) => d === sportStaff)).map((d) => (
+              <select className={selectClass} value={affForm.discipline} onChange={(e) => setAffForm({ ...affForm, discipline: e.target.value })} disabled={!estAdmin && sportsStaff.filter((d) => d === 'KARATE' || d === 'JUDO').length <= 1}>
+                {(estAdmin ? ['KARATE', 'JUDO'] : ['KARATE', 'JUDO'].filter((d) => sportsStaff.includes(d))).map((d) => (
                   <option key={d} value={d}>{d === 'KARATE' ? 'Karaté' : 'Judo'}</option>
                 ))}
               </select>

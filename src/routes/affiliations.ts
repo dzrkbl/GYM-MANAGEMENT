@@ -31,8 +31,8 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const portee = await porteeStaff(req.user!);
     const where: any = {};
     if (!portee.admin) {
-      if (!portee.sport) return sendSuccess(res, { saisonCourante: saisonCourante(), affiliations: [] });
-      where.discipline = portee.sport;
+      if (portee.sports.length === 0) return sendSuccess(res, { saisonCourante: saisonCourante(), affiliations: [] });
+      where.discipline = { in: portee.sports };
     }
     if (saison) where.saison = saison;
     if (discipline) where.discipline = discipline;
@@ -54,7 +54,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<any>
     const data = affiliationSchema.parse(req.body);
     // Staff : uniquement des affiliations de sa discipline.
     const portee = await porteeStaff(req.user!);
-    if (!portee.admin && data.discipline !== portee.sport) {
+    if (!portee.admin && !portee.sports.includes(data.discipline)) {
       return sendError(res, 'Vous ne pouvez affilier que dans votre discipline', 403);
     }
     const membre = await prisma.member.findUnique({ where: { id: data.membreId }, select: { firstName: true, lastName: true } });
@@ -88,7 +88,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response): Promise<an
     if (!portee.admin) {
       const existante = await prisma.affiliation.findUnique({ where: { id: req.params.id } });
       if (!existante) return sendError(res, 'Affiliation introuvable', 404);
-      if (existante.discipline !== portee.sport || (data.discipline && data.discipline !== portee.sport)) {
+      if (!portee.sports.includes(existante.discipline) || (data.discipline && !portee.sports.includes(data.discipline))) {
         return sendError(res, 'Affiliation hors de votre discipline', 403);
       }
     }
@@ -119,7 +119,7 @@ router.delete('/:id', authenticate, async (req: Request, res: Response): Promise
     if (!portee.admin) {
       const existante = await prisma.affiliation.findUnique({ where: { id: req.params.id } });
       if (!existante) return sendError(res, 'Affiliation introuvable', 404);
-      if (existante.discipline !== portee.sport) return sendError(res, 'Affiliation hors de votre discipline', 403);
+      if (!portee.sports.includes(existante.discipline)) return sendError(res, 'Affiliation hors de votre discipline', 403);
     }
     const affiliation = await prisma.affiliation.delete({
       where: { id: req.params.id },

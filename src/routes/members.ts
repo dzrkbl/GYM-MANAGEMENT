@@ -10,7 +10,7 @@ import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
 import { logAudit } from '../lib/audit';
-import { porteeStaff } from '../lib/portee';
+import { porteeStaff, clauseSectionsPortee, membreDansPortee } from '../lib/portee';
 import { genererFactures } from '../lib/factures';
 
 const router = Router();
@@ -74,22 +74,22 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const { section, status } = req.query;
 
     // Portée par discipline : un coach/responsable voit TOUS les groupes de
-    // son sport (jamais les autres disciplines) ; l'admin voit tout.
+    // ses sports (sections attitrées, séparées par des virgules sur le compte) ;
+    // l'admin voit tout ; un staff sans section attitrée ne voit rien.
     const portee = await porteeStaff(req.user!);
-    let filterSections: string[] | undefined;
-    if (!portee.admin && portee.sections) {
-      const demande = section ? String(section) : '';
-      filterSections = demande && portee.sections.includes(demande) ? [demande] : portee.sections;
-    } else if (section) {
-      filterSections = [String(section)];
+    const demande = section ? String(section) : '';
+    let clauseSections: any | null = null;
+    if (portee.admin) {
+      if (demande) clauseSections = { section: demande };
+    } else {
+      const demandeOk = demande && membreDansPortee([{ section: demande }], portee);
+      clauseSections = demandeOk ? { section: demande } : clauseSectionsPortee(portee);
     }
 
     const members = await prisma.member.findMany({
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
-        ...(filterSections ? {
-          sections: { some: { section: { in: filterSections } } }
-        } : {}),
+        ...(clauseSections ? { sections: { some: clauseSections } } : {}),
       },
       include: { sections: true, versements: true },
       orderBy: { lastName: 'asc' },
@@ -240,9 +240,9 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
 
     if (!member) return sendError(res, 'Membre introuvable', 404);
 
-    // Portée par discipline : un coach/responsable n'ouvre que les dossiers de son sport.
+    // Portée par discipline : un coach/responsable n'ouvre que les dossiers de ses sports.
     const portee = await porteeStaff(req.user!);
-    if (!portee.admin && portee.sections && !member.sections.some((s) => portee.sections!.includes(s.section))) {
+    if (!portee.admin && !membreDansPortee(member.sections, portee)) {
       return sendError(res, "Ce membre n'appartient pas à votre discipline", 403);
     }
 

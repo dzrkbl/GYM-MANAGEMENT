@@ -305,9 +305,14 @@ Réponses : `{ success, data }` / `{ success:false, error }`. Auth : JWT Bearer
 (7 j, localStorage `cshp_token`). Rôles vérifiés par `requireRole`.
 
 **Portée par discipline (`src/lib/portee.ts`)** : les ADMIN voient tout ; un
-COACH ou SECTION_MANAGER voit **toute sa discipline** — la section de son
-compte (ex. JUDO_GR1) résout vers le sport (table Section.sport) et couvre
-tous les groupes du même sport. Concrètement pour le staff non admin :
+COACH ou SECTION_MANAGER voit **toutes ses disciplines** — le compte porte une
+liste de sections séparées par des virgules (la page Coachs coche plusieurs
+groupes : « JUDO_GR1,JUDO_GR2 ») ; CHAQUE code résout vers son sport (code de
+la table Section → sport ; sinon nom de sport direct ; sinon racine avant
+« _ » — robuste aux groupes absents de la table) et couvre TOUS les groupes de
+ce sport (+ filtre par préfixe du sport côté membres). Un staff SANS section
+attitrée ne voit RIEN (message explicite dans la page Membres) — assigner ses
+groupes dans la page Coachs. Concrètement pour le staff non admin :
 membres (liste + fiche) limités au sport ; inventaire en lecture (coût de
 revient MASQUÉ, réservé admin) + vente au prix affiché uniquement (prix forcé
 côté serveur) ; affiliations et événements (CRUD + inscriptions) limités à sa

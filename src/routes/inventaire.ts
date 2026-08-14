@@ -69,7 +69,7 @@ router.get('/ventes', authenticate, async (req: Request, res: Response): Promise
     const portee = await porteeStaff(req.user!);
     const where: any = {};
     if (!portee.admin) {
-      where.article = { OR: [{ discipline: null }, { discipline: 'TOUS' }, ...(portee.sport ? [{ discipline: portee.sport }] : [])] };
+      where.article = { OR: [{ discipline: null }, { discipline: 'TOUS' }, ...portee.sports.map((sp) => ({ discipline: sp }))] };
     }
     if (membreId) where.membreId = membreId;
     if (articleId) where.articleId = articleId;
@@ -222,7 +222,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const where: any = {};
     if (!inclureInactifs) where.actif = true;
     if (!portee.admin) {
-      where.OR = [{ discipline: null }, { discipline: 'TOUS' }, ...(portee.sport ? [{ discipline: portee.sport }] : [])];
+      where.OR = [{ discipline: null }, { discipline: 'TOUS' }, ...portee.sports.map((sp) => ({ discipline: sp }))];
     }
     if (discipline) where.discipline = discipline;
     if (categorie) where.categorie = categorie;
