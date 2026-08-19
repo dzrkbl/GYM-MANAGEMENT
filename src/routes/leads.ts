@@ -18,6 +18,12 @@ const createSchema = z.object({
   sport: z.string().optional().nullable(),
   requestType: z.enum(['ESSAI', 'RAPPEL', 'TARIFS', 'AUTRE']).optional().default('ESSAI'),
   website: z.string().optional().nullable(), // honeypot anti-spam
+  // Attribution marketing (landing pages, pubs Meta) — bornée pour éviter les abus.
+  source: z.string().max(120).optional().nullable(),
+  utmSource: z.string().max(120).optional().nullable(),
+  utmCampaign: z.string().max(120).optional().nullable(),
+  utmContent: z.string().max(120).optional().nullable(),
+  note: z.string().max(1000).optional().nullable(),
 });
 
 // POST /api/leads — création publique (formulaire « essai/rappel » du site)
@@ -37,6 +43,11 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         sport: data.sport || 'AUTRE',
         requestType: data.requestType,
         status: 'NEW',
+        source: data.source || null,
+        utmSource: data.utmSource || null,
+        utmCampaign: data.utmCampaign || null,
+        utmContent: data.utmContent || null,
+        note: data.note || null,
       },
     });
     return sendSuccess(res, { ok: true, id: lead.id }, 201);
@@ -95,7 +106,12 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
         phone: lead.phone,
         email: lead.email,
         status: 'EN_ATTENTE',
-        notes: `Prospect converti — intérêt initial : ${lead.sport}`,
+        notes: [
+          `Prospect converti — intérêt initial : ${lead.sport}`,
+          lead.source ? `Source : ${lead.source}` : null,
+          lead.utmContent ? `Pub : ${lead.utmContent}` : null,
+          lead.note ? `Note : ${lead.note}` : null,
+        ].filter(Boolean).join('\n'),
       },
     });
 
