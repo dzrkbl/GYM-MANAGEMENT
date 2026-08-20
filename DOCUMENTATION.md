@@ -332,6 +332,8 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
+| `PATCH /api/versements/:id/annuler-paiement` | ADMIN | corrige une erreur d'encaissement : redevient à percevoir (échéance/montant inchangés, receiptSentAt effacé pour renvoyer un reçu au vrai paiement), audité |
+| `DELETE /api/versements/:id` | ADMIN | supprime un versement (erreur de saisie, doublon) + nettoie ses ReminderLog ; ⚠️ un versement payé supprimé sort des revenus — préférer annuler-paiement pour une erreur d'encaissement ; audité |
 | `GET /api/paiements?month&section&status` | connecté | vue mensuelle : dû ∪ payé du mois ; **le mois courant inclut tous les impayés échus** des mois passés (hors INACTIF) ; statut au jour civil |
 | `POST /api/paiements`, `PATCH /:id/payer`, etc. | ADMIN, SM | tous appellent activation + reçu |
 | `GET /api/dashboard/resume` | ADMIN | revenus (datePaiement), retards (membres distincts), **renouvellements échus**, présences semaine (lundi Montréal), masse salariale (source unique) |
@@ -460,11 +462,19 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 
 ## 9. Procédures d'exploitation (recettes)
 
-### 9.1 Encaisser / renouveler
+### 9.1 Encaisser / renouveler / corriger
 - Encaisser : fiche membre → onglet Paiements → « Encaisser » (ou page
   Paiements → « Marquer comme payé »). CASH = pas de reçu courriel.
 - Renouveler : §2 (« Renouveler un membre »). Les badges/cartes/digest révèlent
-  qui est échu.
+  qui est échu. Après un renouvellement en N versements, seul le 1er est payé
+  (si encaissé) : les suivants apparaissent « Planifié » dans le bloc
+  **Contrat en cours** de l'échéancier (l'historique des contrats précédents
+  est replié en dessous — ne pas confondre ses versements payés avec ceux du
+  nouveau contrat). Les rappels J-7/J-0 partent automatiquement pour les
+  versements planifiés.
+- Corriger : sur chaque versement (ADMIN) — « ↩ Annuler le paiement » (erreur
+  d'encaissement : redevient à percevoir) ou « Supprimer » (erreur de saisie,
+  doublon ; double avertissement si le versement est payé). Tout est audité.
 
 ### 9.2 Comptes
 Coachs → Ajouter → rôle (Coach / Section Manager / **Administrateur**). Mot de

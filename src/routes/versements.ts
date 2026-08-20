@@ -105,4 +105,63 @@ router.put('/:id/payer', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER'])
   }
 });
 
+// PATCH /api/versements/:id/annuler-paiement — corrige une erreur d'encaissement :
+// le versement redevient « à percevoir » (échéance et montant inchangés).
+// receiptSentAt est effacé pour qu'un futur vrai paiement renvoie un reçu ;
+// receiptNumber est conservé (continuité de la numérotation).
+router.patch('/:id/annuler-paiement', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const existant = await prisma.paymentVersement.findUnique({
+      where: { id: req.params.id },
+      include: { member: { select: { firstName: true, lastName: true } } },
+    });
+    if (!existant) return sendError(res, 'Versement introuvable', 404);
+    if (!existant.datePaiement) return sendError(res, "Ce versement n'est pas payé", 400);
+
+    const versement = await prisma.paymentVersement.update({
+      where: { id: existant.id },
+      data: { datePaiement: null, methodePaiement: null, receiptSentAt: null },
+    });
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'PaymentVersement',
+      entityId: versement.id,
+      description: `Paiement ANNULÉ (erreur d'encaissement) : versement #${existant.numeroVersement} de ${existant.montant.toFixed(2)} $ — ${existant.member.firstName} ${existant.member.lastName} (était payé le ${existant.datePaiement.toISOString().slice(0, 10)})`,
+    });
+    return sendSuccess(res, versement);
+  } catch {
+    return sendError(res, "Erreur lors de l'annulation du paiement", 500);
+  }
+});
+
+// DELETE /api/versements/:id — supprime un versement (erreur de saisie, doublon).
+// ⚠️ Un versement payé supprimé disparaît aussi des revenus des rapports —
+// pour une simple erreur d'encaissement, utiliser « annuler-paiement ».
+router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const existant = await prisma.paymentVersement.findUnique({
+      where: { id: req.params.id },
+      include: { member: { select: { firstName: true, lastName: true } } },
+    });
+    if (!existant) return sendError(res, 'Versement introuvable', 404);
+
+    await prisma.$transaction([
+      // Nettoie les traces de rappels liées à ce versement (dédup obsolète).
+      prisma.reminderLog.deleteMany({ where: { versementId: existant.id } }),
+      prisma.paymentVersement.delete({ where: { id: existant.id } }),
+    ]);
+
+    logAudit(req, {
+      action: 'DELETE',
+      entity: 'PaymentVersement',
+      entityId: existant.id,
+      description: `Versement SUPPRIMÉ : #${existant.numeroVersement} de ${existant.montant.toFixed(2)} $ (${existant.datePaiement ? `PAYÉ le ${existant.datePaiement.toISOString().slice(0, 10)}` : `à percevoir le ${existant.datePrevue.toISOString().slice(0, 10)}`}) — ${existant.member.firstName} ${existant.member.lastName}`,
+    });
+    return sendSuccess(res, { message: 'Versement supprimé' });
+  } catch {
+    return sendError(res, 'Erreur lors de la suppression du versement', 500);
+  }
+});
+
 export default router;

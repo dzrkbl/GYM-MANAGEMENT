@@ -153,6 +153,40 @@ export function MembreDetail() {
   const [payNote, setPayNote] = useState('');
   const [isPayingVersement, setIsPayingVersement] = useState(false);
 
+  // Historique des contrats précédents replié par défaut (la confusion type :
+  // les versements payés de l'ANCIEN contrat pris pour ceux du renouvellement).
+  const [showHistorique, setShowHistorique] = useState(false);
+
+  const annulerPaiementVersement = async (v: any) => {
+    if (!confirm(
+      `Annuler le paiement du versement #${v.numeroVersement} (${v.montant.toFixed(2)} $) ?\n` +
+      `Il redeviendra « à percevoir » (échéance : ${formatDateLocal(v.datePrevue)}).\n` +
+      `À utiliser pour corriger une erreur d'encaissement.`
+    )) return;
+    try {
+      await apiFetch(`/versements/${v.id}/annuler-paiement`, { method: 'PATCH' });
+      fetchMemberData();
+    } catch (err: any) {
+      alert(err?.message || "Erreur lors de l'annulation du paiement");
+    }
+  };
+
+  const supprimerVersement = async (v: any) => {
+    const paye = !!v.datePaiement;
+    if (!confirm(paye
+      ? `⚠️ SUPPRIMER le versement #${v.numeroVersement} DÉJÀ PAYÉ (${v.montant.toFixed(2)} $ le ${formatDateLocal(v.datePaiement)}) ?\n` +
+        `Il disparaîtra aussi des revenus des rapports.\n` +
+        `Pour une simple erreur d'encaissement, préférez « Annuler le paiement ».`
+      : `Supprimer le versement #${v.numeroVersement} (${v.montant.toFixed(2)} $ à percevoir le ${formatDateLocal(v.datePrevue)}) ?`
+    )) return;
+    try {
+      await apiFetch(`/versements/${v.id}`, { method: 'DELETE' });
+      fetchMemberData();
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors de la suppression');
+    }
+  };
+
   // Affiliations fédération + achats d'équipement (endpoints ADMIN seulement).
   const [affiliations, setAffiliations] = useState<any[]>([]);
   const [achats, setAchats] = useState<any[]>([]);
@@ -827,7 +861,25 @@ export function MembreDetail() {
             
             {member.versements && member.versements.length > 0 ? (
               <div className="space-y-4">
-                {member.versements.map((v: any, index: number) => {
+                {(() => {
+                  // Séparer le contrat EN COURS (échéances ≥ début du contrat) de
+                  // l'historique des contrats précédents — après un renouvellement,
+                  // les anciens versements payés se confondaient avec les nouveaux.
+                  const debutContrat = member.dateInscription ? new Date(member.dateInscription).getTime() : null;
+                  const tous = member.versements as any[];
+                  const actuels = debutContrat ? tous.filter((v: any) => new Date(v.datePrevue).getTime() >= debutContrat) : tous;
+                  const historique = debutContrat ? tous.filter((v: any) => new Date(v.datePrevue).getTime() < debutContrat) : [];
+                  return (
+                    <>
+                      {historique.length > 0 && (
+                        <p className="text-[11px] uppercase font-extrabold text-gray-400 tracking-wider">
+                          Contrat en cours (depuis le {formatDateLocal(member.dateInscription)})
+                        </p>
+                      )}
+                      {actuels.length === 0 && (
+                        <p className="text-xs text-gray-400 italic">Aucun versement sur le contrat en cours.</p>
+                      )}
+                      {[...actuels, ...(showHistorique ? historique : [])].map((v: any, index: number) => {
                   const isPaid = !!v.datePaiement;
                   const isLate = !isPaid && joursAvantEcheance(v.datePrevue) < 0;
                   // Frais de retard (règlement art. 6) : 10 $/sem après 7 jours, sauf exonération.
@@ -936,10 +988,41 @@ export function MembreDetail() {
                             <DollarSign className="w-3.5 h-3.5" /> Encaisser
                           </Button>
                         )}
+                        {user?.role === 'ADMIN' && (
+                          <div className="flex gap-3">
+                            {isPaid && (
+                              <button
+                                onClick={() => annulerPaiementVersement(v)}
+                                className="text-[11px] underline text-gray-400 hover:text-amber-700 cursor-pointer"
+                                title="Erreur d'encaissement : le versement redevient à percevoir"
+                              >
+                                ↩ Annuler le paiement
+                              </button>
+                            )}
+                            <button
+                              onClick={() => supprimerVersement(v)}
+                              className="text-[11px] underline text-gray-400 hover:text-red-600 cursor-pointer"
+                              title="Supprimer ce versement (erreur de saisie, doublon)"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
+                      {historique.length > 0 && (
+                        <button
+                          onClick={() => setShowHistorique((h) => !h)}
+                          className="w-full text-left text-xs font-bold text-gray-500 hover:text-cshp-black cursor-pointer py-2 border-t border-dashed border-gray-200"
+                        >
+                          {showHistorique ? '▾ Masquer' : '▸ Afficher'} l'historique des contrats précédents ({historique.length} versement{historique.length > 1 ? 's' : ''}, tous antérieurs au {formatDateLocal(member.dateInscription)})
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <p className="text-xs text-gray-400 italic">Aucun échéancier de paiement disponible pour ce membre.</p>
