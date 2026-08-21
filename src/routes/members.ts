@@ -95,7 +95,20 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
       orderBy: { lastName: 'asc' },
     });
 
-    return sendSuccess(res, members);
+    // Dernière présence réelle (pointage PRESENT le plus récent) : une seule
+    // requête groupée pour toute la liste, pas une par membre.
+    const dernieres = await prisma.attendance.groupBy({
+      by: ['memberId'],
+      where: { status: 'PRESENT', memberId: { in: members.map((m) => m.id) } },
+      _max: { date: true },
+    });
+    const presenceParMembre = new Map(dernieres.map((d) => [d.memberId, d._max.date]));
+    const enrichis = members.map((m) => ({
+      ...m,
+      dernierePresence: presenceParMembre.get(m.id) ?? null,
+    }));
+
+    return sendSuccess(res, enrichis);
   } catch (error) {
     return sendError(res, 'Erreur de récupération des membres', 500);
   }
@@ -249,6 +262,79 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
     return sendSuccess(res, member);
   } catch (error) {
     return sendError(res, 'Erreur de récupération', 500);
+  }
+});
+
+// Les trois clés du renouvellement en cours (R30 garde l'ancienne forme id:date,
+// voir sendRenewalReminders). Utilisées par le diagnostic et la réactivation.
+function clesRenouvellement(memberId: string, finContrat: Date): string[] {
+  const finIso = finContrat.toISOString().slice(0, 10);
+  return [`${memberId}:${finIso}`, `${memberId}:${finIso}:R7`, `${memberId}:${finIso}:ECHU`];
+}
+
+// GET /api/membres/:id/courriels — diagnostic des courriels automatiques (ADMIN).
+// Répond à « pourquoi ce membre ne reçoit rien ? » : destinataire effectif,
+// historique des rappels déjà envoyés, et état du renouvellement en cours
+// (armé, ou déjà couvert — envoyé pour de vrai OU neutralisé par le muselage
+// anti-rattrapage d'un import : les deux laissent la même trace en base).
+router.get('/:id/courriels', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const member = await prisma.member.findUnique({ where: { id: req.params.id } });
+    if (!member) return sendError(res, 'Membre introuvable', 404);
+
+    const destinataire = member.parentEmail || member.email || null;
+    const historique = await prisma.reminderLog.findMany({
+      where: { memberId: member.id },
+      orderBy: { sentAt: 'desc' },
+      take: 15,
+      select: { type: true, refKey: true, sentAt: true },
+    });
+
+    let renouvellement: { etat: 'SANS_CONTRAT' | 'ARME' | 'COUVERT'; etapesCouvertes: string[] } =
+      { etat: 'SANS_CONTRAT', etapesCouvertes: [] };
+    if (member.finContrat) {
+      const cles = clesRenouvellement(member.id, member.finContrat);
+      const logs = await prisma.reminderLog.findMany({
+        where: { type: 'RENOUVELLEMENT', refKey: { in: cles } },
+        select: { refKey: true },
+      });
+      const etapes = logs.map((l) =>
+        l.refKey.endsWith(':ECHU') ? 'ECHU' : l.refKey.endsWith(':R7') ? 'R7' : 'R30');
+      renouvellement = { etat: etapes.length > 0 ? 'COUVERT' : 'ARME', etapesCouvertes: etapes };
+    }
+
+    return sendSuccess(res, {
+      destinataire,
+      statut: member.status,
+      finContrat: member.finContrat,
+      renouvellement,
+      historique,
+    });
+  } catch (error) {
+    return sendError(res, 'Erreur lors du diagnostic courriel', 500);
+  }
+});
+
+// POST /api/membres/:id/reactiver-renouvellement — réarme les rappels de
+// renouvellement du contrat EN COURS (ADMIN). Efface les traces R30/R7/ECHU :
+// la prochaine tournée renvoie l'étape appropriée. À utiliser quand le
+// muselage d'un import a neutralisé un renouvellement qu'on voulait envoyer.
+router.post('/:id/reactiver-renouvellement', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const member = await prisma.member.findUnique({ where: { id: req.params.id } });
+    if (!member) return sendError(res, 'Membre introuvable', 404);
+    if (!member.finContrat) return sendError(res, 'Ce membre n\'a pas de fin de contrat définie.', 400);
+
+    const { count } = await prisma.reminderLog.deleteMany({
+      where: { type: 'RENOUVELLEMENT', refKey: { in: clesRenouvellement(member.id, member.finContrat) } },
+    });
+    logAudit(req, {
+      action: 'UPDATE', entity: 'Member', entityId: member.id,
+      description: `Rappels de renouvellement réarmés (${count} trace(s) effacée(s)) — ${member.firstName} ${member.lastName}`,
+    });
+    return sendSuccess(res, { ok: true, tracesEffacees: count });
+  } catch (error) {
+    return sendError(res, 'Erreur lors de la réactivation', 500);
   }
 });
 
