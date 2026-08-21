@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Fiche d'inscription CSHP — Saison 2026-2027</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { font-family: Arial, Helvetica, sans-serif; font-size: 8.4pt; color: #16161f; }
+  @page { size: A4; margin: 9mm 9mm 8mm 9mm; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+
+  /* En-tête */
+  .entete { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #16161f; padding-bottom: 4px; margin-bottom: 6px; }
+  .entete h1 { font-size: 12.5pt; letter-spacing: .2px; }
+  .entete .sous { font-size: 7.2pt; letter-spacing: 1.6px; color: #444; margin-top: 2px; }
+  .entete .droite { text-align: right; }
+  .entete .droite .titre { font-size: 12pt; font-weight: bold; }
+  .entete .droite .version { font-size: 7.2pt; color: #444; margin-top: 2px; }
+  .dossier { border: 1px solid #16161f; padding: 2px 8px; font-size: 7pt; margin-top: 3px; display: inline-block; min-width: 90px; min-height: 14px; text-align: left; }
+
+  /* Bandeaux de section */
+  .bandeau { background: #16161f; color: #fff; font-weight: bold; font-size: 8.2pt; padding: 2.5px 7px; margin: 7px 0 0; display: flex; justify-content: space-between; }
+  .bandeau .note-droite { font-weight: normal; font-size: 7pt; }
+
+  /* Grilles de champs */
+  .champs { display: flex; border: 1px solid #16161f; border-top: 0; }
+  .champ { flex: 1; border-right: 1px solid #bbb; padding: 2px 5px 8px; min-height: 26px; }
+  .champ:last-child { border-right: 0; }
+  .champ label { display: block; font-size: 6.3pt; text-transform: uppercase; letter-spacing: .4px; color: #555; font-weight: bold; }
+  .l2 { min-height: 22px; }
+
+  table { border-collapse: collapse; width: 100%; }
+
+  /* Cases à cocher */
+  .cb { display: inline-block; width: 9px; height: 9px; border: 1.2px solid #16161f; vertical-align: -1px; margin-right: 3px; }
+
+  /* Disciplines */
+  .disciplines td { border: 1px solid #16161f; border-top: 0; padding: 2.5px 6px; }
+  .disciplines .nom { font-weight: bold; width: 62px; }
+  .disciplines .horaire { text-align: right; color: #444; font-size: 7.3pt; width: 210px; }
+
+  .deux-col { display: flex; gap: 6px; }
+  .deux-col > div { flex: 1; }
+
+  .encadre { border: 1px solid #16161f; border-top: 0; padding: 4px 6px; }
+  .note { font-size: 7pt; color: #444; }
+
+  /* Frais */
+  .frais td, .frais th { border: 1px solid #16161f; padding: 2.4px 5px; font-size: 7.6pt; }
+  .frais th { background: #ececec; font-size: 6.6pt; text-transform: uppercase; letter-spacing: .3px; }
+  .frais .tot { font-weight: bold; background: #f5f5f5; }
+  .conditions { border: 1.2px solid #16161f; background: #f6f6f6; padding: 4px 7px; font-size: 7.2pt; margin-top: 5px; }
+  .conditions strong { text-transform: uppercase; font-size: 7pt; }
+
+  /* Règlement (verso) */
+  .regl-colonnes { column-count: 2; column-gap: 14px; margin-top: 5px; }
+  .article { break-inside: avoid; margin-bottom: 7px; }
+  .article h3 { font-size: 8.2pt; border-bottom: 1.2px solid #16161f; margin-bottom: 3px; padding-bottom: 1px; }
+  .article ul { padding-left: 12px; }
+  .article li { margin-bottom: 1.6px; line-height: 1.28; }
+  .article p { line-height: 1.3; margin-bottom: 2px; }
+  .important { background: #f1f1f1; padding: 3px 5px; font-size: 7.2pt; margin-top: 3px; }
+
+  .signature-bloc { border: 1px solid #16161f; border-top: 0; padding: 6px 8px; }
+  .ligne-signature { border-bottom: 1px solid #16161f; min-height: 26px; margin-top: 10px; }
+  .sous-ligne { font-size: 6.4pt; text-transform: uppercase; color: #555; font-weight: bold; margin-top: 1.5px; }
+
+  .footer { display: flex; justify-content: space-between; font-size: 6.8pt; color: #555; border-top: 1px solid #bbb; margin-top: 8px; padding-top: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ PAGE 1 — FICHE ═══════════════════════ -->
+<div class="page">
+  <div class="entete">
+    <div>
+      <h1>Centre Sportif de Haute Performance</h1>
+      <div class="sous">KARATÉ · JUDO · NINJAS · MONTRÉAL</div>
+    </div>
+    <div class="droite">
+      <div class="titre">FICHE D'INSCRIPTION</div>
+      <div class="version">Saison 2026–2027 · Formulaire v2026.2</div>
+      <div class="dossier">N° DOSSIER</div>
+    </div>
+  </div>
+
+  <div class="bandeau"><span>1 · DISCIPLINE ET GROUPE</span><span class="note-droite">cocher le ou les groupes fréquentés</span></div>
+  <table class="disciplines">
+    <tr><td class="nom">Karaté</td><td><span class="cb"></span>Gr. 1 &nbsp;&nbsp;<span class="cb"></span>Gr. 2 &nbsp;&nbsp;<span class="cb"></span>Gr. 3</td><td class="horaire">Mardi &amp; jeudi · 17 h – 20 h</td></tr>
+    <tr><td class="nom">Judo</td><td><span class="cb"></span>Gr. 1 &nbsp;&nbsp;<span class="cb"></span>Gr. 2 &nbsp;&nbsp;<span class="cb"></span>Gr. 3 &nbsp;&nbsp;<span class="cb"></span>Adultes</td><td class="horaire">Lundi &amp; vendredi · 17 h – 19 h 30</td></tr>
+    <tr><td class="nom">Ninjas</td><td><span class="cb"></span>Gr. 1 &nbsp;&nbsp;<span class="cb"></span>Gr. 2 &nbsp;&nbsp;<span class="cb"></span>Gr. 3</td><td class="horaire">Mercredi 17 h – 20 h · samedi 9 h – 12 h</td></tr>
+  </table>
+  <div class="champs">
+    <div class="champ"><label>Ceinture actuelle</label></div>
+    <div class="champ"><label>Club ou dojo précédent</label></div>
+    <div class="champ" style="max-width:110px"><label>Années de pratique</label></div>
+    <div class="champ" style="max-width:120px"><label>Date d'inscription</label></div>
+  </div>
+
+  <div class="bandeau"><span>2 · IDENTIFICATION DE L'ATHLÈTE</span></div>
+  <div class="champs">
+    <div class="champ"><label>Nom de famille</label></div>
+    <div class="champ"><label>Prénom</label></div>
+    <div class="champ" style="max-width:120px"><label>Naissance (AAAA/MM/JJ)</label></div>
+    <div class="champ" style="max-width:70px"><label>Sexe</label><span class="cb"></span>F &nbsp;<span class="cb"></span>M</div>
+    <div class="champ" style="max-width:70px"><label>Poids kg</label></div>
+  </div>
+  <div class="champs">
+    <div class="champ" style="flex:2.2"><label>Adresse (n°, rue, app.)</label></div>
+    <div class="champ"><label>Ville</label></div>
+    <div class="champ" style="max-width:100px"><label>Code postal</label></div>
+  </div>
+  <div class="champs">
+    <div class="champ" style="max-width:170px"><label>Téléphone (athlète)</label></div>
+    <div class="champ"><label>Courriel de l'athlète</label></div>
+  </div>
+
+  <div class="bandeau"><span>3 · PARENT OU TUTEUR</span><span class="note-droite">obligatoire si l'athlète est mineur</span></div>
+  <table class="frais">
+    <tr><th style="width:16px"></th><th>Nom et prénom</th><th style="width:80px">Lien</th><th style="width:110px">Téléphone</th><th style="width:190px">Courriel (reçus et rappels)</th></tr>
+    <tr><td>1</td><td>&nbsp;</td><td></td><td></td><td></td></tr>
+    <tr><td>2</td><td>&nbsp;</td><td></td><td></td><td></td></tr>
+  </table>
+  <div class="encadre note">Les deux courriels reçoivent les rappels de paiement et les reçus. &nbsp;&nbsp;<span class="cb"></span> J'accepte de recevoir les communications du centre par courriel (rappels, horaires, événements).</div>
+
+  <div class="deux-col">
+    <div>
+      <div class="bandeau"><span>4 · PERSONNE À JOINDRE EN CAS D'URGENCE</span></div>
+      <div class="champs"><div class="champ l2"><label>Nom et prénom</label></div></div>
+      <div class="champs">
+        <div class="champ l2"><label>Lien avec l'athlète</label></div>
+        <div class="champ l2"><label>Téléphone</label></div>
+      </div>
+    </div>
+    <div>
+      <div class="bandeau"><span>5 · RENSEIGNEMENTS DE SANTÉ</span></div>
+      <div class="encadre" style="min-height:23px">Problème de santé, allergie, blessure ou médication ? &nbsp; <span class="cb"></span>Oui &nbsp; <span class="cb"></span>Non</div>
+      <div class="champs"><div class="champ l2"><label>Si oui, préciser</label></div></div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:2px"><strong>Important :</strong> si vous avez répondu « Oui », une autorisation médicale écrite doit être fournie avant la première séance.</div>
+
+  <div class="bandeau"><span>6 · FORMULE ET FRAIS</span><span class="note-droite">l'inscription est annuelle</span></div>
+  <div class="deux-col" style="margin-top:0">
+    <div class="encadre" style="border-top:0">
+      <label style="font-size:6.3pt;text-transform:uppercase;color:#555;font-weight:bold">Formule choisie</label><br>
+      <span class="cb"></span><strong>Trimestriel 250 $</strong> &nbsp;&nbsp;&nbsp; <span class="cb"></span><strong>Annuel 790 $</strong>
+    </div>
+    <div class="encadre" style="border-top:0">
+      <label style="font-size:6.3pt;text-transform:uppercase;color:#555;font-weight:bold">Rabais applicable</label><br>
+      <span class="cb"></span>Famille −10 % — membre lié : ______________ &nbsp;&nbsp; <span class="cb"></span>Autre : ______ %
+    </div>
+  </div>
+  <div class="deux-col" style="margin-top:5px">
+    <div>
+      <table class="frais">
+        <tr><th colspan="2">Détail des frais</th></tr>
+        <tr><td>Cotisation (selon la formule)</td><td style="width:70px;text-align:right">$</td></tr>
+        <tr><td>Rabais</td><td style="text-align:right">− $</td></tr>
+        <tr><td>Uniforme</td><td style="text-align:right">$</td></tr>
+        <tr><td>Affiliation à la fédération</td><td style="text-align:right">$</td></tr>
+        <tr class="tot"><td>TOTAL À PAYER</td><td style="text-align:right">$</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="frais">
+        <tr><th style="width:14px">#</th><th>Montant</th><th>Date prévue</th><th style="width:86px">Mode</th><th>Payé le</th></tr>
+        <tr><td>1</td><td></td><td></td><td>C · V · Ch · Ca</td><td></td></tr>
+        <tr><td>2</td><td></td><td></td><td>C · V · Ch · Ca</td><td></td></tr>
+        <tr><td>3</td><td></td><td></td><td>C · V · Ch · Ca</td><td></td></tr>
+        <tr><td>4</td><td></td><td></td><td>C · V · Ch · Ca</td><td></td></tr>
+        <tr><td>5</td><td></td><td></td><td>C · V · Ch · Ca</td><td></td></tr>
+      </table>
+      <div class="note" style="margin-top:2px">Modes : <strong>C</strong> comptant · <strong>V</strong> virement Interac · <strong>Ch</strong> chèque · <strong>Ca</strong> carte. Le 1ᵉʳ versement est exigible à l'inscription, le 2ᵉ un mois plus tard.</div>
+    </div>
+  </div>
+  <div class="conditions">
+    <strong>Conditions de paiement</strong> — Tout retard de plus d'une semaine entraîne des frais de <strong>10 $ par semaine de retard</strong>. Aucune cotisation n'est remboursable après quatre (4) présences, ni après une présence pour un bloc de deux (2) cours par semaine. Les frais d'uniforme et d'affiliation ne sont jamais remboursables.
+    <strong>Vacances</strong> — les forfaits comprennent <strong>2 semaines de vacances durant l'hiver et 2 semaines durant l'été</strong> (fermeture du centre, déjà incluses dans la tarification).
+  </div>
+
+  <div class="bandeau"><span>7 · PROVENANCE</span></div>
+  <div class="champs">
+    <div class="champ"><label>Référé par (nom d'un membre actuel)</label></div>
+    <div class="champ" style="flex:1.6"><label>Comment avez-vous connu le centre ?</label>
+      <span class="cb"></span>Bouche-à-oreille &nbsp; <span class="cb"></span>Réseaux sociaux &nbsp; <span class="cb"></span>Web &nbsp; <span class="cb"></span>École &nbsp; <span class="cb"></span>Autre
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Centre Sportif de Haute Performance · 6498 Beaubien Est, Montréal, H1M 1A9 · payements@centresportifhp.com</span>
+    <span><strong>Suite au verso — règlement intérieur et signatures obligatoires</strong></span>
+  </div>
+</div>
+
+<!-- ═══════════════════════ PAGE 2 — RÈGLEMENT ═══════════════════════ -->
+<div class="page">
+  <div class="entete">
+    <div>
+      <h1>Règlement intérieur</h1>
+      <div class="sous">À CONSERVER · VERSION 2025.1 · APPLICABLE À LA SAISON 2026–2027</div>
+    </div>
+    <div class="droite">
+      <div class="version">Athlète :</div>
+      <div class="dossier" style="min-width:170px"></div>
+    </div>
+  </div>
+
+  <div class="regl-colonnes">
+    <div class="article">
+      <h3>ARTICLE 1 — PARENTS</h3>
+      <p>Pour des raisons de sécurité et de responsabilité, les parents doivent :</p>
+      <ul>
+        <li>Vérifier la présence de l'entraîneur avant de laisser leur enfant.</li>
+        <li>Arriver 5 minutes avant le début et récupérer leur enfant à la fin de l'entraînement.</li>
+        <li>Ne pas être présents pendant les cours, sauf lors du cours d'essai.</li>
+        <li>Respecter la règle : tout retard peut entraîner le refus de l'athlète.</li>
+        <li>Signaler toute absence prolongée.</li>
+        <li>Ne pas pénétrer sur le tapis du dojo.</li>
+        <li>Ne pas intervenir auprès de l'enfant durant le cours, sauf urgence.</li>
+        <li>Autoriser le centre à prendre des photos et vidéos de l'enfant à des fins promotionnelles.</li>
+      </ul>
+      <div class="important"><strong>Important :</strong> le centre est responsable des enfants uniquement pendant les heures d'entraînement, au centre.</div>
+    </div>
+
+    <div class="article">
+      <h3>ARTICLE 2 — COMPORTEMENT</h3>
+      <p>Pour assurer le bon déroulement des cours, chaque athlète doit :</p>
+      <ul>
+        <li>Attendre l'entraîneur et son autorisation avant de monter sur le tapis.</li>
+        <li>Porter la tenue réglementaire (après le cours d'essai).</li>
+        <li>Retirer chaussures, chaussettes, bijoux et objets dangereux ; s'entraîner pieds nus.</li>
+        <li>Apporter une bouteille d'eau ; la nourriture est interdite dans le dojo.</li>
+        <li>Respecter les entraîneurs, les autres athlètes et le matériel du centre.</li>
+      </ul>
+    </div>
+
+    <div class="article">
+      <h3>ARTICLE 3 — INDEMNISATION</h3>
+      <ul>
+        <li>Le centre n'est pas responsable en cas de vol ou de perte d'objets personnels.</li>
+        <li>Aucune cotisation ne sera remboursée après quatre (4) présences à l'entraînement.</li>
+        <li>Tout manquement au respect des personnes, du matériel ou du présent règlement peut entraîner l'exclusion temporaire ou définitive de l'athlète, sans remboursement.</li>
+      </ul>
+    </div>
+
+    <div class="article">
+      <h3>ARTICLE 4 — CAS D'INDISCIPLINE</h3>
+      <ul>
+        <li>1ᵉʳ manquement : avertissement verbal à l'athlète et au parent.</li>
+        <li>2ᵉ manquement : courriel au parent ; l'enfant ne sera admis au prochain cours que s'il est accompagné de son parent.</li>
+        <li>3ᵉ manquement : exclusion définitive de l'athlète, sans remboursement.</li>
+      </ul>
+    </div>
+
+    <div class="article">
+      <h3>ARTICLE 5 — ASSURANCE ET SANTÉ</h3>
+      <ul>
+        <li>L'affiliation à la fédération inclut l'assurance, ce qui libère le centre de toute responsabilité ou réclamation en cas de blessure survenant durant l'entraînement.</li>
+        <li>Tout problème de santé doit être déclaré au recto ; une autorisation médicale est exigée le cas échéant.</li>
+        <li>Le parent autorise le centre à faire appel aux services d'urgence si nécessaire.</li>
+      </ul>
+    </div>
+
+    <div class="article">
+      <h3>ARTICLE 6 — PAIEMENTS</h3>
+      <ul>
+        <li>L'inscription est annuelle et les versements convenus au recto demeurent dus pour la saison complète.</li>
+        <li>Tout retard de plus d'une semaine entraîne des frais de 10 $ par semaine de retard.</li>
+        <li>Les forfaits comprennent 2 semaines de vacances durant l'hiver et 2 semaines durant l'été (fermeture du centre, incluses dans la tarification).</li>
+        <li>Les rappels et reçus sont transmis aux courriels inscrits au recto.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="bandeau"><span>AUTORISATIONS</span></div>
+  <div class="champs">
+    <div class="champ" style="flex:1.3; padding-bottom:4px">
+      <label>Droit à l'image — photos et vidéos promotionnelles</label>
+      <span class="cb"></span>J'autorise &nbsp;&nbsp; <span class="cb"></span>Je refuse
+    </div>
+    <div class="champ" style="padding-bottom:4px">
+      <label>Urgence médicale</label>
+      <span class="cb"></span>J'autorise le centre à faire appel aux services médicaux d'urgence si nécessaire.
+    </div>
+  </div>
+
+  <div class="bandeau"><span>ENGAGEMENT ET SIGNATURE</span><span class="note-droite">parent ou tuteur — pour un athlète mineur</span></div>
+  <div class="signature-bloc">
+    <div class="deux-col">
+      <div>
+        <div class="ligne-signature"></div>
+        <div class="sous-ligne">Je soussigné(e) — nom et prénom du parent</div>
+      </div>
+      <div>
+        <div class="ligne-signature"></div>
+        <div class="sous-ligne">Autorise mon enfant — nom et prénom</div>
+      </div>
+    </div>
+    <p style="margin-top:6px">à faire partie du Centre Sportif de Haute Performance, et j'accepte le règlement intérieur que j'ai lu et compris.</p>
+    <div class="deux-col" style="margin-top:4px">
+      <div style="flex:1.6">
+        <div class="ligne-signature"></div>
+        <div class="sous-ligne">Signature, précédée de la mention « Lu et approuvé »</div>
+      </div>
+      <div>
+        <div class="ligne-signature"></div>
+        <div class="sous-ligne">Fait à Montréal, le (AAAA/MM/JJ)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bandeau"><span>RÉSERVÉ À L'ADMINISTRATION</span></div>
+  <table class="frais">
+    <tr><th>Reçu par</th><th>Date</th><th>Statut du dossier</th><th>Pièces reçues</th><th style="width:200px">Notes</th></tr>
+    <tr>
+      <td>&nbsp;</td><td></td>
+      <td><span class="cb"></span>Actif &nbsp; <span class="cb"></span>En attente</td>
+      <td><span class="cb"></span>Méd. &nbsp; <span class="cb"></span>Photo &nbsp; <span class="cb"></span>Paiem.</td>
+      <td></td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    <span>Centre Sportif de Haute Performance · 6498 Beaubien Est, Montréal, H1M 1A9 · payements@centresportifhp.com</span>
+    <span>Formulaire v2026.2 · Règlement intérieur v2025.1</span>
+  </div>
+</div>
+
+</body>
+</html>

@@ -79,16 +79,29 @@ model Member {
   rabaisReferentPct      Float?
   rabaisReferentApplique Boolean     @default(false)
 
+  // Provenance (section 7 de la fiche d'inscription)
+  provenance             String?     // BOUCHE_A_OREILLE, RESEAUX_SOCIAUX, WEB, ECOLE, AUTRE
+  refereParNom           String?     // nom du membre référent tel que saisi sur la fiche
+
   // Consentement au règlement intérieur (inscription en ligne)
   reglementVersion       String?     // version du règlement acceptée
   reglementAccepteAt     DateTime?   // horodatage de l'acceptation
   reglementSignataire    String?     // nom complet saisi comme signature
+
+  // Autorisations de la fiche d'inscription (toutes obligatoires en ligne ;
+  // un refus du droit à l'image se règle en personne, jamais via le formulaire)
+  consentPhoto           Boolean     @default(false)  // droit à l'image (photos/vidéos promotionnelles)
+  consentUrgence         Boolean     @default(false)  // recours aux services médicaux d'urgence
+  consentCommunications  Boolean     @default(false)  // communications par courriel (rappels, reçus, horaires)
 
   // Relations
   sections      MemberSection[]
   attendances   Attendance[]
   grades        Grade[]
   versements    PaymentVersement[]
+  achats        VenteEquipement[]
+  affiliations  Affiliation[]
+  evenements    EvenementInscription[]
 }
 
 model PaymentVersement {
@@ -100,6 +113,12 @@ model PaymentVersement {
   datePaiement    DateTime?
   methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
   note            String?
+  // Frais de retard (10 $/semaine après 1 semaine, règlement art. 6) : calculés
+  // dynamiquement ; l'admin peut les exonérer au cas par cas.
+  exonererFraisRetard Boolean @default(false)
+  // Frais réellement chargés, décidés par l'admin (null = compteur automatique).
+  // Ex. : 4 semaines de retard = 40 $ courus, l'admin décide d'en charger 10 $.
+  fraisRetardFactures Float?
   reminderSentAt  DateTime?          // Anti-doublon pour les rappels de paiement automatiques
   receiptNumber   Int?               // Numéro de reçu (assigné à l'envoi du reçu)
   receiptSentAt   DateTime?          // Date d'envoi du reçu par courriel (anti-doublon)
@@ -195,7 +214,7 @@ model Section {
 }
 
 enum Plan {
-  MENSUEL
+  MENSUEL // hérité — le forfait mensuel n'existe plus, aucune interface ne le propose
   TRIMESTRIEL
   ANNUEL
 }
@@ -293,3 +312,101 @@ model ReminderLog {
 
 
 
+
+// ---------- Module Inventaire ----------
+// Un article = une combinaison précise (nom + taille + couleur + marque).
+// coutAchat = coût de revient du club (JAMAIS montré aux parents) ;
+// prixVente = prix facturé aux parents. Les deux modifiables par l'admin.
+model ArticleInventaire {
+  id          String   @id @default(uuid())
+  nom         String            // ex. « Kimono karaté », « Gants »
+  categorie   String            // KIMONO, GANTS, PROTEGE_TIBIAS, PROTEGE_DENTS, CEINTURE, COQUILLE, CHANDAIL, AUTRE
+  discipline  String?           // KARATE, JUDO, NINJAS, TOUS
+  taille      String?           // « 140 », « M0 », « 2 »…
+  couleur     String?           // « Bleue », « Blanc »…
+  marque      String?           // « Jukado », « Adidas »…
+  coutAchat   Float?            // coût de revient (interne club)
+  prixVente   Float             // prix de vente aux parents
+  quantite    Int      @default(0)  // stock actuel
+  seuilAlerte Int?              // stock bas : alerte visuelle
+  actif       Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ventes      VenteEquipement[]
+}
+
+// Vente d'équipement : trace QUI a acheté QUOI (prix de vente copié au moment
+// de la vente). N'entre PAS dans les revenus de cotisations des rapports ;
+// n'apparaît PAS automatiquement sur la facture annuelle (ajout manuel si voulu).
+model VenteEquipement {
+  id           String   @id @default(uuid())
+  articleId    String
+  membreId     String?          // acheteur (null = vente comptoir sans dossier)
+  quantite     Int      @default(1)
+  prixUnitaire Float            // prix de VENTE au moment de la vente
+  methode      MethodePaiement?
+  date         DateTime @default(now())
+  note         String?
+  createdAt    DateTime @default(now())
+
+  article      ArticleInventaire @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  member       Member?           @relation(fields: [membreId], references: [id], onDelete: SetNull)
+
+  @@index([membreId])
+  @@index([date])
+}
+
+// ---------- Module Affiliations & Événements ----------
+// Affiliation annuelle à la fédération, par discipline, pour une SAISON
+// (1er septembre → 31 août). Le montant transite vers la fédération :
+// ce n'est PAS un revenu du club (exclu des rapports).
+model Affiliation {
+  id           String    @id @default(uuid())
+  membreId     String
+  discipline   String            // KARATE, JUDO
+  saison       String            // « 2026-2027 »
+  numero       String?           // numéro de membre fédération
+  montant      Float?            // payé à la fédération (pas un revenu club)
+  datePaiement DateTime?
+  note         String?
+  createdAt    DateTime  @default(now())
+
+  member       Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
+
+  @@unique([membreId, discipline, saison])
+  @@index([saison])
+}
+
+// Événement spécial : compétition, passage de grade, autre.
+// fraisInscription transite vers l'organisateur/fédération (pas un revenu club).
+model Evenement {
+  id               String   @id @default(uuid())
+  titre            String
+  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, AUTRE
+  discipline       String?           // KARATE, JUDO, TOUS…
+  date             DateTime
+  lieu             String?
+  fraisInscription Float?
+  note             String?
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  inscriptions     EvenementInscription[]
+}
+
+model EvenementInscription {
+  id          String   @id @default(uuid())
+  evenementId String
+  membreId    String
+  fraisPaye   Boolean  @default(false)  // frais remis (transitent vers la fédé)
+  note        String?
+  createdAt   DateTime @default(now())
+
+  evenement   Evenement @relation(fields: [evenementId], references: [id], onDelete: Cascade)
+  member      Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
+
+  @@unique([evenementId, membreId])
+}

@@ -3,6 +3,8 @@ import { apiFetch } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { useSections } from '../hooks/useSections';
+import { formatDateLocal } from '../lib/format';
+import { etatPaiement } from '../lib/echeances';
 
 interface Course {
   id: string;
@@ -12,13 +14,60 @@ interface Course {
   coach?: { firstName: string; lastName: string } | null;
 }
 
+interface Versement {
+  montant: number;
+  datePrevue: string;
+  datePaiement: string | null;
+}
+
 interface Member {
   id: string;
   firstName: string;
   lastName: string;
   belt?: string;
+  status?: string;
+  montantFinal?: number | null;
+  finContrat?: string | null;
   sections: { section: string; belt: string | null }[];
+  versements?: Versement[];
 }
+
+// Rappel de paiement affiché au coach pendant la prise de présences :
+// versement impayé (visible 7 jours avant l'échéance, et tant qu'il est en
+// retard), renouvellement de contrat dû ou imminent, ou solde sans échéance.
+function rappelPaiement(member: Member): { texte: string; enRetard: boolean } | null {
+  const etat = etatPaiement(member, 7);
+  const dateCourte = (d?: string) => formatDateLocal(d, { day: 'numeric', month: 'short' });
+  switch (etat.type) {
+    case 'RETARD':
+      return {
+        texte: `${fmtMontant(etat.montant!)} $ · en retard depuis le ${dateCourte(etat.date)}${etat.autres ? ` (+${etat.autres})` : ''}`,
+        enRetard: true,
+      };
+    case 'RENOUVELLEMENT_DU':
+      return {
+        texte: `${etat.montant ? `${fmtMontant(etat.montant)} $ · ` : ''}renouvellement dû depuis le ${dateCourte(etat.date)}${etat.reste ? ` · reste ${fmtMontant(etat.reste)} $` : ''}`,
+        enRetard: true,
+      };
+    case 'ECHEANCE_PROCHE':
+      if (etat.jours! > 7) return null;
+      return {
+        texte: `${fmtMontant(etat.montant!)} $ · dû le ${dateCourte(etat.date)}${etat.autres ? ` (+${etat.autres})` : ''}`,
+        enRetard: false,
+      };
+    case 'RESTE_SANS_ECHEANCE':
+      return { texte: `${fmtMontant(etat.reste!)} $ · solde à régler`, enRetard: true };
+    case 'RENOUVELLEMENT_PROCHE':
+      return {
+        texte: `${etat.montant ? `${fmtMontant(etat.montant)} $ · ` : ''}renouvellement le ${dateCourte(etat.date)}`,
+        enRetard: false,
+      };
+    default:
+      return null;
+  }
+}
+
+const fmtMontant = (m: number) => (m % 1 === 0 ? m.toFixed(0) : m.toFixed(2));
 
 export function Pointer() {
   const { codes: sections, getLabel } = useSections();
@@ -238,8 +287,10 @@ export function Pointer() {
               </div>
             ) : (
               <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
-                {members.map(member => (
-                  <li 
+                {members.map(member => {
+                  const rappel = rappelPaiement(member);
+                  return (
+                  <li
                     key={member.id}
                     className="flex justify-between items-center p-4 hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => handleToggleMember(member.id)}
@@ -249,9 +300,18 @@ export function Pointer() {
                       <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-cshp-gray">
                         {getBeltColor(member, selectedSection)}
                       </span>
+                      {rappel && (
+                        <span
+                          className={`inline-block mt-1 ml-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            rappel.enRetard ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {rappel.texte}
+                        </span>
+                      )}
                     </div>
                     <div>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={pointedMemberIds.has(member.id)}
                         onChange={() => {}} // handled by li onClick
@@ -259,7 +319,8 @@ export function Pointer() {
                       />
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>

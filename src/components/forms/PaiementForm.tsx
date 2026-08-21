@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { todayLocalISO } from '../../lib/format';
 
 interface PaiementFormProps {
   amount: number;
@@ -13,7 +14,7 @@ export function PaiementForm({ amount, onSubmit, onCancel, isLoading }: Paiement
   const [formData, setFormData] = useState({
     amount: amount,
     method: 'COMPTANT',
-    date: new Date().toISOString().split('T')[0],
+    date: todayLocalISO(),
     note: ''
   });
 

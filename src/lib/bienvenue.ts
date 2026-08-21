@@ -20,7 +20,6 @@ export function contenuBienvenue(params: { nom: string; karate?: boolean; note?:
     : '';
 
   return `
-    <p>Bonjour,</p>
     <p>Bienvenue au Centre Sportif de Haute-Performance ! Nous sommes ravis d'accueillir
     <strong>${nom}</strong> parmi nos athlètes. Voici quelques informations pour bien démarrer.</p>
     ${encadreNote}

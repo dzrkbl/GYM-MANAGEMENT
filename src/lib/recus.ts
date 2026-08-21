@@ -40,7 +40,7 @@ export interface RecuData {
 }
 
 // Charge le logo du club depuis public/logo.png (ou .jpg) s'il existe.
-function chargerLogo(): { data: string; format: 'PNG' | 'JPEG' } | null {
+export function chargerLogo(): { data: string; format: 'PNG' | 'JPEG' } | null {
   const candidats: Array<[string, 'PNG' | 'JPEG', string]> = [
     ['logo.png', 'PNG', 'png'],
     ['logo.jpg', 'JPEG', 'jpeg'],
@@ -181,13 +181,36 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
     methode,
   });
 
+  // Rappel du prochain engagement : versement suivant impayé, sinon fin de contrat.
+  const prochain = await prisma.paymentVersement.findFirst({
+    where: { membreId: versement.membreId, datePaiement: null, montant: { gt: 0 } },
+    orderBy: { datePrevue: 'asc' },
+  });
+  const finContrat = versement.member.finContrat;
+  const aujourdhuiMtl = new Date(
+    new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date()) + 'T00:00:00Z'
+  );
+  const rappelProchain = prochain
+    ? (prochain.datePrevue < aujourdhuiMtl
+        ? `<p><strong>Versement restant :</strong> ${formatMontant(prochain.montant)},
+           échu depuis le ${prochain.datePrevue.toLocaleDateString('fr-CA')} — merci de le
+           régulariser dès que possible (contactez-nous en cas de question).</p>`
+        : `<p><strong>Prochain versement :</strong> ${formatMontant(prochain.montant)},
+           prévu le ${prochain.datePrevue.toLocaleDateString('fr-CA')}. Un rappel automatique
+           vous sera envoyé quelques jours avant l'échéance.</p>`)
+    : finContrat
+      ? `<p><strong>Tous les versements sont réglés.</strong> L'inscription est valide
+         jusqu'au ${finContrat.toLocaleDateString('fr-CA')} — nous vous contacterons à
+         l'approche du renouvellement.</p>`
+      : '';
+
   await sendEmail({
     to: destinataire,
     subject: `Reçu de paiement — CSHP (no ${String(numero).padStart(5, '0')})`,
     html: htmlCourriel(`
-        <p>Bonjour,</p>
         <p>Vous trouverez en pièce jointe le reçu pour le paiement de
         <strong>${membreNom}</strong> (${formatMontant(versement.montant)}).</p>
+        ${rappelProchain}
       `),
     attachments: [{ filename: `recu-${String(numero).padStart(5, '0')}.pdf`, content: pdf }],
   });
@@ -198,4 +221,32 @@ export async function sendRecuVersement(versementId: string): Promise<boolean> {
   });
 
   return true;
+}
+
+/**
+ * Variante non bloquante : consigne tout échec dans le journal d'audit
+ * (visible dans l'interface admin) au lieu de seulement les logs serveur.
+ */
+export function sendRecuVersementBackground(versementId: string): void {
+  sendRecuVersement(versementId).catch(async (e) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error('Erreur envoi reçu:', message);
+    let detail = `versement ${versementId}`;
+    try {
+      const v = await prisma.paymentVersement.findUnique({
+        where: { id: versementId },
+        include: { member: { select: { firstName: true, lastName: true } } },
+      });
+      if (v) detail = `${v.member.firstName} ${v.member.lastName} — versement n°${v.numeroVersement}`;
+    } catch { /* on garde le détail minimal */ }
+    prisma.auditLog
+      .create({
+        data: {
+          action: 'ERREUR',
+          entity: 'Courriel',
+          description: `Reçu de paiement (${detail}) : ${message}`,
+        },
+      })
+      .catch((err) => console.error('Erreur audit reçu:', err));
+  });
 }

@@ -14,13 +14,23 @@ const router = Router();
  *   0 prenom | 1 nom | 2 dateNaissance(AAAA-MM-JJ) | 3 genre(M/F) | 4 courriel |
  *   5 telephone | 6 nomParent | 7 telephoneParent | 8 courrielParent |
  *   9 statut(ACTIF/INACTIF/EN_ATTENTE) | 10 section(ex KARATE_GR1) |
- *   11 plan(MENSUEL/TRIMESTRIEL/ANNUEL) | 12 prixBase | 13 rabaisFamille(oui/non) |
+ *   11 plan(TRIMESTRIEL/ANNUEL) | 12 prixBase | 13 rabaisFamille(oui/non) |
  *   14 membreFamille | 15 rabaisCustomPct | 16 raisonRabais | 17 montantFinal |
- *   18 dateInscription | 19 finContrat | 20 ceinture | 21 notes
+ *   18 dateInscription | 19 finContrat | 20 ceinture | 21 notes |
+ *   22 membreDepuis(optionnel : ancienneté réelle si antérieure au contrat courant)
  *
  * Colonnes attendues — VERSEMENTS (une ligne par versement, optionnel) :
  *   0 nomComplet("Prenom Nom") | 1 numero | 2 montant | 3 datePrevue |
  *   4 datePaiement(vide si non payé) | 5 methode | 6 note
+ *
+ * Muselage anti-rattrapage : un import d'historique ne doit JAMAIS déclencher
+ * de courriels rétroactifs aux parents. Si la fin du contrat importé est déjà
+ * passée ou tombe dans la fenêtre des rappels (≤ 30 jours), les trois étages
+ * de renouvellement (R30/R7/ÉCHU) sont marqués comme envoyés. Même chose pour
+ * un versement importé déjà en retard : ses trois relances (S0/S1/S2) sont
+ * marquées envoyées — l'admin le voit dans les badges et la liste de relance,
+ * les parents ne reçoivent rien. Le cycle normal reprend sur les échéances et
+ * contrats suivants (nouvelles clés).
  */
 
 const importSchema = z.object({
@@ -33,6 +43,7 @@ interface StatDetail {
   inserted: number;
   skipped: number;
   errors: number;
+  rappelsMuseles?: number;
   errorDetails: Array<{ ligne: number; nom: string; error: string }>;
 }
 
@@ -99,9 +110,9 @@ function normalizeStatut(value?: string): string {
   return ['ACTIF', 'INACTIF', 'EN_ATTENTE'].includes(v) ? v : 'ACTIF';
 }
 
-function normalizePlan(value?: string): 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL' | null {
+function normalizePlan(value?: string): 'TRIMESTRIEL' | 'ANNUEL' | null {
   const v = (value || '').trim().toUpperCase();
-  return v === 'MENSUEL' || v === 'TRIMESTRIEL' || v === 'ANNUEL' ? v : null;
+  return v === 'TRIMESTRIEL' || v === 'ANNUEL' ? v : null;
 }
 
 // POST /api/import
@@ -111,7 +122,9 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
     const skipHeader = data.hasHeader !== false;
 
     const membres = emptyStat();
+    membres.rappelsMuseles = 0;
     const versements = emptyStat();
+    versements.rappelsMuseles = 0;
     const nameToId = new Map<string, string>();
 
     // --- MEMBRES ---
@@ -130,7 +143,12 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
         const key = `${firstName} ${lastName}`;
 
-        const existing = await prisma.member.findFirst({ where: { firstName, lastName } });
+        const existing = await prisma.member.findFirst({
+          where: {
+            firstName: { equals: firstName, mode: 'insensitive' },
+            lastName: { equals: lastName, mode: 'insensitive' },
+          },
+        });
         if (existing) {
           nameToId.set(key, existing.id);
           membres.skipped++;
@@ -160,6 +178,10 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
               raisonRabaisCustom: p[16]?.trim() || null,
               montantFinal: parseNum(p[17]),
               dateInscription: parseDate(p[18]),
+              // Ancienneté : colonne membreDepuis si fournie, sinon la première
+              // inscription connue = date d'inscription du contrat (sinon la
+              // date d'import).
+              signupDate: parseDate(p[22]) ?? parseDate(p[18]) ?? undefined,
               finContrat: parseDate(p[19]),
               currentBelt: ceinture.toUpperCase(),
               notes: p[21]?.trim() || null,
@@ -170,6 +192,25 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
           });
           nameToId.set(key, created.id);
           membres.inserted++;
+
+          // Muselage anti-rattrapage (voir en-tête) : fin de contrat passée ou
+          // à ≤ 30 jours → les trois étages de renouvellement sont marqués
+          // envoyés, l'import ne provoque aucun courriel rétroactif aux parents.
+          if (created.finContrat && created.status === 'ACTIF' && created.plan) {
+            const fenetre = new Date(Date.now() + 30 * 86_400_000);
+            if (created.finContrat <= fenetre) {
+              const finIso = created.finContrat.toISOString().slice(0, 10);
+              await prisma.reminderLog.createMany({
+                data: [
+                  { type: 'RENOUVELLEMENT', memberId: created.id, refKey: `${created.id}:${finIso}` },
+                  { type: 'RENOUVELLEMENT', memberId: created.id, refKey: `${created.id}:${finIso}:R7` },
+                  { type: 'RENOUVELLEMENT', memberId: created.id, refKey: `${created.id}:${finIso}:ECHU` },
+                ],
+                skipDuplicates: true,
+              });
+              membres.rappelsMuseles = (membres.rappelsMuseles || 0) + 1;
+            }
+          }
         } catch (err: any) {
           membres.errors++;
           membres.errorDetails.push({ ligne, nom: key, error: err?.message || String(err) });
@@ -192,17 +233,20 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
 
         // Lier au membre : map de l'import, sinon recherche en base par nom complet.
+        // Le nom complet peut contenir un prénom OU un nom composé (ex. « Rosa-Lya
+        // Maeli Delienne », « Mohamed Adem Moulai Ali ») : on essaie chaque coupure
+        // prénom/nom possible jusqu'à trouver un membre correspondant.
         let memberId = nameToId.get(fullName);
         if (!memberId) {
-          const parts = fullName.split(' ');
-          const firstName = parts[0];
-          const lastName = parts.slice(1).join(' ');
-          const found = lastName
-            ? await prisma.member.findFirst({ where: { firstName, lastName } })
-            : null;
-          if (found) {
-            memberId = found.id;
-            nameToId.set(fullName, found.id);
+          const words = fullName.split(/\s+/).filter(Boolean);
+          for (let s = 1; s < words.length && !memberId; s++) {
+            const firstName = words.slice(0, s).join(' ');
+            const lastName = words.slice(s).join(' ');
+            const found = await prisma.member.findFirst({ where: { firstName, lastName } });
+            if (found) {
+              memberId = found.id;
+              nameToId.set(fullName, found.id);
+            }
           }
         }
         if (!memberId) {
@@ -225,7 +269,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         }
 
         try {
-          await prisma.paymentVersement.create({
+          const created = await prisma.paymentVersement.create({
             data: {
               membreId: memberId,
               numeroVersement: numero,
@@ -237,6 +281,20 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
             },
           });
           versements.inserted++;
+
+          // Muselage anti-rattrapage (voir en-tête) : un versement importé
+          // déjà en retard ne déclenche aucune relance rétroactive aux parents.
+          if (!datePaiement && montant > 0 && datePrevue < new Date()) {
+            await prisma.reminderLog.createMany({
+              data: [
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: created.id },
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: `${created.id}:S1` },
+                { type: 'PAIEMENT_RETARD', memberId, versementId: created.id, refKey: `${created.id}:S2` },
+              ],
+              skipDuplicates: true,
+            });
+            versements.rappelsMuseles = (versements.rappelsMuseles || 0) + 1;
+          }
         } catch (err: any) {
           versements.errors++;
           versements.errorDetails.push({ ligne, nom: fullName, error: err?.message || String(err) });

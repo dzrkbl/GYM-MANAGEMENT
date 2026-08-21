@@ -4,11 +4,12 @@ import { apiFetch } from '../lib/api';
 import { formatMontant } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
-import { DollarSign, Users, AlertCircle, CalendarCheck, TrendingUp, Percent, Repeat } from 'lucide-react';
-import { Navigate } from 'react-router-dom';
+import { DollarSign, Users, AlertCircle, CalendarCheck, TrendingUp, Percent, Repeat, RefreshCw } from 'lucide-react';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 export function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [kpis, setKpis] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,7 +54,7 @@ export function Dashboard() {
     <div className="space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold text-cshp-black">Tableau de bord</h1>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Revenus */}
         <Card className="p-6">
           <div className="flex justify-between items-start">
@@ -97,13 +98,16 @@ export function Dashboard() {
           </div>
         </Card>
 
-        {/* Retards */}
-        <Card className="p-6 border-l-4 border-l-cshp-red">
+        {/* Retards — cliquable : ouvre la page Paiements filtrée sur les retards */}
+        <Card
+          className="p-6 border-l-4 border-l-cshp-red cursor-pointer hover:shadow-md hover:bg-red-50/30 transition-all"
+          onClick={() => navigate('/paiements?statut=EN_RETARD')}
+        >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-sm font-medium text-cshp-gray mb-1">Retards</p>
+              <p className="text-sm font-medium text-cshp-gray mb-1">Retards de versements</p>
               <h3 className="text-2xl font-bold text-cshp-black">
-                {data.retards.count} <span className="text-sm font-normal text-cshp-gray">pers.</span>
+                {data.retards.count} <span className="text-sm font-normal text-cshp-gray">membre(s)</span>
               </h3>
             </div>
             <div className="p-3 bg-red-50 text-cshp-red rounded-lg shrink-0">
@@ -114,9 +118,40 @@ export function Dashboard() {
             <span className="text-cshp-red font-medium">
               {formatMontant(data.retards.montantTotal)}
             </span>
-            <span className="text-cshp-gray ml-2">à récupérer</span>
+            <span className="text-cshp-gray ml-2">à récupérer · cliquer pour voir qui →</span>
           </div>
         </Card>
+
+        {/* Renouvellements échus — cliquable : la liste des membres porte les badges rouges */}
+        {data.renouvellements && (
+          <Card
+            className="p-6 border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md hover:bg-amber-50/30 transition-all"
+            onClick={() => navigate('/membres?suivi=renouvellement')}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-cshp-gray mb-1">Renouvellements échus</p>
+                <h3 className="text-2xl font-bold text-cshp-black">
+                  {data.renouvellements.count} <span className="text-sm font-normal text-cshp-gray">membre(s)</span>
+                </h3>
+              </div>
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-lg shrink-0">
+                <RefreshCw size={24} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-sm flex-wrap gap-x-2">
+              <span className="text-amber-700 font-medium">
+                {formatMontant(data.renouvellements.montantARenouveler)}
+              </span>
+              <span className="text-cshp-gray">à percevoir · cliquer pour voir qui →</span>
+              {data.renouvellements.resteAnciensContrats > 0 && (
+                <span className="text-cshp-red text-xs font-medium">
+                  + {formatMontant(data.renouvellements.resteAnciensContrats)} d'anciens contrats
+                </span>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Présences */}
         <Card className="p-6">
@@ -132,7 +167,7 @@ export function Dashboard() {
             </div>
           </div>
           <div className="mt-4 text-sm text-cshp-gray">
-            La semaine dernière
+            Cette semaine (depuis lundi)
           </div>
         </Card>
 
@@ -153,7 +188,7 @@ export function Dashboard() {
             <span className="text-cshp-gray">
               {data.revenus.moisActuel > 0
                 ? ((data.masseSalariale / data.revenus.moisActuel) * 100).toFixed(1)
-                : 0} % des revenus
+                : 0} % des revenus · source : Module financier
             </span>
           </div>
         </Card>
@@ -214,11 +249,14 @@ export function Dashboard() {
                 const pct = p.total > 0 ? Math.round((p.encaisse / p.total) * 100) : 0;
                 return (
                   <div key={p.label}>
-                    <div className="flex justify-between text-sm mb-1">
+                    <div className="flex justify-between text-sm mb-1 flex-wrap gap-x-2">
                       <span className="font-medium text-cshp-black capitalize">{p.label}</span>
                       <span className="text-cshp-gray">
                         {formatMontant(p.total)}
                         <span className="text-xs text-cshp-red ml-2">à venir {formatMontant(p.aVenir)}</span>
+                        {p.renouvellements > 0 && (
+                          <span className="text-xs text-amber-700 ml-2">+ renouvellements attendus {formatMontant(p.renouvellements)}</span>
+                        )}
                       </span>
                     </div>
                     <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
@@ -228,7 +266,11 @@ export function Dashboard() {
                 );
               })}
             </div>
-            <p className="mt-3 text-xs text-cshp-gray">La portion verte représente les versements déjà encaissés.</p>
+            <p className="mt-3 text-xs text-cshp-gray">
+              Pour chaque mois : les versements planifiés à l'échéancier (vert = déjà encaissés,
+              rouge = à venir), plus les renouvellements attendus (contrats de membres actifs se
+              terminant ce mois-là — la formule est normalement re-payée à cette date).
+            </p>
           </Card>
         </>
       )}

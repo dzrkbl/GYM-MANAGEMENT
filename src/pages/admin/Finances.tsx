@@ -68,6 +68,7 @@ export function Finances() {
   const [annee, setAnnee] = useState<number>(new Date().getFullYear());
   const [modeCumulatif, setModeCumulatif] = useState<boolean>(false);
   const [data, setData] = useState<FinancierData | null>(null);
+  const [rentabilite, setRentabilite] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +111,8 @@ export function Finances() {
       setLoading(true);
       setError(null);
       const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}&cumul=${modeCumulatif}`);
+      // Projection annuelle à effectif constant (indépendante du mois consulté).
+      apiFetch<any>('/rapports/rentabilite').then(setRentabilite).catch(() => {});
       setData(res);
     } catch (err: any) {
       console.error(err);
@@ -501,7 +504,7 @@ export function Finances() {
                           </span>
                           {dep.mois === null && (
                             <span className="px-1.5 py-0.5 text-[9px] font-bold bg-teal-100 text-teal-800 rounded">
-                              Annuelle récurrente
+                              Chaque mois (×12/an)
                             </span>
                           )}
                         </div>
@@ -597,6 +600,72 @@ export function Finances() {
               </div>
             </Card>
 
+            {/* RENTABILITÉ À EFFECTIF CONSTANT (projection annuelle) */}
+            {rentabilite && (
+              <Card className="p-6 lg:col-span-2" id="card-rentabilite">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-bold text-cshp-gray uppercase tracking-wider">Rentabilité à effectif constant (projection 12 mois)</h3>
+                  <Badge variant={rentabilite.resultatPrudent >= 0 ? 'success' : 'danger'}>
+                    {rentabilite.resultatPrudent >= 0 ? 'Rentable' : 'Déficitaire'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-cshp-gray mb-5">
+                  Hypothèse : les <strong>{rentabilite.membresPayants}</strong> membres actifs payants d'aujourd'hui restent et renouvellent aux mêmes prix.
+                  Revenus nets de taxes ; charges actuelles projetées sur 12 mois. Ventes d'équipement et frais de fédération exclus.
+                </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+                  <div className="p-3 bg-slate-50 rounded-xl">
+                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Revenu annuel (net)</span>
+                    <span className="text-lg font-black text-cshp-black">{formatMontant(rentabilite.revenuAnnuelNet)}</span>
+                    <span className="text-[11px] text-cshp-gray block">{formatMontant(rentabilite.revenuAnnuelBrut)} taxes incluses</span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl">
+                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Charges annuelles</span>
+                    <span className="text-lg font-black text-cshp-black">{formatMontant(rentabilite.chargesAnnuelles + rentabilite.ponctuelles12Mois)}</span>
+                    <span className="text-[11px] text-cshp-gray block">{formatMontant(rentabilite.chargesMensuelles)}/mois + {formatMontant(rentabilite.ponctuelles12Mois)} ponctuelles</span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl">
+                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Résultat projeté</span>
+                    <span className={`text-lg font-black ${rentabilite.resultatPrudent >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatMontant(rentabilite.resultatPrudent)}</span>
+                    <span className="text-[11px] text-cshp-gray block">marge {rentabilite.margePct.toFixed(1)} %</span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl">
+                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Seuil de rentabilité</span>
+                    <span className="text-lg font-black text-cshp-black">≈ {rentabilite.membresNecessaires ?? '—'} membres</span>
+                    <span className="text-[11px] text-cshp-gray block">à {formatMontant(rentabilite.revenuMoyenNetParMembre)}/membre/an net</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h4 className="text-[11px] uppercase font-bold text-cshp-gray mb-2">Revenu annualisé par discipline (taxes incluses)</h4>
+                    <div className="space-y-1.5">
+                      {rentabilite.parSport.map((s: any) => (
+                        <div key={s.sport} className="flex justify-between items-center bg-white border border-gray-100 rounded-lg px-3 py-1.5">
+                          <span className="font-semibold text-cshp-black">{s.sport} <span className="text-cshp-gray font-normal">({s.membres} membres)</span></span>
+                          <span className="font-bold">{formatMontant(s.revenuAnnuelBrut)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] uppercase font-bold text-cshp-gray mb-2">Charges mensuelles actuelles</h4>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between bg-white border border-gray-100 rounded-lg px-3 py-1.5"><span>Masse salariale</span><span className="font-bold">{formatMontant(rentabilite.masseSalarialeMensuelle)}</span></div>
+                      <div className="flex justify-between bg-white border border-gray-100 rounded-lg px-3 py-1.5"><span>Loyer</span><span className="font-bold">{formatMontant(rentabilite.loyerMensuel)}</span></div>
+                      <div className="flex justify-between bg-white border border-gray-100 rounded-lg px-3 py-1.5"><span>Autres charges récurrentes</span><span className="font-bold">{formatMontant(rentabilite.depensesRecurrentesMensuelles)}</span></div>
+                    </div>
+                    {rentabilite.sansContrat?.length > 0 && (
+                      <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
+                        ⚠️ {rentabilite.sansContrat.length} membre(s) actif(s) sans contrat chiffré (comptés à 0 $) : {rentabilite.sansContrat.slice(0, 6).join(', ')}{rentabilite.sansContrat.length > 6 ? '…' : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+
           </div>
 
           {/* DÉPENSE MODAL (ADD / EDIT) */}
@@ -650,8 +719,12 @@ export function Finances() {
                       checked={depenseForm.moisOption === 'all'}
                       onChange={() => setDepenseForm({ ...depenseForm, moisOption: 'all' })}
                     />
-                    Annuelle (s&apos;applique à chaque mois d&apos;activité)
+                    Récurrente — retranchée CHAQUE MOIS (×12 sur l&apos;année)
                   </label>
+                  <p className="text-xs text-amber-700 mt-1">
+                    ⚠️ Pour une charge annuelle (ex. assurance 2 400 $/an), saisissez le
+                    montant mensuel (200 $) ici, ou le montant complet sur un mois précis.
+                  </p>
                 </div>
               </div>
 
