@@ -191,6 +191,14 @@ model Lead {
   sport       String   // KARATE, JUDO, TAEKWONDO, KICKBOXING, PRIVATE
   requestType String   // ESSAI, RAPPEL, TARIFS, AUTRE
   status      String   @default("NEW") // NEW, CONTACTED, CONVERTED, LOST
+
+  // Attribution marketing (landing pages du site, pubs Meta…)
+  source      String?  // ex: "landing-karate-enfant", "meta-instant-form"
+  utmSource   String?
+  utmCampaign String?
+  utmContent  String?  // nom du créatif/de la pub
+  note        String?  // texte libre (ex: âge de l'enfant)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

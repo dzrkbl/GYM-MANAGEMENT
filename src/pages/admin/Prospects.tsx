@@ -18,6 +18,10 @@ interface Lead {
   sport: string;
   requestType: string;
   status: string;
+  source: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  note: string | null;
   createdAt: string;
 }
 
@@ -182,6 +186,12 @@ export function Prospects() {
                   {l.sport} · {l.requestType} · {l.phone || '—'} · {l.email || '—'} ·
                   demande du {new Date(l.createdAt).toLocaleDateString('fr-CA')}
                 </p>
+                {(l.source || l.utmContent) && (
+                  <p className="text-xs text-cshp-red mt-0.5">
+                    {[l.source, l.utmCampaign, l.utmContent].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                {l.note && <p className="text-xs text-gray-400 mt-0.5 italic">{l.note}</p>}
               </div>
               <div className="flex items-center gap-2">
                 <select className={selectClass} value={l.status} onChange={(e) => changerStatut(l.id, e.target.value)}>

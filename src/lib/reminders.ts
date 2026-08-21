@@ -346,11 +346,14 @@ export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promi
   const leads = await prisma.lead.findMany({ where: { status: 'NEW', createdAt: { lt: cutoff } } });
 
   for (const l of leads) {
+    const provenance = [l.source, l.utmContent].filter(Boolean).join(' · ');
     const html = htmlCourriel(`
       <p>Bonjour,</p>
       <p>Le prospect <strong>${l.firstName} ${l.lastName}</strong> (${l.sport}, ${l.requestType})
       n'a pas encore été contacté depuis sa demande du ${formatDate(l.createdAt)}.</p>
       <p>Coordonnées : ${l.phone || '—'} · ${l.email || '—'}</p>
+      ${provenance ? `<p>Provenance : ${provenance}</p>` : ''}
+      ${l.note ? `<p>Note : ${l.note}</p>` : ''}
       <p>Pensez à effectuer un suivi.</p>`, { salutation: null });
     const resultat = await envoyerAvecLog({
       type: 'LEAD_RELANCE', memberId: l.id, refKey: l.id,
