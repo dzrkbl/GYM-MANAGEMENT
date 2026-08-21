@@ -199,6 +199,12 @@ model Lead {
   utmContent  String?  // nom du créatif/de la pub
   note        String?  // texte libre (ex: âge de l'enfant)
 
+  // Lien avec la fiche d'inscription en ligne : quand une fiche correspondant
+  // au prospect est reçue, on horodate et on pointe le dossier membre créé
+  // (badge « Fiche reçue » dans Prospects, lien direct vers le dossier).
+  ficheRecueAt DateTime?
+  membreId     String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
