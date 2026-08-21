@@ -163,7 +163,7 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
     const deja = memesNoms.find((m) => coordonneesConcordent(m)) || (sansCoordonnees ? memesNoms[0] : undefined);
 
     if (deja) {
-      await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED' } });
+      await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED', membreId: deja.id } });
       logAudit(req, { action: 'UPDATE', entity: 'Lead', entityId: lead.id, description: `Prospect ${lead.firstName} ${lead.lastName} lié au dossier membre existant` });
       return sendSuccess(res, { membreId: deja.id, dejaExistant: true });
     }
@@ -190,7 +190,7 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
       },
     });
 
-    await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED' } });
+    await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED', membreId: membre.id } });
 
     logAudit(req, { action: 'CREATE', entity: 'Member', entityId: membre.id, description: `Conversion du prospect ${lead.firstName} ${lead.lastName}` });
 

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
-import { sendEmail, sendEmailBackground, htmlCourriel } from '../lib/mailer';
+import { sendEmail, sendEmailBackground, htmlCourriel, parseDestinataires } from '../lib/mailer';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { REGLEMENT_VERSION } from '../lib/reglement';
@@ -226,21 +226,36 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
 
     const nomComplet = `${data.firstName} ${data.lastName}`;
 
-    // Le prospect correspondant (même courriel ou même nom) est automatiquement
-    // marqué CONVERTI : plus besoin du bouton « Convertir », plus de doublon.
-    await prisma.lead.updateMany({
-      where: {
-        status: { in: ['NEW', 'CONTACTED'] },
-        OR: [
-          { email: { equals: destinataire, mode: 'insensitive' } },
-          {
-            firstName: { equals: data.firstName.trim(), mode: 'insensitive' },
-            lastName: { equals: data.lastName.trim(), mode: 'insensitive' },
-          },
-        ],
-      },
-      data: { status: 'CONVERTED' },
-    }).catch(() => { /* non critique */ });
+    // Le prospect correspondant est automatiquement marqué CONVERTI, horodaté
+    // « fiche reçue » et relié au dossier membre (badge vert dans Prospects).
+    // Correspondance élargie, calculée en mémoire (la table des prospects
+    // ouverts est petite) : la comparaison stricte en base ratait les cas
+    // réels — fiche au nom de l'enfant vs prospect au nom du parent, courriel
+    // d'invitation différent du courriel saisi, numéros formatés autrement.
+    try {
+      const courrielsFiche = new Set(
+        [...parseDestinataires(data.parentEmail), ...parseDestinataires(data.email)]
+          .map((e) => e.toLowerCase())
+      );
+      const chiffres = (t?: string | null) => (t || '').replace(/\D/g, '');
+      const telsFiche = [chiffres(data.parentPhone), chiffres(data.phone)].filter((t) => t.length >= 7);
+      const nomAthlete = `${data.firstName.trim()} ${data.lastName.trim()}`.toLowerCase();
+
+      const ouverts = await prisma.lead.findMany({ where: { status: { in: ['NEW', 'CONTACTED'] } } });
+      const correspondants = ouverts.filter((l) => {
+        const emailLead = (l.email || '').toLowerCase().trim();
+        if (emailLead && courrielsFiche.has(emailLead)) return true;
+        const telLead = chiffres(l.phone);
+        if (telLead.length >= 7 && telsFiche.includes(telLead)) return true;
+        return `${l.firstName.trim()} ${l.lastName.trim()}`.toLowerCase() === nomAthlete;
+      });
+      if (correspondants.length > 0) {
+        await prisma.lead.updateMany({
+          where: { id: { in: correspondants.map((l) => l.id) } },
+          data: { status: 'CONVERTED', ficheRecueAt: new Date(), membreId: membre.id },
+        });
+      }
+    } catch { /* non critique : la fiche est enregistrée quoi qu'il arrive */ }
 
     // Courriel de bienvenue au parent/athlète (non bloquant).
     sendEmailBackground({

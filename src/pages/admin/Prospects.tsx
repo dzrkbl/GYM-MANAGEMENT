@@ -23,6 +23,8 @@ interface Lead {
   utmContent: string | null;
   note: string | null;
   createdAt: string;
+  ficheRecueAt: string | null; // fiche d'inscription en ligne reçue
+  membreId: string | null;     // dossier membre créé par la fiche ou la conversion
 }
 
 const STATUTS: { value: string; label: string; variant: any }[] = [
@@ -167,8 +169,12 @@ export function Prospects() {
             // Ancienneté du prospect : un NEW qui traîne se voit tout de suite.
             const joursDepuis = Math.floor((Date.now() - new Date(l.createdAt).getTime()) / 86_400_000);
             const sansSuivi = l.status === 'NEW' && joursDepuis >= 3;
+            // Fiche d'inscription en ligne reçue : carte verte, impossible à rater.
+            const ficheRecue = !!l.ficheRecueAt;
             return (
-            <Card key={l.id} className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${sansSuivi ? 'border-l-4 border-l-cshp-red' : ''}`}>
+            <Card key={l.id} className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              ficheRecue ? 'border-l-4 border-l-emerald-500 bg-emerald-50/60' : sansSuivi ? 'border-l-4 border-l-cshp-red' : ''
+            }`}>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-cshp-black uppercase">{l.lastName}</span>
@@ -176,6 +182,11 @@ export function Prospects() {
                   <Badge variant={STATUTS.find((s) => s.value === l.status)?.variant || 'neutral'} className="text-[10px]">
                     {labelStatut(l.status)}
                   </Badge>
+                  {ficheRecue && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full">
+                      📋 Fiche reçue le {new Date(l.ficheRecueAt!).toLocaleDateString('fr-CA')}
+                    </span>
+                  )}
                   {sansSuivi && (
                     <span className="px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 rounded-full">
                       ⏳ {joursDepuis} j sans suivi
@@ -221,6 +232,16 @@ export function Prospects() {
                 {l.status !== 'CONVERTED' && (
                   <Button variant="outline" onClick={() => convertir(l.id)} className="!min-h-0 h-9 px-3 text-xs">
                     <ArrowRightCircle size={16} className="mr-1" /> Convertir
+                  </Button>
+                )}
+                {l.membreId && (
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(`/membres/${l.membreId}`)}
+                    className="!min-h-0 h-9 px-3 text-xs !border-emerald-300 !text-emerald-700 hover:!bg-emerald-50"
+                    title="Ouvrir le dossier membre créé pour ce prospect"
+                  >
+                    👤 Voir la fiche membre
                   </Button>
                 )}
                 <button onClick={() => supprimer(l.id)} className="p-2 text-gray-400 hover:text-red-500" title="Supprimer">
