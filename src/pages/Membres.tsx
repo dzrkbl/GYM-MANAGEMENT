@@ -38,15 +38,24 @@ export function Membres() {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
   
-  const [sectionFilter, setSectionFilter] = useState(
-    user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS'
-  );
-  const [statusFilter, setStatusFilter] = useState('ACTIF');
-
-  // Filtre de suivi via l'URL : ?suivi=renouvellement (carte « Renouvellements
-  // échus » du tableau de bord) montre uniquement les contrats terminés.
+  // Filtres portés par l'URL (?groupe=, ?statut=, ?suivi=) : revenir en
+  // arrière depuis une fiche membre restaure le groupe consulté au lieu de
+  // retomber sur « Tous », et un lien copié conserve la vue.
   const [searchParams, setSearchParams] = useSearchParams();
   const suiviFilter = searchParams.get('suivi'); // 'renouvellement' | null
+  const defautSection = user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS';
+  const sectionFilter = searchParams.get('groupe') ?? defautSection;
+  const statusFilter = searchParams.get('statut') ?? 'ACTIF';
+  const setFiltreUrl = (cle: 'groupe' | 'statut', valeur: string, defaut: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (valeur === defaut) next.delete(cle); // URL propre sur les valeurs par défaut
+      else next.set(cle, valeur);
+      return next;
+    }, { replace: true });
+  };
+  const setSectionFilter = (v: string) => setFiltreUrl('groupe', v, defautSection);
+  const setStatusFilter = (v: string) => setFiltreUrl('statut', v, 'ACTIF');
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -294,7 +303,11 @@ export function Membres() {
         <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold flex items-center justify-between">
           <span>🔄 Filtre actif : renouvellements échus seulement ({membersAffiches.length} membre(s))</span>
           <button
-            onClick={() => setSearchParams({})}
+            onClick={() => setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('suivi'); // ne retire que ce filtre, garde groupe/statut
+              return next;
+            }, { replace: true })}
             className="underline text-xs hover:text-amber-950"
           >
             ✕ Retirer le filtre
@@ -325,7 +338,7 @@ export function Membres() {
       ) : (
         <Card className="shadow-sm border border-gray-100 overflow-hidden bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
+            <table className="w-full text-left border-collapse min-w-[1150px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">
                   {modeFacture && <th className="py-3 px-4 w-10">✔</th>}
@@ -333,6 +346,7 @@ export function Membres() {
                   <th className="py-3 px-4">Nom</th>
                   <th className="py-3 px-4">Prénom</th>
                   <th className="py-3 px-4">Groupe</th>
+                  <th className="py-3 px-4">Dernière présence</th>
                   <th className="py-3 px-4">Plan</th>
                   <th className="py-3 px-4 text-right">Montant final</th>
                   <th className="py-3 px-4 text-right">Total payé</th>
@@ -379,6 +393,20 @@ export function Membres() {
                         <Badge variant="neutral" className="bg-slate-100 text-slate-800 border-none px-2.5 py-1 text-xs">
                           {getLabel(member.sections?.[0]?.section)}
                         </Badge>
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-semibold">
+                        {member.dernierePresence ? (() => {
+                          const jours = Math.floor((Date.now() - new Date(member.dernierePresence).getTime()) / 86_400_000);
+                          const couleur = jours <= 7 ? 'text-emerald-600' : jours <= 21 ? 'text-amber-600' : 'text-red-600';
+                          return (
+                            <span className={couleur}>
+                              {formatDateLocal(member.dernierePresence)}
+                              <span className="text-gray-400 font-normal"> · {jours === 0 ? "aujourd'hui" : `il y a ${jours} j`}</span>
+                            </span>
+                          );
+                        })() : (
+                          <span className="text-gray-400">Jamais pointé</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-xs text-gray-600 uppercase">
                         {member.plan || '-'}

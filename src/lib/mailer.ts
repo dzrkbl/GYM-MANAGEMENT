@@ -171,6 +171,70 @@ export async function sendEmail({ to, subject, html, attachments }: {
 }
 
 /**
+ * Envoi GROUPÉ (communications aux membres). À utiliser dès qu'il y a plus de
+ * quelques destinataires : un envoi individuel par adresse en parallèle dépasse
+ * la limite de débit de Resend (2 requêtes/seconde) et tout échoue en 429 au-delà
+ * d'une dizaine de courriels.
+ *  - Resend : API batch, 100 courriels par requête (chaque destinataire reçoit
+ *    son propre courriel, personne ne voit les adresses des autres), avec une
+ *    pause entre les lots pour rester sous la limite de débit.
+ *  - SMTP : envoi séquentiel avec une courte pause (les serveurs SMTP mutualisés
+ *    comme Hostinger throttlent aussi).
+ */
+export async function sendEmailsEnMasse({ destinataires, subject, html }: {
+  destinataires: string[];
+  subject: string;
+  html: string;
+}): Promise<{ envoyes: number; echecs: { adresse: string; erreur: string }[] }> {
+  const cfg = configCourriel();
+  if (!cfg.provider) throw new Error(cfg.details);
+
+  const text = htmlVersTexte(html);
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let envoyes = 0;
+  const echecs: { adresse: string; erreur: string }[] = [];
+
+  if (cfg.provider === 'resend') {
+    const TAILLE_LOT = 100; // maximum de l'API batch de Resend
+    for (let i = 0; i < destinataires.length; i += TAILLE_LOT) {
+      const lot = destinataires.slice(i, i + TAILLE_LOT);
+      try {
+        const { error } = await getResend().batch.send(
+          lot.map((adresse) => ({
+            from: EMAIL_FROM,
+            to: [adresse],
+            replyTo: EMAIL_REPLY_TO,
+            subject,
+            html,
+            text,
+          }))
+        );
+        if (error) throw new Error(error.message);
+        envoyes += lot.length;
+      } catch (e) {
+        const erreur = e instanceof Error ? e.message : String(e);
+        for (const adresse of lot) echecs.push({ adresse, erreur });
+      }
+      // 600 ms entre les lots : bien sous la limite de 2 requêtes/seconde.
+      if (i + TAILLE_LOT < destinataires.length) await pause(600);
+    }
+    return { envoyes, echecs };
+  }
+
+  // SMTP : séquentiel, une pause courte entre chaque envoi.
+  for (const adresse of destinataires) {
+    try {
+      await sendEmail({ to: adresse, subject, html });
+      envoyes++;
+    } catch (e) {
+      echecs.push({ adresse, erreur: e instanceof Error ? e.message : String(e) });
+    }
+    await pause(150);
+  }
+  return { envoyes, echecs };
+}
+
+/**
  * Envoi « en arrière-plan » (non bloquant) : ne lève jamais d'exception, mais
  * consigne tout échec dans le journal d'audit (action ERREUR, entité Courriel)
  * pour que l'admin le voie dans l'interface au lieu des seuls logs serveur.
