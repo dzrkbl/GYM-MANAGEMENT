@@ -52,9 +52,12 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
     });
   };
 
+  const isAdmin = formData.role === 'ADMIN';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sectionVal = selectedSections.length > 0 ? selectedSections.join(',') : null;
+    // Un administrateur a accès à toutes les sections : on ne lui en attache aucune.
+    const sectionVal = isAdmin ? null : (selectedSections.length > 0 ? selectedSections.join(',') : null);
     const payload: any = { ...formData, section: sectionVal };
     // Mot de passe optionnel : si laissé vide, on ne l'envoie pas (création = mot de passe temporaire généré ; édition = inchangé).
     if (!payload.password) delete payload.password;
@@ -100,8 +103,22 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
           >
             <option value="COACH">Coach</option>
             <option value="SECTION_MANAGER">Section Manager</option>
+            <option value="ADMIN">Administrateur (accès complet)</option>
           </select>
+          {isAdmin && (
+            <p className="text-xs text-cshp-gray mt-1">
+              Mêmes accès que le compte principal : membres, paiements, finances, courriels, équipe.
+            </p>
+          )}
         </div>
+        {isAdmin ? (
+          <div>
+            <label className="block mb-1 text-sm font-medium text-cshp-black">Sections</label>
+            <div className="border border-gray-200 p-3 rounded-lg bg-gray-50 min-h-[44px] flex items-center">
+              <span className="text-sm text-cshp-gray">Toutes les sections (accès administrateur)</span>
+            </div>
+          </div>
+        ) : (
         <div>
           <label className="block mb-1 text-sm font-medium text-cshp-black">Sections (Multi-sélection) *</label>
           <div className="flex flex-wrap gap-2 border border-gray-300 p-3 rounded-lg bg-white min-h-[44px]">
@@ -132,6 +149,7 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
           </div>
           <p className="text-xs text-cshp-gray mt-1">Sélectionnez une ou plusieurs sections.</p>
         </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -182,7 +200,7 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
           Annuler
         </Button>
         <Button type="submit" isLoading={isLoading} className="flex-1">
-          {initialData ? 'Mettre à jour' : 'Créer le coach'}
+          {initialData ? 'Mettre à jour' : 'Créer le compte'}
         </Button>
       </div>
     </form>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant, formatDateLocal } from '../lib/format';
+import { formatMontant, formatDateLocal, todayLocalISO } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
@@ -59,7 +59,7 @@ export function Rapports() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const currentMonthValue = new Date().toISOString().substring(0, 7); // YYYY-MM
+  const currentMonthValue = todayLocalISO().slice(0, 7); // AAAA-MM (heure de Montréal, pas UTC)
   const [periodType, setPeriodType] = useState('MOIS'); // MOIS, TRIMESTRE, ANNEE, CUSTOM
   const [month, setMonth] = useState(currentMonthValue);
   const [customFrom, setCustomFrom] = useState('');
@@ -75,6 +75,10 @@ export function Rapports() {
 
   // Saisie et suivi manuel des salaires fixes des coachs (Masse Salariale A+B)
   const [coachs, setCoachs] = useState<{ id: string; nom: string; montant: number }[]>([]);
+  // Salaires saisis sur les COMPTES (page Coachs) — inclus dans la masse
+  // salariale automatiquement ; affichés ici en lecture seule pour éviter
+  // qu'on saisisse la même personne deux fois.
+  const [salairesComptes, setSalairesComptes] = useState<{ id: string; nom: string; montant: number }[]>([]);
   const [showCoachConfig, setShowCoachConfig] = useState(false);
   const [editingCoach, setEditingCoach] = useState<Record<string, string>>({});
   const [newCoach, setNewCoach] = useState({ nom: '', montant: '' });
@@ -83,11 +87,18 @@ export function Rapports() {
     apiFetch<any[]>('/coach-salaire')
       .then(setCoachs)
       .catch(console.error);
+    apiFetch<any[]>('/coachs')
+      .then((cs) => setSalairesComptes(
+        (cs || [])
+          .filter((c: any) => c.actif && Number(c.remuneration) > 0)
+          .map((c: any) => ({ id: c.id, nom: `${c.firstName} ${c.lastName}`, montant: Number(c.remuneration) }))
+      ))
+      .catch(console.error);
   }, []);
 
   const totalDefaut = useMemo(() => {
-    return coachs.reduce((s, c) => s + c.montant, 0);
-  }, [coachs]);
+    return coachs.reduce((s, c) => s + c.montant, 0) + salairesComptes.reduce((s, c) => s + c.montant, 0);
+  }, [coachs, salairesComptes]);
 
   useEffect(() => {
     fetchReport();
@@ -234,9 +245,14 @@ export function Rapports() {
   }, [monthsOfPeriod, masseSalarialeList]);
 
   const totalMasseSalarialeSaisie = useMemo(() => {
-    return masseSalarialeByMonth.reduce(
-      (sum, m) => sum + (m.montant !== null ? m.montant : totalDefaut), 0
-    );
+    // Seuls les mois déjà commencés comptent : comparer 12 mois de salaires aux
+    // revenus de 8 mois écoulés donnait des pourcentages absurdes en cours d'année.
+    const [cy, cm] = todayLocalISO().split('-').map(Number);
+    return masseSalarialeByMonth.reduce((sum, m) => {
+      const estFutur = m.annee > cy || (m.annee === cy && m.mois > cm);
+      if (estFutur) return sum;
+      return sum + (m.montant !== null ? m.montant : totalDefaut);
+    }, 0);
   }, [masseSalarialeByMonth, totalDefaut]);
 
   const pourcentageMasseSalariale = useMemo(() => {
@@ -313,7 +329,7 @@ export function Rapports() {
     
     doc.setFontSize(11);
     doc.text(`Période : Du ${dateRange.from} au ${dateRange.to}`, 14, 28);
-    doc.text(`Édité le : ${formatDateLocal(new Date())}`, 14, 34);
+    doc.text(`Édité le : ${formatDateLocal(todayLocalISO())}`, 14, 34);
     
     let yPos = 45;
 
@@ -466,6 +482,14 @@ export function Rapports() {
     return (data?.retards ?? []).filter((r: any) => r.section === filtreSection);
   }, [data, filtreSection]);
 
+  // Renouvellements échus (contrats terminés non renouvelés) : à relancer au
+  // même titre que les retards — ils font partie de la liste d'appels.
+  const renouvFiltres = useMemo(() => {
+    const liste = data?.renouvellementsEchus ?? [];
+    if (filtreSection === 'TOUTES') return liste;
+    return liste.filter((r: any) => r.section === filtreSection);
+  }, [data, filtreSection]);
+
   function exportRetardsPDF(retards: any[]) {
     const doc = new jsPDF();
     doc.setFontSize(16);
@@ -475,7 +499,7 @@ export function Rapports() {
       ? 'Toutes les sections'
       : (data.parSection.find((s: any) => s.section === filtreSection)?.label || filtreSection);
     doc.text(`Section : ${sectionLabel}`, 14, 28);
-    doc.text(`Édité le : ${formatDateLocal(new Date())}`, 14, 34);
+    doc.text(`Édité le : ${formatDateLocal(todayLocalISO())}`, 14, 34);
     doc.text(`${retards.length} dossier(s) · Total : ${formatMontant(retards.reduce((s, r) => s + r.montant, 0))}`, 14, 40);
     
     autoTable(doc, {
@@ -491,14 +515,39 @@ export function Rapports() {
       theme: 'grid',
       headStyles: { fillColor: [225, 29, 72] }
     });
+
+    // Renouvellements échus : la 2e moitié de la liste d'appels.
+    if (renouvFiltres.length > 0) {
+      const yApres = (doc as any).lastAutoTable?.finalY || 60;
+      doc.setFontSize(12);
+      doc.text(`Renouvellements échus à percevoir (${renouvFiltres.length})`, 14, yApres + 10);
+      autoTable(doc, {
+        startY: yApres + 14,
+        head: [['Membre', 'Section', 'Échu le', 'Depuis', 'Renouvellement', 'Reste ancien contrat', 'Téléphone']],
+        body: renouvFiltres.map((r: any) => [
+          r.membreNom,
+          getLabel(r.section) || r.section,
+          formatDateLocal(r.finContrat),
+          `${r.joursEchus} jours`,
+          formatMontant(r.montant),
+          r.resteAncienContrat > 0 ? formatMontant(r.resteAncienContrat) : '—',
+          r.telephone || '—'
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [217, 119, 6] }
+      });
+    }
     doc.save(`CSHP_Retards_${sectionLabel}_${dateRange.from}.pdf`);
   }
 
   function exportRetardsCSV(retards: any[]) {
     let csv = '\uFEFF';
-    csv += 'Membre,Section,Montant,Depuis,Ancienneté (jours)\n';
+    csv += 'Type,Membre,Section,Montant,Depuis,Ancienneté (jours),Reste ancien contrat,Téléphone\n';
     retards.forEach(r => {
-      csv += `"${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${formatDateLocal(r.date)}","${r.joursRetard}"\n`;
+      csv += `"Versement en retard","${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${formatDateLocal(r.date)}","${r.joursRetard}","",""\n`;
+    });
+    renouvFiltres.forEach((r: any) => {
+      csv += `"Renouvellement échu","${r.membreNom}","${getLabel(r.section) || r.section}","${r.montant}","${formatDateLocal(r.finContrat)}","${r.joursEchus}","${r.resteAncienContrat || ''}","${r.telephone || ''}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -661,9 +710,21 @@ export function Rapports() {
 
               {showCoachConfig && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
-                  <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-2">Salaire fixe par coach</div>
+                  {salairesComptes.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider">Comptes du personnel (gérés dans la page Coachs)</div>
+                      {salairesComptes.map((c) => (
+                        <div key={c.id} className="flex items-center gap-2 text-sm justify-between bg-white p-2 rounded-lg border border-gray-100 opacity-80">
+                          <span className="font-semibold text-cshp-black">👤 {c.nom}</span>
+                          <span className="text-xs font-bold text-cshp-black">{c.montant.toFixed(2)} $/m <span className="text-cshp-gray font-normal">· compte</span></span>
+                        </div>
+                      ))}
+                      <p className="text-[11px] text-cshp-gray italic">Inclus automatiquement dans la masse salariale — ne pas les ressaisir ci-dessous.</p>
+                    </div>
+                  )}
+                  <div className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-2">Salaires SANS compte dans l'app (aides, contractuels…)</div>
                   {coachs.length === 0 ? (
-                    <p className="text-xs text-cshp-gray italic">Aucun coach fixe enregistré.</p>
+                    <p className="text-xs text-cshp-gray italic">Aucune ligne — les salaires des comptes ci-dessus suffisent.</p>
                   ) : (
                     <div className="space-y-2">
                       {coachs.map(c => (
@@ -1066,6 +1127,46 @@ export function Rapports() {
                 </table>
               )}
             </div>
+
+            {/* Renouvellements échus : l'autre moitié de l'argent à relancer */}
+            <div className={`p-4 rounded-xl border mt-6 mb-3 font-bold text-sm flex flex-col sm:flex-row gap-2 justify-between items-start sm:items-center ${
+              renouvFiltres.length > 0
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-gray-50 text-gray-500 border-gray-100'
+            }`}>
+              <span>🔄 {renouvFiltres.length} renouvellement(s) échu(s)</span>
+              <span>À percevoir : {formatMontant(renouvFiltres.reduce((s: number, r: any) => s + r.montant, 0))}</span>
+            </div>
+            {renouvFiltres.length > 0 && (
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-cshp-gray text-xs uppercase tracking-wider font-semibold">
+                      <th className="pb-3 pr-2">Membre</th>
+                      <th className="pb-3 px-2">Section</th>
+                      <th className="pb-3 px-2">Échu le</th>
+                      <th className="pb-3 px-2">Renouvellement</th>
+                      <th className="pb-3 pl-2">Reste ancien contrat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {renouvFiltres.map((r: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-3 pr-2 font-bold text-cshp-black">{r.membreNom}</td>
+                        <td className="py-3 px-2 text-cshp-gray">{getLabel(r.section) || r.section}</td>
+                        <td className="py-3 px-2 text-amber-700 font-semibold">
+                          {formatDateLocal(r.finContrat, { day: 'numeric', month: 'short', year: 'numeric' })} ({r.joursEchus} j)
+                        </td>
+                        <td className="py-3 px-2 font-bold text-cshp-black">{formatMontant(r.montant)}</td>
+                        <td className="py-3 pl-2 text-cshp-red font-semibold">
+                          {r.resteAncienContrat > 0 ? formatMontant(r.resteAncienContrat) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         </div>
       </>

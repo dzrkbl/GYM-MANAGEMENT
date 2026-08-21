@@ -2,8 +2,48 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { masseSalarialePourMois } from '../lib/finances';
 
 const router = Router();
+
+// Jour courant à Montréal (AAAA-MM-JJ) : le serveur tourne en UTC, où « new
+// Date() » après 20 h de Montréal est déjà demain.
+function aujourdhuiMontreal(): string {
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+}
+
+// « En retard » du tableau de bord : impayés dont le jour d'échéance est passé
+// (jour civil), membres INACTIF exclus — mêmes règles que la page Paiements.
+function whereRetards() {
+  return {
+    datePaiement: null,
+    datePrevue: { lt: new Date(aujourdhuiMontreal() + 'T00:00:00Z') },
+    member: { status: { not: 'INACTIF' } },
+  };
+}
+
+// Renouvellements échus : membres ACTIFS dont le contrat est terminé — ils
+// doivent re-payer leur formule (c'est de l'argent à percevoir, invisible dans
+// les versements puisque l'ancien échéancier est soldé).
+async function renouvellementsEchus() {
+  const membres = await prisma.member.findMany({
+    where: { status: 'ACTIF', finContrat: { lt: new Date(aujourdhuiMontreal() + 'T00:00:00Z') } },
+    include: { versements: true },
+  });
+  let montantARenouveler = 0;
+  let resteAnciensContrats = 0;
+  for (const m of membres) {
+    montantARenouveler += m.montantFinal || 0;
+    const paye = m.versements.filter((v) => v.datePaiement).reduce((n, v) => n + v.montant, 0);
+    const reste = Math.round(((m.montantFinal || 0) - paye) * 100) / 100;
+    if (reste > 0) resteAnciensContrats += reste;
+  }
+  return {
+    count: membres.length,
+    montantARenouveler: Math.round(montantARenouveler * 100) / 100,
+    resteAnciensContrats: Math.round(resteAnciensContrats * 100) / 100,
+  };
+}
 
 // Help function for revenues using paymentVersement
 const getRevenusForMonth = async (year: number, month: number) => {
@@ -38,7 +78,7 @@ const getRevenusForMonth = async (year: number, month: number) => {
 // GET /api/dashboard/revenus
 router.get('/revenus', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const reqMonth = req.query.month as string || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const reqMonth = req.query.month as string || aujourdhuiMontreal().slice(0, 7); // AAAA-MM (Montréal)
     const [yearStr, monthStr] = reqMonth.split('-');
     const year = parseInt(yearStr, 10);
     const monthIndex = parseInt(monthStr, 10) - 1; // 0-based
@@ -65,7 +105,7 @@ router.get('/revenus', authenticate, requireRole(['ADMIN']), async (req: Request
 // GET /api/dashboard/revenus/section
 router.get('/revenus/section', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const reqMonth = req.query.month as string || new Date().toISOString().slice(0, 7); // YYYY-MM
+    const reqMonth = req.query.month as string || aujourdhuiMontreal().slice(0, 7); // AAAA-MM (Montréal)
     const [yearStr, monthStr] = reqMonth.split('-');
     
     const revenues = await getRevenusForMonth(parseInt(yearStr, 10), parseInt(monthStr, 10) - 1);
@@ -79,18 +119,12 @@ router.get('/revenus/section', authenticate, requireRole(['ADMIN']), async (req:
 // GET /api/dashboard/retards
 router.get('/retards', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const now = new Date();
-    const overdues = await prisma.paymentVersement.findMany({
-      where: {
-        datePaiement: null,
-        datePrevue: { lt: now }
-      }
-    });
+    const overdues = await prisma.paymentVersement.findMany({ where: whereRetards() });
 
-    const count = overdues.length;
+    const count = new Set(overdues.map((p) => p.membreId)).size;
     const montantTotal = overdues.reduce((sum, p) => sum + p.montant, 0);
 
-    return sendSuccess(res, { count, montantTotal });
+    return sendSuccess(res, { count, versements: overdues.length, montantTotal });
 
   } catch (error) {
     return sendError(res, 'Erreur', 500);
@@ -133,15 +167,11 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
     if (prevMonthIndex < 0) { prevMonthIndex = 11; prevYear -= 1; }
     const moisPrecedent = await getRevenusForMonth(prevYear, prevMonthIndex);
     
-    // Retards
-    const overdues = await prisma.paymentVersement.findMany({
-      where: {
-        datePaiement: null,
-        datePrevue: { lt: now }
-      }
-    });
-    const retardsCount = overdues.length;
+    // Retards (mêmes règles que la page Paiements) + renouvellements échus
+    const overdues = await prisma.paymentVersement.findMany({ where: whereRetards() });
+    const retardsCount = new Set(overdues.map((p) => p.membreId)).size;
     const retardsMontant = overdues.reduce((sum, p) => sum + p.montant, 0);
+    const renouvellements = await renouvellementsEchus();
 
     // Membres
     const membres = await prisma.member.findMany({
@@ -156,11 +186,18 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
        }
     }
 
-    // Présences de la semaine (global approximation for dashboard)
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // Monday
+    // Présences de la semaine : du lundi 00 h au dimanche 23 h 59 (jours civils
+    // de Montréal). L'ancien calcul gardait l'heure courante (le lundi matin
+    // disparaissait dès l'après-midi) et, le dimanche, visait la semaine SUIVANTE.
+    const [ay, am, aj] = aujourdhuiMontreal().split('-').map(Number);
+    const ref = new Date(Date.UTC(ay, am - 1, aj));
+    const decalage = (ref.getUTCDay() + 6) % 7; // 0 = lundi
+    const weekStart = new Date(ref);
+    weekStart.setUTCDate(ref.getUTCDate() - decalage);
+    weekStart.setUTCHours(0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+    weekEnd.setUTCHours(23, 59, 59, 999);
 
     const attendances = await prisma.attendance.findMany({
       where: { date: { gte: weekStart, lte: weekEnd } },
@@ -197,11 +234,9 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
       if (tauxCetteSemaine > 100) tauxCetteSemaine = 100;
     }
 
-    // Masse Salariale
-    const activeCoachs = await prisma.user.findMany({
-      where: { role: { in: ['COACH', 'SECTION_MANAGER'] }, actif: true }
-    });
-    const masseSalariale = activeCoachs.reduce((sum, c) => sum + (c.remuneration || 0), 0);
+    // Masse salariale : MÊME source que le Module financier (override du mois
+    // sinon « Gérer les coachs ») — le Dashboard affichait un 3e chiffre.
+    const masseSalariale = await masseSalarialePourMois(now.getMonth() + 1, now.getFullYear());
 
     return sendSuccess(res, {
       revenus: {
@@ -215,8 +250,10 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
       },
       retards: {
         count: retardsCount,
+        versements: overdues.length,
         montantTotal: retardsMontant
       },
+      renouvellements,
       presences: {
         tauxCetteSemaine
       },
@@ -234,9 +271,12 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
     const now = new Date();
     const finJour = (d: Date) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
 
-    // MRR : équivalent mensuel des cotisations des membres actifs.
+    // MRR : équivalent mensuel des cotisations des membres actifs dont le
+    // contrat COURT ENCORE (un contrat expiré ne rapporte plus : il est dans
+    // « Renouvellements échus », pas dans le récurrent).
+    const debutJour = new Date(aujourdhuiMontreal() + 'T00:00:00Z');
     const actifs = await prisma.member.findMany({
-      where: { status: 'ACTIF' },
+      where: { status: 'ACTIF', OR: [{ finContrat: null }, { finContrat: { gte: debutJour } }] },
       select: { plan: true, montantFinal: true },
     });
     let mrr = 0;
@@ -272,17 +312,26 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
     for (let i = 0; i < 3; i++) {
       const debut = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const fin = new Date(now.getFullYear(), now.getMonth() + i + 1, 0, 23, 59, 59);
+      // Versements planifiés du mois (les membres INACTIF n'apportent plus rien).
       const vers = await prisma.paymentVersement.findMany({
-        where: { datePrevue: { gte: debut, lte: fin } },
+        where: { datePrevue: { gte: debut, lte: fin }, member: { status: { not: 'INACTIF' } } },
         select: { montant: true, datePaiement: true },
       });
       let total = 0, encaisse = 0;
       for (const v of vers) { total += v.montant; if (v.datePaiement) encaisse += v.montant; }
+      // Renouvellements attendus : contrats de membres ACTIFS se terminant ce
+      // mois-là — au renouvellement, la formule est re-payée (montantFinal).
+      const finissants = await prisma.member.findMany({
+        where: { status: 'ACTIF', finContrat: { gte: debut, lte: fin } },
+        select: { montantFinal: true },
+      });
+      const renouvellementsAttendus = finissants.reduce((n, m) => n + (m.montantFinal || 0), 0);
       previsions.push({
         label: `${moisLabels[debut.getMonth()]} ${debut.getFullYear()}`,
         total: Math.round(total * 100) / 100,
         encaisse: Math.round(encaisse * 100) / 100,
         aVenir: Math.round((total - encaisse) * 100) / 100,
+        renouvellements: Math.round(renouvellementsAttendus * 100) / 100,
       });
     }
 

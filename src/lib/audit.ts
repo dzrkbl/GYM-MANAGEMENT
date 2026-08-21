@@ -1,7 +1,7 @@
 import { Request } from 'express';
 import { prisma } from './prisma';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PAY';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PAY' | 'ERREUR';
 
 // Enregistre une entrée d'audit (non bloquant : n'interrompt jamais la requête).
 export function logAudit(

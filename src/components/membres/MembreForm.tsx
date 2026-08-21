@@ -4,10 +4,10 @@ import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { createMembre, updateMembre, apiFetch } from '../../lib/api';
-import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../../lib/tarifs';
+import { calculerMontantFinal, calculerFinContrat, ajouterMoisISO, TARIFS } from '../../lib/tarifs';
 import { User, CreditCard, ChevronRight, ChevronLeft, Plus, Trash, Search, Check, AlertCircle } from 'lucide-react';
 import { useSections } from '../../hooks/useSections';
-import { formatDateLocal } from '../../lib/format';
+import { formatDateLocal, todayLocalISO } from '../../lib/format';
 
 interface MembreFormProps {
   membre?: any; // Si fourni, on est en mode édition
@@ -15,7 +15,7 @@ interface MembreFormProps {
   onCancel: () => void;
 }
 
-const CEINTURES_LIST = [
+export const CEINTURES_LIST = [
   "Blanche",
   "Blanche-Jaune",
   "Jaune",
@@ -36,13 +36,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const isEditing = !!membre;
   const { sections, getLabel } = useSections();
 
-  const GROUPES = useMemo(() => {
-    const list = sections.map(s => ({ value: s.code, label: s.label }));
-    if (!list.some(item => item.value === 'MENSUEL')) {
-      list.push({ value: 'MENSUEL', label: 'Mensuel' });
-    }
-    return list;
-  }, [sections]);
+  const GROUPES = useMemo(() => sections.map(s => ({ value: s.code, label: s.label })), [sections]);
 
   // Étape courante (1 à 4)
   const [currentStep, setCurrentStep] = useState(1);
@@ -71,6 +65,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [lastName, setLastName] = useState(membre?.lastName || '');
   const [email, setEmail] = useState(membre?.email || '');
   const [phone, setPhone] = useState(membre?.phone || '');
+  const [parentName, setParentName] = useState(membre?.parentName || '');
+  const [parentPhone, setParentPhone] = useState(membre?.parentPhone || '');
+  const [parentEmail, setParentEmail] = useState(membre?.parentEmail || '');
   const [dob, setDob] = useState(membre?.dateOfBirth ? membre.dateOfBirth.split('T')[0] : '');
   const [poids, setPoids] = useState<number | ''>(membre?.poids !== undefined && membre?.poids !== null ? membre.poids : '');
   const [groupe, setGroupe] = useState(membre?.sections?.[0]?.section || '');
@@ -87,18 +84,12 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
   // Section B
   const [dateInscription, setDateInscription] = useState(
-    membre?.dateInscription ? membre.dateInscription.split('T')[0] : new Date().toISOString().split('T')[0]
+    membre?.dateInscription ? membre.dateInscription.split('T')[0] : todayLocalISO()
   );
-  const [plan, setPlan] = useState<'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL'>(membre?.plan || 'TRIMESTRIEL');
-  const [montantCustom, setMontantCustom] = useState<number | ''>(
-    membre?.plan === 'MENSUEL' ? (membre.prixBase || '') : ''
+  // Seules deux formules existent (le forfait mensuel a été retiré).
+  const [plan, setPlan] = useState<'TRIMESTRIEL' | 'ANNUEL'>(
+    membre?.plan === 'ANNUEL' ? 'ANNUEL' : 'TRIMESTRIEL'
   );
-
-  useEffect(() => {
-    if (plan !== 'MENSUEL') {
-      setMontantCustom('');
-    }
-  }, [plan]);
 
   const [rabaisFamille, setRabaisFamille] = useState(membre?.rabaisFamille || false);
   const [membreFamilleId, setMembreFamilleId] = useState(membre?.membreFamilleId || '');
@@ -106,13 +97,11 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   const [raisonRabaisCustom, setRaisonRabaisCustom] = useState(membre?.raisonRabaisCustom || '');
 
   // Section C
+  // En édition d'un membre qui a déjà des versements, on reste en mode « custom » :
+  // choisir 1/2/3 régénère l'échéancier À NEUF (datePaiement remis à null), ce qui
+  // effacerait l'historique des paiements enregistrés.
   const [modeVersement, setModeVersement] = useState<'1' | '2' | '3' | 'custom'>(
-    membre?.versements && membre.versements.length > 0
-      ? (membre.versements.length <= 3 && !membre.versements.some((v: any, i: number) => {
-          // vérifier si les montants sont inégaux ou non standards
-          return false; // par défaut garder custom s'il y a des versements ou essayer de détecter
-        }) ? `${membre.versements.length}` as any : 'custom')
-      : '3'
+    membre?.versements && membre.versements.length > 0 ? 'custom' : '3'
   );
   const [versements, setVersements] = useState<any[]>(() => {
     if (membre?.versements && membre.versements.length > 0) {
@@ -146,10 +135,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
   }, [dob]);
 
   // Prix de base
-  const prixBase = useMemo(() => {
-    if (plan === 'MENSUEL') return typeof montantCustom === 'number' ? montantCustom : 0;
-    return TARIFS[plan]?.base ?? 0;
-  }, [plan, montantCustom]);
+  const prixBase = useMemo(() => TARIFS[plan]?.base ?? 0, [plan]);
 
   // Montant final calculé en temps réel
   const montantFinalCalculated = useMemo(() => {
@@ -206,6 +192,25 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
     return m ? `${m.firstName} ${m.lastName}` : '';
   }, [referePar, membresList]);
 
+  // Pré-remplir les champs de recherche avec le parrain/membre lié existant
+  // (mode édition), une fois la liste des membres chargée.
+  useEffect(() => {
+    if (membreFamilleId && !searchFamille && selectedFamilleLabel) setSearchFamille(selectedFamilleLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFamilleLabel]);
+  useEffect(() => {
+    if (referePar && !searchReferent && selectedReferentLabel) setSearchReferent(selectedReferentLabel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReferentLabel]);
+
+
+  // Le trimestriel (250 $) se paie en UNE fois : pas de fractionnement 2/3.
+  useEffect(() => {
+    if (plan === 'TRIMESTRIEL' && (modeVersement === '2' || modeVersement === '3')) {
+      setModeVersement('1');
+    }
+  }, [plan, modeVersement]);
+
   // --- MISE À JOUR DE L'ÉCHÉANCIER AUTOMATIQUE ---
   useEffect(() => {
     if (modeVersement !== 'custom') {
@@ -216,18 +221,15 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       const roundedVersements = [];
 
       for (let i = 1; i <= parts; i++) {
-        const d = new Date(dateInscription);
-        d.setMonth(d.getMonth() + (i - 1));
-        
         // Ajuster le dernier versement pour pallier les arrondis
-        const montantStr = i === parts 
+        const montantStr = i === parts
           ? (montantFinalCalculated - (baseAmount * (parts - 1))).toFixed(2)
           : baseAmount.toFixed(2);
 
         roundedVersements.push({
           numeroVersement: i,
           montant: Number(montantStr),
-          datePrevue: d.toISOString().split('T')[0],
+          datePrevue: ajouterMoisISO(dateInscription, i - 1),
           datePaiement: null,
           methodePaiement: null,
           note: '',
@@ -239,15 +241,13 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
   const addCustomVersement = () => {
     const nextNum = versements.length + 1;
-    const d = new Date(dateInscription);
-    d.setMonth(d.getMonth() + (nextNum - 1));
 
     setVersements([
       ...versements,
       {
         numeroVersement: nextNum,
         montant: 0,
-        datePrevue: d.toISOString().split('T')[0],
+        datePrevue: ajouterMoisISO(dateInscription, nextNum - 1),
         datePaiement: null,
         methodePaiement: null,
         note: '',
@@ -282,7 +282,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       setErrorMessage("");
     }
     if (currentStep === 3) {
-      if (!areVersementsValid) {
+      // Un membre INACTIF ou EN ATTENTE n'a pas à avoir un échéancier équilibré
+      // (ex. départ en cours d'année : on ne va pas exiger un paiement futur).
+      if (status === 'ACTIF' && !areVersementsValid) {
         setErrorMessage("Le total des versements doit être exactement égal au montant final.");
         return;
       }
@@ -307,7 +309,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
       return;
     }
 
-    if (!areVersementsValid) {
+    if (status === 'ACTIF' && !areVersementsValid) {
       setErrorMessage(`La somme des versements (${totalVersements.toFixed(2)} $) ne correspond pas au montant calculé (${montantFinalCalculated.toFixed(2)} $).`);
       setCurrentStep(3);
       return;
@@ -321,6 +323,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         lastName,
         email: email || null,
         phone: phone || null,
+        parentName: parentName || null,
+        parentPhone: parentPhone || null,
+        parentEmail: parentEmail || null,
         dob: dob || null,
         poids: poids !== '' ? Number(poids) : null,
         sections: [{ section: groupe, belt: belt || "Blanche" }],
@@ -338,6 +343,9 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         referePar: referePar || null,
         rabaisReferentPct: rabaisReferentPct !== '' ? Number(rabaisReferentPct) : null,
         versements: versements.map(v => ({
+          // L'id (présent en modification) permet au backend de conserver
+          // l'historique du versement : reçus émis, exonérations, rappels envoyés.
+          ...(v.id ? { id: v.id } : {}),
           numeroVersement: v.numeroVersement,
           montant: Number(v.montant),
           datePrevue: v.datePrevue,
@@ -396,7 +404,18 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-6">
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          // Formulaire multi-étapes : la touche Entrée dans un champ ne doit
+          // JAMAIS soumettre (à l'étape 4, elle enregistrait la fiche pendant
+          // la saisie du parrain).
+          if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+            e.preventDefault();
+          }
+        }}
+        className="p-5 space-y-6"
+      >
         {errorMessage && (
           <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded flex items-start gap-2 text-red-700 text-sm">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -440,6 +459,38 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 onChange={e => setPhone(e.target.value)}
                 placeholder="Ex. 514-123-4567"
               />
+            </div>
+
+            {/* Parent / tuteur : c'est LE destinataire des rappels de paiement,
+                reçus et renouvellements pour les mineurs. */}
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-3">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Parent / tuteur (pour les mineurs)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Nom du parent"
+                  value={parentName}
+                  onChange={e => setParentName(e.target.value)}
+                  placeholder="Ex. Marie Dupont"
+                />
+                <Input
+                  label="Téléphone du parent"
+                  value={parentPhone}
+                  onChange={e => setParentPhone(e.target.value)}
+                  placeholder="Ex. 514-123-4567"
+                />
+              </div>
+              <div>
+                <Input
+                  label="Courriel du parent (rappels et reçus — ';' pour plusieurs)"
+                  value={parentEmail}
+                  onChange={e => setParentEmail(e.target.value)}
+                  placeholder="Ex. parent1@test.com; parent2@test.com"
+                />
+                <p className="text-xs text-cshp-gray mt-1">
+                  Les rappels de paiement, reçus et avis de renouvellement sont envoyés à cette
+                  adresse en priorité (sinon au courriel de l'athlète).
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -556,8 +607,8 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
             <div>
               <label className="block text-sm font-medium text-cshp-black mb-2">Choix du plan d'abonnement</label>
-              <div className="grid grid-cols-3 gap-3">
-                {(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL'] as const).map(p => (
+              <div className="grid grid-cols-2 gap-3">
+                {(['TRIMESTRIEL', 'ANNUEL'] as const).map(p => (
                   <button
                     key={p}
                     type="button"
@@ -576,17 +627,6 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                 ))}
               </div>
             </div>
-
-            {plan === 'MENSUEL' && (
-              <Input
-                label="Montant personnalisé ($) *"
-                type="number"
-                value={montantCustom}
-                onChange={e => setMontantCustom(e.target.value === '' ? '' : Number(e.target.value))}
-                placeholder="Ex. 120"
-                required
-              />
-            )}
 
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4">
               <div className="flex items-start gap-3">
@@ -618,7 +658,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                       type="text"
                       className="w-full pl-9 pr-3 min-h-[40px] border border-gray-300 bg-white rounded-lg text-sm"
                       placeholder="Rechercher par prénom ou nom de famille..."
-                      value={searchFamille || selectedFamilleLabel}
+                      value={searchFamille}
                       onFocus={() => setShowFamilleDropdown(true)}
                       onBlur={() => setTimeout(() => setShowFamilleDropdown(false), 200)}
                       onChange={e => {
@@ -710,13 +750,19 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
 
             <div>
               <label className="block text-sm font-medium text-cshp-black mb-2">Option de fractionnement</label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { value: '1', label: '1 fois' },
-                  { value: '2', label: '2 fois' },
-                  { value: '3', label: '3 fois' },
-                  { value: 'custom', label: 'Perso.' },
-                ].map(opt => (
+              <div className={`grid ${plan === 'TRIMESTRIEL' ? 'grid-cols-2' : 'grid-cols-4'} gap-2`}>
+                {(plan === 'TRIMESTRIEL'
+                  ? [
+                      { value: '1', label: '1 fois' },
+                      { value: 'custom', label: 'Perso.' },
+                    ]
+                  : [
+                      { value: '1', label: '1 fois' },
+                      { value: '2', label: '2 fois' },
+                      { value: '3', label: '3 fois' },
+                      { value: 'custom', label: 'Perso.' },
+                    ]
+                ).map(opt => (
                   <button
                     key={opt.value}
                     type="button"
@@ -813,7 +859,7 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
                     type="text"
                     className="w-full pl-9 pr-3 min-h-[44px] border border-gray-300 bg-white rounded-lg text-sm"
                     placeholder="Entrez le prénom ou nom du membre parrain..."
-                    value={searchReferent || selectedReferentLabel}
+                    value={searchReferent}
                     onFocus={() => setShowReferentDropdown(true)}
                     onBlur={() => setTimeout(() => setShowReferentDropdown(false), 200)}
                     onChange={e => {

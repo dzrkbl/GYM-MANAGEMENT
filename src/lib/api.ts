@@ -15,17 +15,28 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     headers,
   });
 
-  const data = await response.json();
-
+  // Le 401 doit être signalé AVANT le parsing : une réponse non-JSON ne doit
+  // pas empêcher la déconnexion automatique.
   if (response.status === 401) {
     window.dispatchEvent(new CustomEvent('cshp-unauthorized'));
   }
 
-  if (!response.ok) {
-    throw new Error(data.error || 'Une erreur est survenue');
+  // Réponse pas forcément JSON (page d'erreur du proxy, corps vide…) : on
+  // parse prudemment pour renvoyer un message lisible plutôt que
+  // « Unexpected token… ».
+  let data: any = null;
+  try {
+    const texte = await response.text();
+    data = texte ? JSON.parse(texte) : null;
+  } catch {
+    data = null;
   }
 
-  return data.data;
+  if (!response.ok) {
+    throw new Error(data?.error || `Erreur serveur (${response.status})`);
+  }
+
+  return data?.data as T;
 }
 
 export async function createMembre(data: any): Promise<any> {

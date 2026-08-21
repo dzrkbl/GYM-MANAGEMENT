@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
@@ -10,8 +10,22 @@ import { Spinner } from '../components/ui/Spinner';
 import { Modal } from '../components/ui/Modal';
 import { MembreForm } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
-import { Search, Plus, Eye, Calendar, DollarSign, UserCheck } from 'lucide-react';
+import { Search, Plus, Eye, Calendar, DollarSign, UserCheck, FileText } from 'lucide-react';
 import { formatDateLocal } from '../lib/format';
+import { etatPaiement } from '../lib/echeances';
+
+// Déclenche le téléchargement d'un PDF renvoyé en base64 par l'API.
+function telechargerPdfBase64(base64: string, filename: string) {
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function Membres() {
   const { user } = useAuth();
@@ -28,8 +42,53 @@ export function Membres() {
     user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS'
   );
   const [statusFilter, setStatusFilter] = useState('ACTIF');
+
+  // Filtre de suivi via l'URL : ?suivi=renouvellement (carte « Renouvellements
+  // échus » du tableau de bord) montre uniquement les contrats terminés.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const suiviFilter = searchParams.get('suivi'); // 'renouvellement' | null
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // --- Mode « Factures » : cocher des membres puis générer une facture par
+  // famille avec les montants versés durant l'année civile choisie. ---
+  const anneeCourante = new Date().getFullYear();
+  const [modeFacture, setModeFacture] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [anneeFacture, setAnneeFacture] = useState(anneeCourante);
+  const [isGeneratingFactures, setIsGeneratingFactures] = useState(false);
+  const [factureMsg, setFactureMsg] = useState('');
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleGenererFactures = async () => {
+    if (selectedIds.size === 0) return;
+    setIsGeneratingFactures(true);
+    setFactureMsg('');
+    try {
+      const res = await apiFetch<{ annee: number; factures: Array<{ filename: string; base64: string; membres: string[]; total: number }> }>(
+        '/membres/factures',
+        { method: 'POST', body: JSON.stringify({ memberIds: Array.from(selectedIds), annee: anneeFacture }) }
+      );
+      res.factures.forEach((f, i) => {
+        // Petit décalage entre les téléchargements pour que le navigateur les accepte tous.
+        setTimeout(() => telechargerPdfBase64(f.base64, f.filename), i * 400);
+      });
+      setFactureMsg(`${res.factures.length} facture(s) générée(s) : ${res.factures.map(f => f.membres.join(' + ')).join(' · ')}`);
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      setFactureMsg('Erreur : ' + (err.message || 'génération impossible'));
+    } finally {
+      setIsGeneratingFactures(false);
+    }
+  };
 
   useEffect(() => {
     fetchMembers();
@@ -63,13 +122,7 @@ export function Membres() {
   }
 
   const { codes, getLabel } = useSections();
-  const SECTIONS = useMemo(() => {
-    const list = ["TOUS", ...codes];
-    if (!list.includes("MENSUEL")) {
-      list.push("MENSUEL");
-    }
-    return list;
-  }, [codes]);
+  const SECTIONS = useMemo(() => ["TOUS", ...codes], [codes]);
 
   const STATUSES = [
     { value: 'ACTIF', label: 'Actif' },
@@ -77,69 +130,45 @@ export function Membres() {
     { value: 'EN_ATTENTE', label: 'En attente' }
   ];
 
-  // Helper pour calculer le statut complet du paiement en temps réel
+  // Liste affichée : applique le filtre de suivi (renouvellements échus).
+  const membersAffiches = useMemo(() => {
+    if (suiviFilter !== 'renouvellement') return members;
+    return members.filter((m) => etatPaiement(m).type === 'RENOUVELLEMENT_DU');
+  }, [members, suiviFilter]);
+
+  // Statut de paiement en temps réel — tient compte de la fin de contrat :
+  // un échéancier soldé n'est « à jour » que tant que le contrat court.
   const getPaiementStatus = (member: any) => {
-    const versements = member.versements || [];
-    const finalAmount = member.montantFinal || 0;
-    
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    const totalPaid = versements
-      .filter((v: any) => v.datePaiement)
-      .reduce((sum: number, v: any) => sum + (v.montant || 0), 0);
-
-    const restToPay = finalAmount - totalPaid;
-    
-    if (finalAmount <= 0) {
-      return {
-        label: 'Gratuit',
-        colorClass: 'bg-gray-100 text-gray-700 border-gray-300'
-      };
+    // Un membre parti (INACTIF) n'est plus suivi : pas de faux « En retard ».
+    if (member.status === 'INACTIF') {
+      return { label: '— (parti)', colorClass: 'bg-gray-50 text-gray-400 border-gray-200' };
     }
-
-    if (restToPay <= 0) {
-      return {
-        label: '✅ À jour (Soldé)',
-        colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      };
+    const etat = etatPaiement(member);
+    switch (etat.type) {
+      case 'GRATUIT':
+        return { label: 'Gratuit', colorClass: 'bg-gray-100 text-gray-700 border-gray-300' };
+      case 'RETARD':
+        return { label: '⚠️ En retard', colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold' };
+      case 'RENOUVELLEMENT_DU':
+        return {
+          label: `🔄 Renouvellement dû depuis le ${formatDateLocal(etat.date, { day: 'numeric', month: 'short' })}${etat.reste ? ` · reste ${etat.reste} $` : ''}`,
+          colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold',
+        };
+      case 'ECHEANCE_PROCHE':
+        return { label: `🔵 Échéance dans ${etat.jours} j.`, colorClass: 'bg-blue-50 text-blue-700 border-blue-200' };
+      case 'RESTE_SANS_ECHEANCE':
+        return {
+          label: `💰 Reste ${etat.reste} $ — aucune échéance planifiée`,
+          colorClass: 'bg-amber-50 text-amber-700 border-amber-200 font-bold',
+        };
+      case 'RENOUVELLEMENT_PROCHE':
+        return {
+          label: `🔄 Renouvellement le ${formatDateLocal(etat.date, { day: 'numeric', month: 'short' })}`,
+          colorClass: 'bg-amber-50 text-amber-700 border-amber-200',
+        };
+      default:
+        return { label: '✅ À jour (Soldé)', colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     }
-
-    // Vérifier si un versement passé n'est pas payé
-    const existsLate = versements.some((v: any) => {
-      if (v.datePaiement) return false;
-      const prevue = new Date(v.datePrevue);
-      prevue.setHours(0,0,0,0);
-      return prevue < today;
-    });
-
-    if (existsLate) {
-      return {
-        label: '⚠️ En retard',
-        colorClass: 'bg-red-50 text-red-700 border-red-200 font-bold'
-      };
-    }
-
-    // Trouver le prochain versement
-    const nextVersement = versements
-      .filter((v: any) => !v.datePaiement)
-      .sort((a: any, b: any) => new Date(a.datePrevue).getTime() - new Date(b.datePrevue).getTime())[0];
-
-    if (nextVersement) {
-      const prevue = new Date(nextVersement.datePrevue);
-      prevue.setHours(0,0,0,0);
-      const diffTime = prevue.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return {
-        label: `🔵 Échéance dans ${diffDays} j.`,
-        colorClass: 'bg-blue-50 text-blue-700 border-blue-200'
-      };
-    }
-
-    return {
-      label: '✅ À jour',
-      colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    };
   };
 
   return (
@@ -152,10 +181,55 @@ export function Membres() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Gérez vos athlètes, plans d'abonnements, cotisations et échéanciers.</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto bg-cshp-red hover:bg-red-700 text-white font-bold h-11 shadow-sm">
-          <Plus size={20} className="mr-2" /> Ajouter un membre
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {user?.role === 'ADMIN' && (
+            <Button
+              variant={modeFacture ? 'primary' : 'outline'}
+              onClick={() => { setModeFacture(!modeFacture); setSelectedIds(new Set()); setFactureMsg(''); }}
+              className="w-full sm:w-auto h-11 font-bold"
+            >
+              <FileText size={18} className="mr-2" /> {modeFacture ? 'Quitter le mode factures' : 'Factures'}
+            </Button>
+          )}
+          <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto bg-cshp-red hover:bg-red-700 text-white font-bold h-11 shadow-sm">
+            <Plus size={20} className="mr-2" /> Ajouter un membre
+          </Button>
+        </div>
       </div>
+
+      {/* Barre d'action du mode factures */}
+      {modeFacture && (
+        <div className="sticky top-2 z-30 bg-slate-900 text-white p-3 sm:p-4 rounded-xl shadow-lg flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div className="text-sm">
+            <span className="font-bold">{selectedIds.size}</span> membre(s) coché(s) —
+            une facture par famille, avec les montants versés durant l'année choisie.
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <select
+              value={anneeFacture}
+              onChange={(e) => setAnneeFacture(Number(e.target.value))}
+              className="min-h-[40px] rounded-lg px-2 text-cshp-black text-sm font-semibold bg-white"
+            >
+              {[anneeCourante, anneeCourante - 1, anneeCourante - 2].map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+            <Button
+              onClick={handleGenererFactures}
+              isLoading={isGeneratingFactures}
+              disabled={selectedIds.size === 0}
+              className="bg-cshp-red hover:bg-red-700 text-white font-bold h-10"
+            >
+              Générer les factures
+            </Button>
+          </div>
+        </div>
+      )}
+      {factureMsg && (
+        <div className={`p-3 rounded-lg text-sm font-medium ${factureMsg.startsWith('Erreur') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+          {factureMsg}
+        </div>
+      )}
 
       {/* RECHERCHE ET FILTRES */}
       <Card className="p-4 shadow-sm border border-gray-100 bg-white">
@@ -215,16 +289,38 @@ export function Membres() {
         </div>
       </Card>
 
+      {/* Filtre « renouvellements échus » actif (depuis le tableau de bord) */}
+      {suiviFilter === 'renouvellement' && (
+        <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold flex items-center justify-between">
+          <span>🔄 Filtre actif : renouvellements échus seulement ({membersAffiches.length} membre(s))</span>
+          <button
+            onClick={() => setSearchParams({})}
+            className="underline text-xs hover:text-amber-950"
+          >
+            ✕ Retirer le filtre
+          </button>
+        </div>
+      )}
+
       {/* TABLEAU / VUE LISTE ADMINISTRATIVE */}
       {error ? (
-        <div className="p-4 bg-red-50-border border-red-200 text-red-600 rounded-lg font-medium shadow-sm">{error}</div>
+        <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-lg font-medium shadow-sm">{error}</div>
       ) : isLoading ? (
         <div className="py-12 flex justify-center"><Spinner /></div>
-      ) : members.length === 0 ? (
+      ) : membersAffiches.length === 0 ? (
         <Card className="text-center py-16 text-gray-500 border border-gray-100 shadow-sm">
           <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-700 font-medium">Aucun athlète dans cette sélection.</p>
-          <p className="text-xs text-gray-400 mt-1">Créez un profil pour commencer à faire le suivi.</p>
+          {user && user.role !== 'ADMIN' && !user.section ? (
+            <>
+              <p className="text-gray-700 font-medium">Aucune section n'est attitrée à votre compte.</p>
+              <p className="text-xs text-gray-400 mt-1">Demandez à un administrateur de vous assigner vos groupes (page Coachs) pour voir les membres de votre discipline.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-700 font-medium">Aucun athlète dans cette sélection.</p>
+              <p className="text-xs text-gray-400 mt-1">Créez un profil pour commencer à faire le suivi.</p>
+            </>
+          )}
         </Card>
       ) : (
         <Card className="shadow-sm border border-gray-100 overflow-hidden bg-white">
@@ -232,6 +328,7 @@ export function Membres() {
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">
+                  {modeFacture && <th className="py-3 px-4 w-10">✔</th>}
                   <th className="py-3 px-4 w-16">#</th>
                   <th className="py-3 px-4">Nom</th>
                   <th className="py-3 px-4">Prénom</th>
@@ -246,7 +343,7 @@ export function Membres() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {members.map((member, index) => {
+                {membersAffiches.map((member, index) => {
                   const paiement = getPaiementStatus(member);
                   const totalPaid = (member.versements || [])
                     .filter((v: any) => v.datePaiement)
@@ -254,11 +351,21 @@ export function Membres() {
                   const restToPay = (member.montantFinal || 0) - totalPaid;
 
                   return (
-                    <tr 
-                      key={member.id} 
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/membres/${member.id}`)}
+                    <tr
+                      key={member.id}
+                      className={`hover:bg-slate-50 transition-colors cursor-pointer ${modeFacture && selectedIds.has(member.id) ? 'bg-red-50/50' : ''}`}
+                      onClick={() => (modeFacture ? toggleSelected(member.id) : navigate(`/membres/${member.id}`))}
                     >
+                      {modeFacture && (
+                        <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(member.id)}
+                            onChange={() => toggleSelected(member.id)}
+                            className="w-5 h-5 rounded text-cshp-red focus:ring-cshp-red"
+                          />
+                        </td>
+                      )}
                       <td className="py-3.5 px-4 font-mono text-gray-500 font-semibold">
                         {String(index + 1).padStart(3, '0')}
                       </td>

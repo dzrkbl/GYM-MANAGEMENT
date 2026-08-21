@@ -18,6 +18,12 @@ const createSchema = z.object({
   sport: z.string().optional().nullable(),
   requestType: z.enum(['ESSAI', 'RAPPEL', 'TARIFS', 'AUTRE']).optional().default('ESSAI'),
   website: z.string().optional().nullable(), // honeypot anti-spam
+  // Attribution marketing (landing pages, pubs Meta) — bornée pour éviter les abus.
+  source: z.string().max(120).optional().nullable(),
+  utmSource: z.string().max(120).optional().nullable(),
+  utmCampaign: z.string().max(120).optional().nullable(),
+  utmContent: z.string().max(120).optional().nullable(),
+  note: z.string().max(1000).optional().nullable(),
 });
 
 // POST /api/leads — création publique (formulaire « essai/rappel » du site)
@@ -37,6 +43,11 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         sport: data.sport || 'AUTRE',
         requestType: data.requestType,
         status: 'NEW',
+        source: data.source || null,
+        utmSource: data.utmSource || null,
+        utmCampaign: data.utmCampaign || null,
+        utmContent: data.utmContent || null,
+        note: data.note || null,
       },
     });
     return sendSuccess(res, { ok: true, id: lead.id }, 201);
@@ -87,6 +98,44 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
     const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
     if (!lead) return sendError(res, 'Prospect introuvable', 404);
 
+    // Si un membre du même nom existe déjà (ex. fiche d'inscription en ligne
+    // déjà soumise), on ne crée PAS de doublon : on marque simplement converti.
+    // MAIS un simple homonyme (même nom, coordonnées différentes) est une autre
+    // personne : avant, son inscription était silencieusement fusionnée avec le
+    // dossier de l'autre — perdue. On ne fusionne que si les coordonnées
+    // concordent (ou si le prospect n'a aucune coordonnée à comparer).
+    const memesNoms = await prisma.member.findMany({
+      where: {
+        firstName: { equals: lead.firstName, mode: 'insensitive' },
+        lastName: { equals: lead.lastName, mode: 'insensitive' },
+      },
+    });
+    const chiffres = (t?: string | null) => (t || '').replace(/\D/g, '');
+    const emailLead = (lead.email || '').toLowerCase().trim();
+    const telLead = chiffres(lead.phone);
+    const coordonneesConcordent = (m: any) => {
+      const emailsMembre = [m.email, m.parentEmail]
+        .filter(Boolean)
+        .flatMap((e: string) => e.split(/[;,]/))
+        .map((e: string) => e.toLowerCase().trim());
+      if (emailLead && emailsMembre.includes(emailLead)) return true;
+      if (telLead.length >= 7 && [chiffres(m.phone), chiffres(m.parentPhone)].includes(telLead)) return true;
+      return false;
+    };
+    const sansCoordonnees = !emailLead && telLead.length < 7;
+    const deja = memesNoms.find((m) => coordonneesConcordent(m)) || (sansCoordonnees ? memesNoms[0] : undefined);
+
+    if (deja) {
+      await prisma.lead.update({ where: { id: lead.id }, data: { status: 'CONVERTED' } });
+      logAudit(req, { action: 'UPDATE', entity: 'Lead', entityId: lead.id, description: `Prospect ${lead.firstName} ${lead.lastName} lié au dossier membre existant` });
+      return sendSuccess(res, { membreId: deja.id, dejaExistant: true });
+    }
+    // Homonyme détecté mais coordonnées différentes : on crée un nouveau
+    // dossier et on le signale dans les notes pour lever toute ambiguïté.
+    const noteHomonyme = memesNoms.length > 0
+      ? ` ⚠️ Attention : un autre membre porte le même nom (coordonnées différentes).`
+      : '';
+
     const membre = await prisma.member.create({
       data: {
         firstName: lead.firstName,
@@ -95,7 +144,12 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
         phone: lead.phone,
         email: lead.email,
         status: 'EN_ATTENTE',
-        notes: `Prospect converti — intérêt initial : ${lead.sport}`,
+        notes: [
+          `Prospect converti — intérêt initial : ${lead.sport}.${noteHomonyme}`,
+          lead.source ? `Source : ${lead.source}` : null,
+          lead.utmContent ? `Pub : ${lead.utmContent}` : null,
+          lead.note ? `Note : ${lead.note}` : null,
+        ].filter(Boolean).join('\n'),
       },
     });
 

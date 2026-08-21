@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
-import { formatMontant, formatDate, formatDateLocal } from '../lib/format';
+import { formatMontant, formatDate, formatDateLocal, todayLocalISO } from '../lib/format';
 import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { Navigate } from 'react-router-dom';
@@ -29,20 +29,27 @@ export function Paiements() {
 
   const now = new Date();
   const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  
-  const prevMonthDate = new Date();
-  prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-  const prevMonthValue = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-  
+
+  // Mois précédent par arithmétique de chaîne : `setMonth(-1)` un 29/30/31
+  // débordait et renvoyait le mois COURANT (les deux boutons devenaient identiques).
+  const [cy, cm] = currentMonthValue.split('-').map(Number);
+  const prevMonthValue = cm === 1 ? `${cy - 1}-12` : `${cy}-${String(cm - 1).padStart(2, '0')}`;
+
   const PERIODS = [
     { value: currentMonthValue, label: 'Ce mois' },
     { value: prevMonthValue, label: 'Mois précédent' },
     { value: 'ALL', label: 'Tout' }
   ];
 
+  // Filtre initial via l'URL (?statut=EN_RETARD depuis la carte « Retards » du tableau de bord).
+  const [searchParams] = useSearchParams();
+  const statutInitial = searchParams.get('statut');
+
   const [periodFilter, setPeriodFilter] = useState(currentMonthValue);
   const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
-  const [statusFilter, setStatusFilter] = useState('TOUS');
+  const [statusFilter, setStatusFilter] = useState(
+    statutInitial && ['PAYÉ', 'EN_RETARD', 'EN_ATTENTE'].includes(statutInitial) ? statutInitial : 'TOUS'
+  );
   
   const [payments, setPayments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,7 +60,7 @@ export function Paiements() {
 
   // Modal State
   const [payModal, setPayModal] = useState<{ open: boolean; versementId: string | null; amount: number }>({ open: false, versementId: null, amount: 0 });
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]); // aujourd'hui par défaut
+  const [payDate, setPayDate] = useState(todayLocalISO()); // aujourd'hui par défaut
   const [payMethod, setPayMethod] = useState('COMPTANT');
 
   useEffect(() => {
@@ -81,7 +88,7 @@ export function Paiements() {
 
   const openPayModal = (id: string, amount: number) => {
     setPayModal({ open: true, versementId: id, amount });
-    setPayDate(new Date().toISOString().split('T')[0]);
+    setPayDate(todayLocalISO());
     setPayMethod('COMPTANT');
   };
 
@@ -103,8 +110,11 @@ export function Paiements() {
     }));
 
     try {
-      await apiFetch(`/paiements/${versementId}/payer`, {
-        method: 'PATCH',
+      // Même endpoint que la fiche membre : accessible aux gestionnaires de
+      // section (l'ancien /paiements/:id/payer était réservé ADMIN, ce qui
+      // faisait échouer le bouton pour eux après une mise à jour optimiste).
+      await apiFetch(`/versements/${versementId}/payer`, {
+        method: 'PUT',
         body: JSON.stringify({
           datePaiement: payDate,
           methodePaiement: payMethod
@@ -119,25 +129,34 @@ export function Paiements() {
     }
   };
 
-  // derived state for banner
+  // Résumé de la sélection :
+  //  - Encaissé = argent réellement REÇU pendant le mois consulté (datePaiement),
+  //    pas les échéances du mois (l'ancien calcul confondait « dû » et « reçu »).
+  //  - En retard = tous les impayés échus visibles (la vue « Ce mois » inclut
+  //    ceux des mois précédents, envoyés par le serveur).
   const summary = useMemo(() => {
+    const moisSel = periodFilter !== 'ALL' ? periodFilter : null;
     let encaissé = 0;
     let attente = 0;
     let retard = 0;
 
     payments.forEach(p => {
-      if (p.status === 'PAYÉ') encaissé += p.amount;
+      if (p.status === 'PAYÉ') {
+        if (!moisSel || String(p.paidDate || '').slice(0, 7) === moisSel) encaissé += p.amount;
+      }
       if (p.status === 'EN_ATTENTE') attente += p.amount;
       if (p.status === 'EN_RETARD') retard += p.amount;
     });
 
     return { encaissé, attente, retard };
-  }, [payments]);
+  }, [payments, periodFilter]);
 
-  // Sorting: 1. EN_RETARD, 2. EN_ATTENTE, 3. PAYÉ
+  // Tri : 1. EN_RETARD (le plus ancien en premier — le plus urgent),
+  //       2. EN_ATTENTE (prochaine échéance en premier),
+  //       3. PAYÉ (le plus récent en premier).
   const sortedPayments = useMemo(() => {
     const list = [...payments];
-    
+
     const getStatusWeight = (status: string) => {
       if (status === 'EN_RETARD') return 1;
       if (status === 'EN_ATTENTE') return 2;
@@ -148,10 +167,13 @@ export function Paiements() {
       const wA = getStatusWeight(a.status);
       const wB = getStatusWeight(b.status);
       if (wA !== wB) return wA - wB; // Sort by status group
-      
-      return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(); // Then date desc
+
+      if (a.status === 'PAYÉ') {
+        return new Date(b.paidDate || b.dueDate).getTime() - new Date(a.paidDate || a.dueDate).getTime();
+      }
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     });
-    
+
     return list;
   }, [payments]);
 
@@ -223,15 +245,15 @@ export function Paiements() {
           <span className="text-xs font-bold text-cshp-gray uppercase tracking-wider mb-1">Résumé de la sélection</span>
           <div className="flex gap-4 md:gap-8 overflow-x-auto text-sm md:text-base">
             <div>
-              <span className="text-cshp-gray mr-2">Encaissé :</span> 
+              <span className="text-cshp-gray mr-2">{periodFilter === 'ALL' ? 'Encaissé (tout) :' : 'Reçu ce mois :'}</span>
               <span className="font-bold text-green-600">{formatMontant(summary.encaissé)}</span>
             </div>
             <div>
-              <span className="text-cshp-gray mr-2">En attente :</span> 
+              <span className="text-cshp-gray mr-2">À venir :</span>
               <span className="font-bold text-yellow-600">{formatMontant(summary.attente)}</span>
             </div>
             <div>
-              <span className="text-cshp-gray mr-2">En retard :</span> 
+              <span className="text-cshp-gray mr-2">{periodFilter === currentMonthValue || periodFilter === 'ALL' ? 'En retard (total) :' : 'En retard :'}</span>
               <span className="font-bold text-cshp-red">{formatMontant(summary.retard)} 🔴</span>
             </div>
           </div>
@@ -278,7 +300,7 @@ export function Paiements() {
                     {p.member?.lastName} {p.member?.firstName}
                   </h3>
                   <div className="text-sm text-cshp-gray mt-1">
-                    {getLabel(p.section || '')} · {p.subscription?.type === 'MENSUEL' ? 'Mensuel' : 'Saisonnier'}
+                    {getLabel(p.section || '')}
                   </div>
                   <div className="text-sm text-cshp-black mt-2 md:mt-1 flex items-center gap-2">
                     <span className="font-bold text-base">{formatMontant(p.amount)}</span>

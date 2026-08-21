@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
 import { z } from 'zod';
 
 const router = Router();
@@ -19,13 +20,24 @@ const coachSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
   phone: z.string().optional().nullable(),
-  role: z.enum(['COACH', 'SECTION_MANAGER']),
+  role: z.enum(['COACH', 'SECTION_MANAGER', 'ADMIN']),
   section: z.string().optional().nullable(),
   remuneration: z.number().optional().default(0),
   actif: z.boolean().optional().default(true),
   dateDebut: z.string().optional(),
   note: z.string().optional().nullable()
 });
+
+// Garde-fou : refuse toute modification qui laisserait le centre sans
+// administrateur actif (rétrogradation ou désactivation du dernier ADMIN).
+async function seraitDernierAdmin(id: string, changes: { role?: string; actif?: boolean }): Promise<boolean> {
+  const cible = await prisma.user.findUnique({ where: { id } });
+  if (!cible || cible.role !== 'ADMIN' || !cible.actif) return false;
+  const perdAdmin = (changes.role !== undefined && changes.role !== 'ADMIN') || changes.actif === false;
+  if (!perdAdmin) return false;
+  const autresAdmins = await prisma.user.count({ where: { role: 'ADMIN', actif: true, id: { not: id } } });
+  return autresAdmins === 0;
+}
 
 // POST /api/coachs
 router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
@@ -53,6 +65,13 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         dateDebut: data.dateDebut ? new Date(data.dateDebut) : new Date(),
         note: data.note
       }
+    });
+
+    logAudit(req, {
+      action: 'CREATE',
+      entity: 'User',
+      entityId: coach.id,
+      description: `${coach.firstName} ${coach.lastName} (${coach.email}) — rôle ${coach.role}`,
     });
 
     const { passwordHash: _, ...coachWithoutPass } = coach;
@@ -108,6 +127,10 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
     const updateSchema = coachSchema.partial();
     const data = updateSchema.parse(req.body);
 
+    if (await seraitDernierAdmin(id, data)) {
+      return sendError(res, "Impossible : ce compte est le dernier administrateur actif du centre.", 400);
+    }
+
     let updateData: any = { ...data };
     if (data.dateDebut) updateData.dateDebut = new Date(data.dateDebut);
     // Ne jamais stocker le mot de passe en clair : on le hache et on retire le champ brut.
@@ -120,7 +143,14 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
       where: { id },
       data: updateData
     });
-    
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: coach.id,
+      description: `${coach.firstName} ${coach.lastName} (${coach.email})${data.password ? ' — mot de passe changé' : ''}${data.role ? ` — rôle ${coach.role}` : ''}`,
+    });
+
     const { passwordHash, ...rest } = coach;
     return sendSuccess(res, rest);
   } catch (error: any) {
@@ -135,11 +165,22 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
 router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const { id } = req.params;
-    
+
+    if (await seraitDernierAdmin(id, { actif: false })) {
+      return sendError(res, "Impossible : ce compte est le dernier administrateur actif du centre.", 400);
+    }
+
     // soft delete
-    await prisma.user.update({
+    const desactive = await prisma.user.update({
       where: { id },
       data: { actif: false }
+    });
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: id,
+      description: `Compte désactivé : ${desactive.firstName} ${desactive.lastName} (${desactive.email})`,
     });
 
     return sendSuccess(res, { message: 'Coach désactivé' });

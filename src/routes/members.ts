@@ -3,11 +3,15 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { calculerMontantFinal, calculerFinContrat, TARIFS } from '../lib/tarifs';
-import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { calculerMontantFinal, calculerFinContrat, dateAMidi, ajouterMoisISO, TARIFS } from '../lib/tarifs';
+import { activerSiPremierPaiement, normalizeMethodePaiement } from '../lib/paiements';
+import { sendRecuVersementBackground } from '../lib/recus';
+import { sendEmailBackground, htmlCourriel } from '../lib/mailer';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
 import { logAudit } from '../lib/audit';
+import { porteeStaff, clauseSectionsPortee, membreDansPortee } from '../lib/portee';
+import { genererFactures } from '../lib/factures';
 
 const router = Router();
 
@@ -36,14 +40,20 @@ const memberSchema = z.object({
   ).min(1, 'Au moins une section est requise'),
   parentName: z.string().optional().nullable(),
   parentPhone: z.string().optional().nullable(),
+  // Destinataire prioritaire des rappels et reçus (plusieurs adresses possibles,
+  // séparées par « ; »).
+  parentEmail: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   currentBelt: z.string().optional().nullable(),
   status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']).default('ACTIF'),
 
   poids: z.number().optional().nullable(),
+  // Début du contrat EN COURS (renouvelé à chaque renouvellement).
   dateInscription: z.string().optional().nullable(),
+  // Première inscription au club (ancienneté) — ne bouge pas au renouvellement.
+  membreDepuis: z.string().optional().nullable(),
   finContrat: z.string().optional().nullable(),
-  plan: z.enum(['MENSUEL', 'TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
+  plan: z.enum(['TRIMESTRIEL', 'ANNUEL']).optional().nullable(),
   prixBase: z.number().optional().nullable(),
   rabaisFamille: z.boolean().optional().default(false),
   membreFamilleId: z.string().optional().nullable(),
@@ -62,20 +72,24 @@ const memberSchema = z.object({
 router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const { section, status } = req.query;
-    
-    // Logic for role-based section filtering:
-    // If user is SECTION_MANAGER, force the section filter to their section.
-    let filterSection = section as string | undefined;
-    if (req.user!.role === 'SECTION_MANAGER') {
-      filterSection = req.user!.section as string;
+
+    // Portée par discipline : un coach/responsable voit TOUS les groupes de
+    // ses sports (sections attitrées, séparées par des virgules sur le compte) ;
+    // l'admin voit tout ; un staff sans section attitrée ne voit rien.
+    const portee = await porteeStaff(req.user!);
+    const demande = section ? String(section) : '';
+    let clauseSections: any | null = null;
+    if (portee.admin) {
+      if (demande) clauseSections = { section: demande };
+    } else {
+      const demandeOk = demande && membreDansPortee([{ section: demande }], portee);
+      clauseSections = demandeOk ? { section: demande } : clauseSectionsPortee(portee);
     }
 
     const members = await prisma.member.findMany({
       where: {
         ...(status ? { status: status as string } : { status: { not: 'INACTIF' } }),
-        ...(filterSection ? {
-          sections: { some: { section: filterSection } }
-        } : {}),
+        ...(clauseSections ? { sections: { some: clauseSections } } : {}),
       },
       include: { sections: true, versements: true },
       orderBy: { lastName: 'asc' },
@@ -93,7 +107,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     const data = memberSchema.parse(req.body);
 
     let prixBase = data.prixBase;
-    let finContrat = data.finContrat ? new Date(data.finContrat) : null;
+    let finContrat = data.finContrat ? dateAMidi(data.finContrat) : null;
     let montantFinal = data.montantFinal;
 
     if (data.plan) {
@@ -116,12 +130,13 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
         data: {
           firstName: data.firstName,
           lastName: data.lastName,
-          dateOfBirth: data.dob ? new Date(data.dob) : null,
+          dateOfBirth: data.dob ? dateAMidi(data.dob) : null,
           gender: data.gender,
           phone: data.phone,
           email: data.email,
           parentName: data.parentName,
           parentPhone: data.parentPhone,
+          parentEmail: data.parentEmail,
           notes: data.notes,
           currentBelt: data.currentBelt,
           status: data.status,
@@ -131,7 +146,11 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             )
           },
           poids: data.poids,
-          dateInscription: data.dateInscription ? new Date(data.dateInscription) : null,
+          dateInscription: data.dateInscription ? dateAMidi(data.dateInscription) : null,
+          // À la création, l'ancienneté démarre avec le premier contrat.
+          signupDate: data.membreDepuis
+            ? dateAMidi(data.membreDepuis)
+            : (data.dateInscription ? dateAMidi(data.dateInscription) : undefined),
           finContrat: finContrat,
           plan: data.plan,
           prixBase: prixBase,
@@ -147,8 +166,8 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
             create: data.versements.map((v: any) => ({
               numeroVersement: v.numeroVersement,
               montant: v.montant,
-              datePrevue: new Date(v.datePrevue),
-              datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
+              datePrevue: dateAMidi(v.datePrevue),
+              datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
               methodePaiement: v.methodePaiement,
               note: v.note,
             }))
@@ -164,11 +183,11 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
     const dest = newMember.parentEmail || newMember.email;
     if (dest) {
       const karate = newMember.sections?.some((s: any) => estKarate(s.section));
-      sendEmail({
+      sendEmailBackground({
         to: dest,
         subject: 'Bienvenue au Centre Sportif de Haute-Performance',
         html: htmlCourriel(contenuBienvenue({ nom: `${newMember.firstName} ${newMember.lastName}`, karate })),
-      }).catch((e) => console.error('Erreur courriel bienvenue:', e));
+      }, `Courriel de bienvenue (${newMember.firstName} ${newMember.lastName})`);
     }
 
     logAudit(req, { action: 'CREATE', entity: 'Member', entityId: newMember.id, description: `${newMember.firstName} ${newMember.lastName}` });
@@ -182,6 +201,35 @@ router.post('/', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async 
   }
 });
 
+// POST /api/membres/factures — factures annuelles par famille.
+// Pour les membres cochés : une facture PAR FAMILLE (enfants liés, même
+// courriel ou même téléphone de parent), listant tous les montants VERSÉS
+// durant l'année civile demandée. Retourne un PDF encodé par famille.
+router.post('/factures', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const schema = z.object({
+      memberIds: z.array(z.string()).min(1, 'Sélectionnez au moins un membre'),
+      annee: z.number().int().min(2020).max(2100),
+    });
+    const { memberIds, annee } = schema.parse(req.body);
+
+    const factures = await genererFactures(memberIds, annee);
+    if (factures.length === 0) return sendError(res, 'Aucun membre trouvé pour cette sélection', 404);
+
+    logAudit(req, {
+      action: 'CREATE',
+      entity: 'Facture',
+      description: `${factures.length} facture(s) ${annee} — ${factures.map((f) => f.membres.join(' + ')).join(' | ')}`,
+    });
+
+    return sendSuccess(res, { annee, factures });
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Erreur génération factures:', error);
+    return sendError(res, 'Erreur lors de la génération des factures', 500);
+  }
+});
+
 // GET /api/membres/:id
 router.get('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
@@ -191,6 +239,12 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<an
     });
 
     if (!member) return sendError(res, 'Membre introuvable', 404);
+
+    // Portée par discipline : un coach/responsable n'ouvre que les dossiers de ses sports.
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && !membreDansPortee(member.sections, portee)) {
+      return sendError(res, "Ce membre n'appartient pas à votre discipline", 403);
+    }
 
     return sendSuccess(res, member);
   } catch (error) {
@@ -244,20 +298,26 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (data.dob) {
-      updateData.dateOfBirth = new Date(data.dob);
+      updateData.dateOfBirth = dateAMidi(data.dob);
     } else if (data.dob === null) {
       updateData.dateOfBirth = null;
     }
     delete updateData.dob;
 
+    // « Membre depuis » (ancienneté) : modifiable explicitement, jamais recalculée.
+    if (data.membreDepuis) {
+      updateData.signupDate = dateAMidi(data.membreDepuis);
+    }
+    delete updateData.membreDepuis;
+
     if (data.dateInscription) {
-      updateData.dateInscription = new Date(data.dateInscription);
+      updateData.dateInscription = dateAMidi(data.dateInscription);
     } else if (data.dateInscription === null) {
       updateData.dateInscription = null;
     }
 
     if (data.finContrat) {
-      updateData.finContrat = new Date(data.finContrat);
+      updateData.finContrat = dateAMidi(data.finContrat);
     } else if (data.finContrat === null) {
       updateData.finContrat = null;
     }
@@ -272,16 +332,38 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
     }
 
     if (data.versements) {
+      // Remplacement de l'échéancier SANS perdre l'historique système : on
+      // rapproche chaque nouveau versement d'un ancien (par id, sinon par
+      // numéro) pour conserver son id (les rappels déjà envoyés — journalisés
+      // par id de versement — ne repartent pas), son numéro de reçu, la date
+      // d'envoi du reçu et l'exonération des frais de retard. Sans cela,
+      // chaque modification de membre renvoyait les rappels de retard aux
+      // parents et réutilisait des numéros de reçus.
+      const anciens = await prisma.paymentVersement.findMany({ where: { membreId: req.params.id } });
+      const parId = new Map(anciens.map((a) => [a.id, a]));
+      const parNumero = new Map(anciens.map((a) => [a.numeroVersement, a]));
+      const idsRepris = new Set<string>();
+
       updateData.versements = {
         deleteMany: {},
-        create: data.versements.map((v: any) => ({
-          numeroVersement: v.numeroVersement,
-          montant: v.montant,
-          datePrevue: new Date(v.datePrevue),
-          datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
-          methodePaiement: v.methodePaiement,
-          note: v.note,
-        }))
+        create: data.versements.map((v: any) => {
+          let ancien = (v.id && parId.get(v.id)) || parNumero.get(v.numeroVersement) || null;
+          if (ancien && idsRepris.has(ancien.id)) ancien = null; // jamais deux fois le même id
+          if (ancien) idsRepris.add(ancien.id);
+          return {
+            ...(ancien ? { id: ancien.id } : {}),
+            numeroVersement: v.numeroVersement,
+            montant: v.montant,
+            datePrevue: dateAMidi(v.datePrevue),
+            datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
+            methodePaiement: v.methodePaiement,
+            note: v.note,
+            exonererFraisRetard: ancien?.exonererFraisRetard ?? false,
+            receiptNumber: ancien?.receiptNumber ?? null,
+            receiptSentAt: ancien?.receiptSentAt ?? null,
+            reminderSentAt: ancien?.reminderSentAt ?? null,
+          };
+        })
       };
     }
 
@@ -297,6 +379,101 @@ router.put('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), asyn
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     return sendError(res, 'Erreur de modification', 500);
+  }
+});
+
+// POST /api/membres/:id/renouveler — renouvellement de contrat en un geste.
+// Cas type : le parent passe payer le trimestre suivant. Crée le NOUVEAU
+// contrat (dateInscription = date choisie, finContrat recalculée, montantFinal
+// = montant convenu), AJOUTE le nouvel échéancier à la suite de l'historique
+// (rien n'est supprimé, l'ancienneté signupDate ne bouge pas) et, si demandé,
+// encaisse immédiatement le premier versement (reçu automatique sauf CASH).
+router.post('/:id/renouveler', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const schema = z.object({
+      dateDebut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide'),
+      plan: z.enum(['TRIMESTRIEL', 'ANNUEL']),
+      montant: z.number().positive('Le montant doit être positif'),
+      nbVersements: z.number().int().min(1).max(3).default(1),
+      premierPaiement: z.object({
+        methode: z.string(),
+        datePaiement: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }).optional().nullable(),
+    });
+    const data = schema.parse(req.body);
+
+    const membre = await prisma.member.findUnique({
+      where: { id: req.params.id },
+      include: { versements: true },
+    });
+    if (!membre) return sendError(res, 'Membre introuvable', 404);
+
+    // Le trimestriel se paie en une fois (règle du centre).
+    const nbVersements = data.plan === 'TRIMESTRIEL' ? 1 : data.nbVersements;
+
+    let methode: ReturnType<typeof normalizeMethodePaiement> = null;
+    if (data.premierPaiement) {
+      methode = normalizeMethodePaiement(data.premierPaiement.methode);
+      if (!methode) return sendError(res, 'Méthode de paiement invalide', 400);
+    }
+
+    // Échéancier : même répartition des arrondis que le formulaire membre
+    // (montant de base au cent inférieur, solde sur le dernier versement).
+    const base = Math.floor((data.montant / nbVersements) * 100) / 100;
+    const numeroDepart = membre.versements.reduce((max, v) => Math.max(max, v.numeroVersement), 0) + 1;
+    const nouveaux = Array.from({ length: nbVersements }, (_, i) => ({
+      membreId: membre.id,
+      numeroVersement: numeroDepart + i,
+      montant: i === nbVersements - 1
+        ? Math.round((data.montant - base * (nbVersements - 1)) * 100) / 100
+        : base,
+      datePrevue: dateAMidi(ajouterMoisISO(data.dateDebut, i)),
+      datePaiement: i === 0 && data.premierPaiement ? dateAMidi(data.premierPaiement.datePaiement) : null,
+      methodePaiement: i === 0 && data.premierPaiement ? methode : null,
+      note: `Renouvellement du ${data.dateDebut}`,
+    }));
+
+    const finContrat = calculerFinContrat(data.dateDebut, data.plan);
+
+    await prisma.$transaction([
+      prisma.member.update({
+        where: { id: membre.id },
+        data: {
+          plan: data.plan,
+          dateInscription: dateAMidi(data.dateDebut),
+          finContrat,
+          montantFinal: data.montant,
+          // Un membre parti ou en attente qui renouvelle est de retour.
+          ...(data.premierPaiement && membre.status !== 'ACTIF' ? { status: 'ACTIF' } : {}),
+        },
+      }),
+      prisma.paymentVersement.createMany({ data: nouveaux }),
+    ]);
+
+    if (data.premierPaiement) {
+      await activerSiPremierPaiement(membre.id);
+      const premier = await prisma.paymentVersement.findFirst({
+        where: { membreId: membre.id, numeroVersement: numeroDepart },
+      });
+      if (premier) sendRecuVersementBackground(premier.id);
+    }
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'Member',
+      entityId: membre.id,
+      description: `Renouvellement ${data.plan} ${data.montant} $ à partir du ${data.dateDebut} (${nbVersements} versement(s))${data.premierPaiement ? ` — 1er versement encaissé (${methode})` : ''} — ${membre.firstName} ${membre.lastName}`,
+    });
+
+    const aJour = await prisma.member.findUnique({
+      where: { id: membre.id },
+      include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } },
+    });
+    return sendSuccess(res, aJour, 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    console.error('Erreur renouvellement:', error);
+    return sendError(res, 'Erreur lors du renouvellement', 500);
   }
 });
 
@@ -328,8 +505,8 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
           create: versementsData.map(v => ({
             numeroVersement: v.numeroVersement,
             montant: v.montant,
-            datePrevue: new Date(v.datePrevue),
-            datePaiement: v.datePaiement ? new Date(v.datePaiement) : null,
+            datePrevue: dateAMidi(v.datePrevue),
+            datePaiement: v.datePaiement ? dateAMidi(v.datePaiement) : null,
             methodePaiement: v.methodePaiement,
             note: v.note,
           }))
@@ -345,9 +522,54 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
   }
 });
 
-// DELETE /api/membres/:id (soft delete)
+// PATCH /api/membres/:id/statut — changement rapide de statut, SANS passer par le
+// formulaire complet (qui exige un échéancier équilibré : bloquant pour rendre
+// inactif un membre parti).
+router.patch('/:id/statut', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { status } = z.object({ status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']) }).parse(req.body);
+
+    const member = await prisma.member.update({
+      where: { id: req.params.id },
+      data: { status },
+    });
+
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'Member',
+      entityId: member.id,
+      description: `Statut de ${member.firstName} ${member.lastName} → ${status}`,
+    });
+
+    return sendSuccess(res, member);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Statut invalide', 400, error.issues);
+    return sendError(res, 'Erreur de changement de statut', 500);
+  }
+});
+
+// DELETE /api/membres/:id — désactivation (défaut) ou suppression DÉFINITIVE
+// (?definitif=1, ADMIN) pour les dossiers de test/doublons. Refusée si le membre
+// a des paiements encaissés (on ne détruit jamais un historique financier).
 router.delete('/:id', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
+    if (req.query.definitif === '1') {
+      if (req.user!.role !== 'ADMIN') {
+        return sendError(res, 'Suppression définitive réservée à l\'ADMIN.', 403);
+      }
+      const cible = await prisma.member.findUnique({
+        where: { id: req.params.id },
+        include: { versements: true },
+      });
+      if (!cible) return sendError(res, 'Membre introuvable', 404);
+      if (cible.versements.some((v) => v.datePaiement)) {
+        return sendError(res, 'Ce membre a des paiements encaissés : suppression définitive refusée. Utilisez plutôt le statut Inactif.', 409);
+      }
+      await prisma.member.delete({ where: { id: cible.id } });
+      logAudit(req, { action: 'DELETE', entity: 'Member', entityId: cible.id, description: `SUPPRESSION DÉFINITIVE de ${cible.firstName} ${cible.lastName} (doublon/test)` });
+      return sendSuccess(res, { ok: true, supprime: true });
+    }
+
     const member = await prisma.member.update({
       where: { id: req.params.id },
       data: { status: 'INACTIF' }
