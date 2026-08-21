@@ -221,6 +221,11 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 - **UptimeRobot** pinge `GET /api/health` toutes les ~5 min : triple rôle —
   garder l'app éveillée (Render gratuit dort), démarrage rapide pour les
   usagers, et **déclencher la tournée quotidienne** (§7.1).
+- **Surveillance complète** (pannes silencieuses, site public, CORS, leads) :
+  voir `docs/surveillance.md` — workflow GitHub `surveillance.yml` 2×/jour,
+  bilan profond `/api/health/complet`, filet anti-perte de leads (courriel de
+  secours à l'admin si la base est indisponible), alerte immédiate si les
+  migrations échouent au déploiement.
 - **Bruit normal dans les logs** (ne pas « corriger ») :
   - `terminating connection due to administrator command` (57P01) : Neon coupe
     les connexions au repos ; Prisma se reconnecte seul.
@@ -352,7 +357,8 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET/POST/PUT/DELETE /api/affiliations` | ADMIN | par membre/discipline/saison (doublon → 400) ; GET renvoie aussi `saisonCourante` |
 | `GET/POST/PUT/DELETE /api/evenements` + `/:id/inscriptions` | ADMIN | détail = participants avec `admissibilite` calculée (affiliation de la saison de l'événement + `solde` dû au club) ; PATCH inscription `{fraisPaye}` ; DELETE événement = archivage si inscriptions |
 | `GET /api/audit` | ADMIN | journal (cherchez `ERREUR / Courriel` pour les envois ratés) |
-| `GET /api/health` | public | ping UptimeRobot |
+| `GET /api/health` | public | ping UptimeRobot (léger EXPRÈS : ne touche pas la base, Neon doit dormir) |
+| `GET /api/health/complet` | public | bilan profond : base + latence, migrations, transport courriel, canal admin ; 503 si un maillon casse. Réveille Neon → quelques appels/jour max (voir `docs/surveillance.md`) |
 | `GET /api/cron/reminders` | Bearer CRON_SECRET | tournée à la demande |
 
 ## 7. Les automatisations (le cœur du système)

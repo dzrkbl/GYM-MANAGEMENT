@@ -4,8 +4,14 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+import { sendEmail, htmlCourriel } from '../lib/mailer';
 
 const router = Router();
+
+// Les données du lead partent telles quelles dans un courriel HTML : on échappe
+// pour qu'un prospect (ou un robot) ne puisse pas injecter de balises.
+const echapper = (v?: string | null) =>
+  (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const STATUTS = ['NEW', 'CONTACTED', 'CONVERTED', 'LOST'] as const;
 
@@ -33,23 +39,54 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
     if (data.website && data.website.trim() !== '') {
       return sendSuccess(res, { ok: true }); // honeypot : on ignore silencieusement
     }
-    const lead = await prisma.lead.create({
-      data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        gender: data.gender || null,
-        phone: data.phone || null,
-        email: data.email || null,
-        sport: data.sport || 'AUTRE',
-        requestType: data.requestType,
-        status: 'NEW',
-        source: data.source || null,
-        utmSource: data.utmSource || null,
-        utmCampaign: data.utmCampaign || null,
-        utmContent: data.utmContent || null,
-        note: data.note || null,
-      },
-    });
+    let lead;
+    try {
+      lead = await prisma.lead.create({
+        data: {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          gender: data.gender || null,
+          phone: data.phone || null,
+          email: data.email || null,
+          sport: data.sport || 'AUTRE',
+          requestType: data.requestType,
+          status: 'NEW',
+          source: data.source || null,
+          utmSource: data.utmSource || null,
+          utmCampaign: data.utmCampaign || null,
+          utmContent: data.utmContent || null,
+          note: data.note || null,
+        },
+      });
+    } catch (erreurBase) {
+      // Base indisponible (Neon en panne, migration en cours…) : le contact ne
+      // doit JAMAIS être perdu. On l'envoie par courriel à l'admin pour saisie
+      // manuelle, et le site reçoit un succès : le visiteur a fait sa part.
+      // Si le courriel échoue aussi, on retombe dans le catch global (500) et
+      // le site affiche son message de repli avec le téléphone.
+      const notif = process.env.INSCRIPTION_NOTIF_EMAIL;
+      if (!notif) throw erreurBase;
+      const detail = erreurBase instanceof Error ? erreurBase.message : String(erreurBase);
+      await sendEmail({
+        to: notif,
+        subject: `⚠️ Lead reçu mais base indisponible — ${data.firstName} ${data.lastName}`,
+        html: htmlCourriel(`
+          <p>Le formulaire du site a reçu une demande, mais la base de données
+          n'a pas répondu. <strong>À saisir manuellement dans Prospects</strong> :</p>
+          <ul>
+            <li>Nom : ${echapper(data.firstName)} ${echapper(data.lastName)}</li>
+            <li>Téléphone : ${echapper(data.phone) || '—'}</li>
+            <li>Courriel : ${echapper(data.email) || '—'}</li>
+            <li>Sport : ${echapper(data.sport) || 'AUTRE'} · Demande : ${echapper(data.requestType)}</li>
+            <li>Provenance : ${echapper(data.source) || '—'}${data.utmContent ? ' · Pub : ' + echapper(data.utmContent) : ''}</li>
+            ${data.note ? `<li>Note : ${echapper(data.note)}</li>` : ''}
+          </ul>
+          <p>Erreur technique : ${echapper(detail)}</p>`,
+          { salutation: null }),
+      });
+      console.error('Lead sauvé par courriel (base indisponible) :', detail);
+      return sendSuccess(res, { ok: true, secours: true }, 201);
+    }
     return sendSuccess(res, { ok: true, id: lead.id }, 201);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);

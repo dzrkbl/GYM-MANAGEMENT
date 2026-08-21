@@ -1,0 +1,86 @@
+# Surveillance du site public et de l'API de gestion.
+#
+# Tourne deux fois par jour (7 h 17 et 19 h 17, heure de Montréal en été) et
+# vérifie toute la chaîne qui amène un lead : site Hostinger → CORS → API
+# Render → base Neon. Chaque vérification échouée fait échouer le run, et le
+# dernier step envoie une alerte courriel via Resend si les secrets
+# RESEND_API_KEY et ALERTE_EMAIL sont configurés (sinon : notification GitHub
+# seulement, visible dans l'onglet Actions).
+#
+# IMPORTANT : les workflows planifiés ne tournent que sur la branche par
+# défaut (main). Ce fichier est inactif tant qu'il n'y est pas fusionné.
+# Déclenchement manuel possible à tout moment : Actions → Surveillance → Run workflow.
+
+name: Surveillance site + API
+
+on:
+  schedule:
+    - cron: '17 11,23 * * *' # UTC : 7 h 17 et 19 h 17 à Montréal (UTC-4)
+  workflow_dispatch:
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Site — accueil joignable et CTA présent
+        run: |
+          corps=$(curl -sS --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors https://centresportifhp.com/)
+          echo "$corps" | grep -qi "essai gratuit" || {
+            echo "::error::L'accueil ne contient plus « essai gratuit » (page blanche, 403 ou mauvais contenu déployé)."
+            exit 1
+          }
+
+      - name: Site — version.txt (déploiement sain)
+        run: |
+          curl -sSf --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors https://centresportifhp.com/version.txt
+
+      - name: API — health léger (Render debout)
+        run: |
+          # --max-time 90 : le premier accès après une sieste Render peut être long.
+          curl -sSf --max-time 90 --retry 3 --retry-delay 15 --retry-all-errors https://cshp-backend.onrender.com/api/health
+
+      - name: API — health complet (base, migrations, courriel)
+        run: |
+          rep=$(curl -sS --max-time 90 --retry 3 --retry-delay 15 --retry-all-errors https://cshp-backend.onrender.com/api/health/complet)
+          echo "$rep"
+          echo "$rep" | grep -q '"ok":true' || {
+            echo "::error::Santé dégradée : voir le JSON ci-dessus (base, migrations, courriel ou canal admin)."
+            exit 1
+          }
+
+      - name: API — CORS du formulaire de leads
+        run: |
+          entetes=$(curl -sS --max-time 90 --retry 3 --retry-delay 15 --retry-all-errors \
+            -X OPTIONS \
+            -H "Origin: https://centresportifhp.com" \
+            -H "Access-Control-Request-Method: POST" \
+            -D - -o /dev/null \
+            https://cshp-backend.onrender.com/api/leads)
+          echo "$entetes"
+          echo "$entetes" | grep -qi "access-control-allow-origin" || {
+            echo "::error::CORS cassé : le navigateur bloquera le POST du formulaire du site."
+            exit 1
+          }
+
+      - name: Alerte courriel en cas d'échec
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTE_EMAIL: ${{ secrets.ALERTE_EMAIL }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERTE_EMAIL" ]; then
+            echo "Secrets RESEND_API_KEY / ALERTE_EMAIL absents : pas de courriel, alerte GitHub seulement."
+            exit 0
+          fi
+          curl -sS https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @- <<JSON
+          {
+            "from": "CSHP Surveillance <payements@centresportifhp.com>",
+            "to": ["$ALERTE_EMAIL"],
+            "subject": "🚨 Surveillance CSHP : une vérification a échoué",
+            "text": "Une vérification automatique du site ou de l'API a échoué.\n\nDétails du run : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\nRéflexes : docs/surveillance.md dans le dépôt GYM-MANAGEMENT."
+          }
+          JSON
