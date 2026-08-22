@@ -67,3 +67,60 @@ Toutes les modifications passent par Google AI Studio → GitHub → Render.
 - Activer les rappels (reset reminderSentAt sur versements futurs)
 
 Push et commit avec le message "docs: ajout DEVLOG.md".
+
+---
+
+## 2026-08-21 au 2026-08-22 — Surveillance, courriels de masse, suivi des prospects
+
+### Contexte
+Le site public (centresportifhp.com, dépôt séparé) est en production et envoie
+ses leads à l'app. Objectif de la période : détecter les pannes avant de perdre
+de la business, débloquer les courriels groupés, et redonner de la visibilité
+sur le parcours prospect → fiche d'inscription → membre.
+
+### Ce qui a été fait (PR #6, #8, #9)
+- **Fiche d'inscription papier 2025-2026** recto-verso alignée sur le modèle
+  Member (docs/formulaires/ : HTML source + PDF + procédure de régénération).
+- **Surveillance complète** (runbook : docs/surveillance.md) :
+  - `GET /api/health/complet` : bilan profond (base + latence, migrations,
+    transport courriel, canal admin) ; 503 si un maillon casse. `/api/health`
+    reste léger EXPRÈS (ping UptimeRobot 5 min, Neon doit dormir).
+  - Workflow `.github/workflows/surveillance.yml` 2×/jour : accueil du site +
+    CTA, version.txt, health léger + complet, préflight CORS de /api/leads ;
+    alerte Resend si secrets RESEND_API_KEY + ALERTE_EMAIL configurés.
+  - **Filet anti-perte de leads** : base indisponible → le lead part par
+    courriel à INSCRIPTION_NOTIF_EMAIL, le site reçoit un succès.
+  - **Alerte migrations** : échec de `prisma migrate deploy` au démarrage →
+    courriel immédiat (avant : schéma décalé silencieux).
+- **Courriels groupés débloqués** : l'envoi parallèle individuel plafonnait à
+  ~10 (limite Resend 2 req/s → 429). `sendEmailsEnMasse` : batch Resend
+  100/requête + pause 600 ms, repli SMTP séquentiel.
+- **Colonne « Dernière présence »** (liste Membres) : dernier pointage PRESENT,
+  vert ≤ 7 j / ambre ≤ 21 j / rouge au-delà ; une requête groupée.
+- **Diagnostic courriels par membre** (fiche, ADMIN) : destinataire effectif,
+  renouvellement du contrat en cours ARME/COUVERT, historique ReminderLog,
+  bouton « Réarmer » (efface R30/R7/ECHU du contrat en cours). Répond au cas
+  « les renouvellements judo ne partent pas » : le muselage anti-rattrapage
+  d'un import neutralise les rappels des contrats à ≤ 30 jours.
+- **Filtres Membres portés par l'URL** (`?groupe=`, `?statut=`) + vrai retour
+  arrière depuis la fiche : le groupe consulté est restauré.
+- **Prospects : badge « Fiche reçue »** : `Lead.ficheRecueAt` + `Lead.membreId`
+  (migration), correspondance élargie à la réception de la fiche (courriels
+  multiples parent+athlète, téléphones en chiffres, nom de l'athlète), carte
+  verte + bouton « Voir la fiche membre ».
+
+### Décisions
+- Deux endpoints de santé séparés : le léger ne touche JAMAIS la base (Neon
+  doit dormir entre les requêtes réelles), le profond se pinge quelques
+  fois/jour maximum.
+- Quota Resend du club : 100/jour, 3 000/mois → envois groupés par groupe
+  plutôt qu'à tout le club ; le batch remonte les échecs par adresse.
+- Réarmement des renouvellements = suppression des traces ReminderLog du
+  contrat en cours (indistinguable d'un envoi réel en base : le bouton
+  l'explique et l'action est auditée).
+
+### Reste à faire (côté propriétaire)
+- Secrets GitHub RESEND_API_KEY + ALERTE_EMAIL (alerte courriel du workflow).
+- UptimeRobot : contact d'alerte vérifié + moniteur mot-clé « gratuit » sur
+  centresportifhp.com + moniteur health/complet à 12 h (PAS 5 min).
+- Premier « Run workflow » manuel de la surveillance (aucune run au 22 août).

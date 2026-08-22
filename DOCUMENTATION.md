@@ -6,7 +6,7 @@ contexte. Lisez les sections 1 à 3 avant de toucher au code : elles contiennent
 les règles métier et les conventions dont la violation a déjà causé des bugs
 réels (documentés en §10).
 
-Dernière mise à jour majeure : **2026-08-12**.
+Dernière mise à jour majeure : **2026-08-22**.
 
 ---
 
@@ -329,12 +329,14 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | Route | Accès | Points clés |
 |---|---|---|
 | `POST /api/auth/login`, `GET /api/auth/me` | public / connecté | me lit la base (rôle à jour) |
-| `GET /api/membres` | connecté (SM filtré sur sa section) | inclut `sections` + `versements` (le Pointage et les badges s'en servent) |
+| `GET /api/membres` | connecté (SM filtré sur sa section) | inclut `sections` + `versements` (le Pointage et les badges s'en servent) + `dernierePresence` (dernier pointage PRESENT, une requête groupée) |
 | `POST /api/membres` | ADMIN, SM | calcule finContrat/montantFinal si plan fourni ; bienvenue + audit |
 | `PUT /api/membres/:id` | ADMIN, SM | partiel ; recalcul si plan/date/rabais changent ; **préserve l'identité des versements** (§3.5) ; `membreDepuis` → signupDate |
 | `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité |
 | `DELETE /api/membres/:id?definitif=1` | ADMIN | refusé si paiements encaissés |
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
+| `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
+| `POST /api/membres/:id/reactiver-renouvellement` | ADMIN | efface les traces R30/R7/ECHU du contrat en cours → la prochaine tournée renvoie l'étape appropriée ; audité |
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
 | `PATCH /api/versements/:id/annuler-paiement` | ADMIN | corrige une erreur d'encaissement : redevient à percevoir (échéance/montant inchangés, receiptSentAt effacé pour renvoyer un reçu au vrai paiement), audité |
@@ -349,8 +351,8 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET/POST/PUT/DELETE /api/coachs` | ADMIN (liste : connecté) | **comptes staff, y compris ADMIN** ; mot de passe temporaire renvoyé une fois ; garde-fou : impossible de rétrograder/désactiver le **dernier admin actif** ; tout audité |
 | `POST /api/import` | ADMIN | CSV membres + versements (§9.3) |
 | `POST /api/inscription` (public, rate-limité), `GET /api/inscription/sections`, `POST /api/inscription/inviter` (ADMIN/SM) | | fiche en ligne (§2) ; inviter = envoi du lien par courriel |
-| `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) |
-| `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections ; test vers adresse au choix ; diagnostic transport |
+| `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) ; renseigne `membreId`. **Filet anti-perte** : si l'écriture en base échoue, le lead part par courriel à INSCRIPTION_NOTIF_EMAIL et le site reçoit un succès |
+| `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections via `sendEmailsEnMasse` (batch Resend 100/requête — l'envoi parallèle individuel plafonnait à ~10 : limite 2 req/s) ; test vers adresse au choix ; diagnostic transport |
 | `POST /api/backup` | ADMIN | sauvegarde Excel immédiate |
 | `GET/POST/PUT/DELETE /api/inventaire` + `POST /:id/stock {delta}` | ADMIN | CRUD articles ; DELETE = suppression si aucune vente, sinon désactivation ; `POST /api/inventaire/seed-karate` = catalogue karaté idempotent (prix de VENTE fournis par le club, coût de revient à saisir) |
 | `GET/POST /api/inventaire/ventes`, `DELETE /ventes/:id` | ADMIN | vente (décrémente stock, prix copié, membre optionnel), annulation (réincrémente) ; `?membreId=` → achats d'un dossier |
@@ -402,6 +404,13 @@ sinon le compteur couru. Les erreurs d'envoi vont dans l'Audit
 - **Invitation à s'inscrire** (bouton Prospects) — lien vers la fiche en ligne.
 - **Notification de fiche reçue** (admin) — avec provenance.
 - Envoi groupé manuel : page Courriels (multi-sections, échecs listés).
+  Transport : `sendEmailsEnMasse` (mailer.ts) — batch Resend par lots de 100
+  avec pause 600 ms (limite 2 req/s), repli SMTP séquentiel. Quota Resend du
+  club : 100/jour, 3 000/mois → privilégier les envois par groupe.
+- **Fiche en ligne reçue → prospect marqué** : correspondance élargie en
+  mémoire (courriels multiples parent+athlète, téléphones en chiffres, nom de
+  l'athlète) → statut CONVERTED + `ficheRecueAt` + `membreId` (badge vert
+  « Fiche reçue » dans Prospects).
 
 ### 7.3 Sauvegarde quotidienne (`src/lib/sauvegarde.ts`)
 Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
@@ -426,9 +435,12 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   → `/paiements?statut=EN_RETARD` ; « Renouvellements échus » →
   `/membres?suivi=renouvellement`. Prévision de trésorerie 3 mois (échéancier +
   renouvellements attendus). Toutes les définitions en §3.6.
-- **Membres** : table avec badges d'état (`etatPaiement`), filtres
-  section/statut/recherche, filtre URL `?suivi=renouvellement`, mode
-  **Factures** (cases à cocher + année + génération par famille).
+- **Membres** : table avec badges d'état (`etatPaiement`), colonne
+  **Dernière présence** (vert ≤ 7 j, ambre ≤ 21 j, rouge au-delà), filtres
+  section/statut/recherche **portés par l'URL** (`?groupe=`, `?statut=` — le
+  retour depuis une fiche restaure le groupe consulté), filtre URL
+  `?suivi=renouvellement`, mode **Factures** (cases à cocher + année +
+  génération par famille).
 - **Fiche membre** (`/membres/:id`) : **Édition rapide** (groupe, ceinture,
   coordonnées, dates, poids, notes — ne touche JAMAIS au plan/échéancier) vs
   **Profil complet** (assistant 4 étapes). Onglet Paiements : bannières
@@ -445,7 +457,9 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
   que le coach fasse le rappel en personne.
 - **Prospects** : leads avec date de demande + badge « X j sans suivi »,
-  conversion, invitation à la fiche en ligne.
+  conversion, invitation à la fiche en ligne. Carte **verte** + badge
+  « 📋 Fiche reçue le X » quand la fiche en ligne correspondante arrive,
+  bouton « Voir la fiche membre » (`membreId`).
 - **Rapports** : période, revenus, répartition par groupe, masse salariale
   éditable par mois (total = mois écoulés), **liste de relance** (retards +
   renouvellements échus) exportable PDF/CSV.
