@@ -6,6 +6,7 @@ import { Inscription } from './pages/Inscription';
 import { Dashboard } from './pages/Dashboard';
 import { Pointer } from './pages/Pointer';
 import { Membres } from './pages/Membres';
+import { Retention } from './pages/Retention';
 import { MembreDetail } from './pages/MembreDetail';
 import { Paiements } from './pages/Paiements';
 import { Coachs } from './pages/Coachs';
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/membres" element={<Membres />} />
             <Route path="/membres/:id" element={<MembreDetail />} />
             <Route path="/pointer" element={<Pointer />} />
+            <Route path="/retention" element={<Retention />} />
             <Route path="/paiements" element={<Paiements />} />
             <Route path="/admin/finances" element={<Finances />} />
             <Route path="/admin/import" element={<Import />} />

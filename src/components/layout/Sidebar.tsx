@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target, Package, Trophy } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target, Package, Trophy, LifeBuoy } from 'lucide-react';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
@@ -11,6 +11,7 @@ export function Sidebar() {
     { to: '/membres', icon: Users, label: 'Membres' },
     ...(user?.role === 'ADMIN' ? [{ to: '/admin/prospects', icon: Target, label: 'Prospects' }] : []),
     { to: '/pointer', icon: CheckSquare, label: 'Pointage' },
+    { to: '/retention', icon: LifeBuoy, label: 'Rétention' },
     ...(user?.role === 'ADMIN' ? [{ to: '/paiements', icon: CreditCard, label: 'Paiements' }] : []),
     ...(user?.role === 'ADMIN' ? [{ to: '/admin/finances', icon: Coins, label: 'Finances' }] : []),
     // Inventaire et Événements : accessibles à tout le personnel — le serveur
