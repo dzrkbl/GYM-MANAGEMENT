@@ -19,9 +19,12 @@ const router = Router();
 
 const evenementSchema = z.object({
   titre: z.string().min(1),
-  type: z.enum(['COMPETITION', 'PASSAGE_GRADE', 'AUTRE']).default('COMPETITION'),
+  type: z.enum(['COMPETITION', 'PASSAGE_GRADE', 'FORMATION', 'FERMETURE', 'AUTRE']).default('COMPETITION'),
   discipline: z.enum(['KARATE', 'JUDO', 'NINJAS', 'TOUS']).optional().nullable(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Dernier jour INCLUS : compétition d'une fin de semaine, fermeture des Fêtes…
+  dateFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  horaire: z.string().max(40).optional().nullable(),
   lieu: z.string().optional().nullable(),
   fraisInscription: z.number().min(0).optional().nullable(),
   note: z.string().optional().nullable(),
@@ -105,9 +108,13 @@ async function admissibilite(evenement: { date: Date; discipline: string | null 
 // Staff : événements de sa discipline + événements « TOUS » du club.
 router.get('/', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
-    const { inclureInactifs } = req.query as Record<string, string>;
+    const { inclureInactifs, statut } = req.query as Record<string, string>;
     const portee = await porteeStaff(req.user!);
     const where: any = inclureInactifs ? {} : { actif: true };
+    // Par défaut le module Événements ne montre que ce que le club a RETENU ;
+    // les dates de fédération importées vivent dans le calendrier de saison.
+    // ?statut=TOUS pour tout voir, ?statut=CALENDRIER pour la liste à trier.
+    if (statut !== 'TOUS') where.statut = statut === 'CALENDRIER' ? 'CALENDRIER' : 'RETENU';
     if (!portee.admin) {
       where.OR = [{ discipline: null }, { discipline: 'TOUS' }, ...portee.sports.map((sp) => ({ discipline: sp }))];
     }
@@ -191,7 +198,11 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<any>
       return sendError(res, 'Vous ne pouvez créer un événement que dans votre discipline', 403);
     }
     const evenement = await prisma.evenement.create({
-      data: { ...data, date: new Date(`${data.date}T12:00:00Z`) },
+      data: {
+        ...data,
+        date: new Date(`${data.date}T12:00:00Z`),
+        dateFin: data.dateFin ? new Date(`${data.dateFin}T12:00:00Z`) : null,
+      },
     });
     logAudit(req, {
       action: 'CREATE',
@@ -220,6 +231,9 @@ router.put('/:id', authenticate, async (req: Request, res: Response): Promise<an
     }
     const updateData: any = { ...data };
     if (data.date) updateData.date = new Date(`${data.date}T12:00:00Z`);
+    if (data.dateFin !== undefined) {
+      updateData.dateFin = data.dateFin ? new Date(`${data.dateFin}T12:00:00Z`) : null;
+    }
     const evenement = await prisma.evenement.update({ where: { id: req.params.id }, data: updateData });
     logAudit(req, {
       action: 'UPDATE',
@@ -232,6 +246,42 @@ router.put('/:id', authenticate, async (req: Request, res: Response): Promise<an
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
     if (error?.code === 'P2025') return sendError(res, 'Événement introuvable', 404);
     return sendError(res, 'Erreur de modification', 500);
+  }
+});
+
+// PATCH /api/evenements/:id/statut — le bouton « Intégrer au module Événements ».
+// CALENDRIER : date de fédération, informative, aucune inscription possible.
+// RETENU : le club y participe — inscriptions, frais et admissibilité s'activent.
+router.patch('/:id/statut', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { statut } = z.object({ statut: z.enum(['CALENDRIER', 'RETENU']) }).parse(req.body);
+    const existant = await prisma.evenement.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { inscriptions: true } } },
+    });
+    if (!existant) return sendError(res, 'Événement introuvable', 404);
+
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin && !disciplineDansPortee(existant.discipline, portee)) {
+      return sendError(res, 'Événement hors de votre discipline', 403);
+    }
+    // Remettre au calendrier un événement qui a déjà des inscrits ferait
+    // disparaître ces inscriptions de la vue : on refuse plutôt que de surprendre.
+    if (statut === 'CALENDRIER' && existant._count.inscriptions > 0) {
+      return sendError(res, `Cet événement compte ${existant._count.inscriptions} inscription(s) : retirez-les d'abord.`, 409);
+    }
+
+    const evenement = await prisma.evenement.update({ where: { id: existant.id }, data: { statut } });
+    logAudit(req, {
+      action: 'UPDATE', entity: 'Evenement', entityId: evenement.id,
+      description: statut === 'RETENU'
+        ? `Événement retenu par le club : ${evenement.titre}`
+        : `Événement remis au calendrier de saison : ${evenement.titre}`,
+    });
+    return sendSuccess(res, evenement);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Statut invalide', 400, error.issues);
+    return sendError(res, 'Erreur lors du changement de statut', 500);
   }
 });
 

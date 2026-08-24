@@ -390,17 +390,47 @@ model Affiliation {
 model Evenement {
   id               String   @id @default(uuid())
   titre            String
-  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, AUTRE
+  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, FORMATION, FERMETURE, AUTRE
   discipline       String?           // KARATE, JUDO, TOUS…
   date             DateTime
+  dateFin          DateTime?         // dernier jour INCLUS (compétition sur plusieurs jours, fermeture)
+  horaire          String?           // « 09:00 à 13:00 » si l'événement porte une heure
   lieu             String?
   fraisInscription Float?
   note             String?
   actif            Boolean  @default(true)
+
+  // Calendrier de saison : une date importée d'une fédération arrive en
+  // CALENDRIER (informative, visible au calendrier, aucune inscription).
+  // Le bouton « Intégrer au module Événements » la passe à RETENU, ce qui
+  // débloque inscriptions, frais et calcul d'admissibilité.
+  statut           String   @default("RETENU")  // CALENDRIER | RETENU
+  source           String?           // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ… (null = saisi au club)
+  sourceUid        String?           // UID iCal, pour ne pas réimporter deux fois
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   inscriptions     EvenementInscription[]
+
+  // Deux valeurs nulles ne se heurtent jamais en Postgres : les événements
+  // saisis à la main (source nulle) ne sont donc pas contraints.
+  @@unique([source, sourceUid])
+  @@index([date])
+}
+
+// Abonnement à un calendrier de fédération (fichier .ics public).
+model CalendrierSource {
+  id            String    @id @default(uuid())
+  code          String    @unique  // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ…
+  nom           String              // « Karaté Québec — saison 2025/2026 »
+  url           String              // lien .ics d'abonnement
+  discipline    String?             // discipline appliquée aux événements importés
+  actif         Boolean   @default(true)
+  dernierSyncAt DateTime?
+  dernierSyncMsg String?            // résultat de la dernière synchronisation
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model EvenementInscription {
