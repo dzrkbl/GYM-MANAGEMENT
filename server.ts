@@ -29,6 +29,7 @@ import backupRouter from './src/routes/backup';
 import inventaireRouter from './src/routes/inventaire';
 import evenementsRouter from './src/routes/evenements';
 import affiliationsRouter from './src/routes/affiliations';
+import retentionRouter from './src/routes/retention';
 
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
@@ -132,6 +133,7 @@ app.use('/api/backup', backupRouter);
 app.use('/api/inventaire', inventaireRouter);
 app.use('/api/evenements', evenementsRouter);
 app.use('/api/affiliations', affiliationsRouter);
+app.use('/api/retention', retentionRouter);
 
 // Basic health check
 // LÉGER exprès : pingé toutes les ~5 min par UptimeRobot pour garder Render

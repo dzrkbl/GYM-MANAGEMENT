@@ -336,6 +336,8 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `DELETE /api/membres/:id?definitif=1` | ADMIN | refusé si paiements encaissés |
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
 | `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
+| `GET /api/retention` | connecté (portée par discipline) | liste d'appels : membres ACTIFS ayant manqué ≥ 2 **séances tenues** depuis leur dernière présence. Une séance « tenue » = date où au moins un membre du cours a été pointé → les fermetures et cours annulés ne comptent pour personne, sans calendrier à maintenir. Absences EXCUSED ignorées ; membres jamais pointés exclus (comptés à part) |
+| `POST/DELETE /api/retention/:id/contact` | connecté | note l'appel pour l'épisode d'absence en cours (`ReminderLog` type `RETENTION_APPEL`, refKey `membreId:dateDerniérePrésence`) : si le membre revient puis décroche à nouveau, un nouvel épisode démarre |
 | `POST /api/membres/:id/reactiver-renouvellement` | ADMIN | efface les traces R30/R7/ECHU du contrat en cours → la prochaine tournée renvoie l'étape appropriée ; audité |
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
@@ -456,6 +458,12 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 - **Pointage** (coachs) : liste des ACTIFS de la section du jour + **badge de
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
   que le coach fasse le rappel en personne.
+- **Rétention** (`/retention`, tous les rôles, aussi dans la barre mobile) :
+  la liste d'appels du coach. Compteurs (à appeler, encore récupérables,
+  jamais pointés), tri par priorité (non contactés dans la fenêtre 2-4 séances
+  d'abord), liens `tel:` et `sms:` avec message pré-rédigé, bouton « Noté »
+  (marquage optimiste, annulable). Le fond de la démarche : §2 et §3 de
+  `marketing/11-croissance-par-les-donnees.md`.
 - **Prospects** : leads avec date de demande + badge « X j sans suivi »,
   conversion, invitation à la fiche en ligne. Carte **verte** + badge
   « 📋 Fiche reçue le X » quand la fiche en ligne correspondante arrive,
