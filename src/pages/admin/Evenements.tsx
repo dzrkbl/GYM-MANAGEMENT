@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { saisonCourante, saisonsChoix } from '../../lib/saison';
 import { useSections } from '../../hooks/useSections';
+import { SourcesCalendrier } from '../../components/calendrier/SourcesCalendrier';
 import { Trophy, Plus, Pencil, Trash2, ArrowLeft, UserPlus, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 interface Evenement {
@@ -424,6 +425,8 @@ export function Evenements() {
           ) : <span />
         )}
       </div>
+
+      {estAdmin && <SourcesCalendrier />}
 
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg border border-red-100 text-sm">{error}</div>}
       {info && (

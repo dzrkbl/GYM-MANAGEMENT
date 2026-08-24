@@ -274,6 +274,10 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 - **Attendance** — présences pointées (unique memberId+courseId+date). **Seuls
   les présents sont pointés** — il n'existe jamais de ligne ABSENT (d'où les
   taux calculés sur `séances × effectif`, §10.16).
+- **Evenement** porte `statut` (`CALENDRIER` = date de fédération informative,
+  `RETENU` = le club participe), `source`/`sourceUid` (dédup iCal, unique
+  ensemble), `dateFin` (dernier jour INCLUS) et `horaire`. **CalendrierSource**
+  = un abonnement .ics (code, url, discipline, dernière synchro).
 - **Lead**, **Section**, **Grade**, **User** (staff : ADMIN / SECTION_MANAGER /
   COACH ; mots de passe bcrypt), **AuditLog** (traçabilité, incl. les erreurs
   courriel `action='ERREUR', entity='Courriel'`), **ReminderLog** (§3.4),
@@ -338,6 +342,9 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
 | `GET /api/retention` | connecté (portée par discipline) | liste d'appels : membres ACTIFS ayant manqué ≥ 2 **séances tenues** depuis leur dernière présence. Une séance « tenue » = date où au moins un membre du cours a été pointé → les fermetures et cours annulés ne comptent pour personne, sans calendrier à maintenir. Absences EXCUSED ignorées ; membres jamais pointés exclus (comptés à part) |
 | `POST/DELETE /api/retention/:id/contact` | connecté | note l'appel pour l'épisode d'absence en cours (`ReminderLog` type `RETENTION_APPEL`, refKey `membreId:dateDerniérePrésence`) : si le membre revient puis décroche à nouveau, un nouvel épisode démarre |
+| `GET /api/calendrier?debut&fin` | connecté | événements DATÉS chevauchant la fenêtre (calendrier de saison + club). Les cours récurrents n'y sont PAS : la vue mois les projette depuis `/api/cours` |
+| `GET/POST/PUT/DELETE /api/calendrier/sources` + `POST /sources/:id/sync` | ADMIN | abonnements .ics des fédérations ; la synchro n'écrase que les champs de la fédération (titre, dates, horaire, lieu) et ne touche jamais au `statut` ni aux frais saisis au club. Supprimer une source NE supprime PAS les dates importées |
+| `PATCH /api/evenements/:id/statut` | ADMIN, SM | bascule `CALENDRIER` ↔ `RETENU` (le bouton « Intégrer au module Événements »). Refuse le retour à CALENDRIER si des inscriptions existent |
 | `POST /api/membres/:id/reactiver-renouvellement` | ADMIN | efface les traces R30/R7/ECHU du contrat en cours → la prochaine tournée renvoie l'étape appropriée ; audité |
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
@@ -458,6 +465,12 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 - **Pointage** (coachs) : liste des ACTIFS de la section du jour + **badge de
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
   que le coach fasse le rappel en personne.
+- **Calendrier** (`/planning`) : deux onglets. **Mois** (par défaut) projette
+  les cours récurrents sur les vraies dates et superpose les événements datés ;
+  une fermeture masque les cours du jour ; clic sur un événement = fiche avec le
+  bouton « Intégrer au module Événements ». **Semaine type** reste la grille de
+  gestion des cours récurrents. Sur téléphone, le mois devient un agenda des
+  seules journées occupées.
 - **Rétention** (`/retention`, tous les rôles, aussi dans la barre mobile) :
   la liste d'appels du coach. Compteurs (à appeler, encore récupérables,
   jamais pointés), tri par priorité (non contactés dans la fenêtre 2-4 séances
