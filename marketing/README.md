@@ -52,6 +52,7 @@ Plan couvrant la période du **14 juillet au 11 octobre 2026**, construit autour
 | [templates/](templates/) | Fichiers CSV à importer dans Google Sheets (suivi leads + KPI) | Semaine 2 |
 | [09-questions-notebooklm.md](09-questions-notebooklm.md) | Questions de recherche en attente (subventions, écoles, rétention…) | Quand tu retournes dans NotebookLM |
 | [10-recherche-communautes.md](10-recherche-communautes.md) | **Recherche communautés** (maghrébine ~80 %, haïtienne, ouest-africaine…) : sources à ajouter, prompts, plan d'intégration | **En cours — priorité créatifs** |
+| [11-croissance-par-les-donnees.md](11-croissance-par-les-donnees.md) | **Croissance par les données** : fratrie, radar de décrochage, sièges vides, réactivation des anciens membres — les leviers à coût nul de votre propre base | **À lire avant d'augmenter le budget pub** |
 
 ---
 
