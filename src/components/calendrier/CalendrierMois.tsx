@@ -7,7 +7,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { Spinner } from '../ui/Spinner';
-import { ChevronLeft, ChevronRight, MapPin, Users, CalendarPlus, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Users, CalendarPlus, ExternalLink, ClipboardCheck, UserCheck } from 'lucide-react';
 
 /**
  * Vue mois unifiée : les cours récurrents (semaine type) projetés sur les vraies
@@ -62,6 +62,19 @@ export function CalendrierMois() {
   const [afficherCours, setAfficherCours] = useState(true);
   const [ouvert, setOuvert] = useState<any>(null); // événement affiché en détail
   const [enCours, setEnCours] = useState(false);
+  // Séance ouverte : un cours à une date précise, avec la liste des pointés.
+  const [seance, setSeance] = useState<{ cours: any; jour: string } | null>(null);
+  const [presences, setPresences] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    if (!seance) { setPresences(null); return; }
+    let annule = false;
+    setPresences(null);
+    apiFetch<any[]>(`/presences?courseId=${seance.cours.id}&date=${seance.jour}`)
+      .then((r) => { if (!annule) setPresences(r); })
+      .catch(() => { if (!annule) setPresences([]); });
+    return () => { annule = true; };
+  }, [seance]);
 
   // Grille : du lundi de la 1re semaine au dimanche de la dernière.
   const grille = useMemo(() => {
@@ -231,9 +244,9 @@ export function CalendrierMois() {
                     {cs.map((c) => (
                       <button
                         key={c.id + jour}
-                        onClick={() => navigate('/pointer')}
+                        onClick={() => setSeance({ cours: c, jour })}
                         className="w-full text-left text-[10px] leading-tight px-1.5 py-0.5 rounded text-gray-500 hover:bg-gray-100 truncate"
-                        title={`${getLabel(c.section)} · ${c.startTime}-${c.endTime}`}
+                        title={`${getLabel(c.section)} · ${c.startTime}-${c.endTime} — voir les présences`}
                       >
                         {c.startTime} {getLabel(c.section)}
                       </button>
@@ -267,9 +280,13 @@ export function CalendrierMois() {
                       );
                     })}
                     {cs.map((c) => (
-                      <div key={c.id} className="text-xs text-gray-500 px-2">
+                      <button
+                        key={c.id}
+                        onClick={() => setSeance({ cours: c, jour })}
+                        className="w-full text-left text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100"
+                      >
                         {c.startTime} à {c.endTime} · {getLabel(c.section)}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </Card>
@@ -278,6 +295,79 @@ export function CalendrierMois() {
           </div>
         </>
       )}
+
+      {/* Présences d'une séance : qui était là, qui a pointé et quand */}
+      <Modal
+        isOpen={!!seance}
+        onClose={() => setSeance(null)}
+        title={seance ? `${getLabel(seance.cours.section)} — ${new Date(`${seance.jour}T12:00:00Z`).toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}` : ''}
+        width="lg"
+      >
+        {seance && (
+          <div className="space-y-4 text-sm">
+            <p className="text-gray-500 text-xs">
+              Cours de {seance.cours.startTime} à {seance.cours.endTime}
+              {seance.cours.coach ? ` · ${seance.cours.coach.firstName ?? ''} ${seance.cours.coach.lastName ?? ''}`.trimEnd() : ''}
+            </p>
+
+            {presences === null ? (
+              <div className="py-6 flex justify-center"><Spinner /></div>
+            ) : presences.length === 0 ? (
+              <div className="py-6 text-center space-y-3">
+                <p className="text-gray-600 font-medium">Aucun pointage enregistré pour cette séance.</p>
+                <p className="text-xs text-gray-400">
+                  Soit le cours n'a pas eu lieu, soit le pointage n'a pas été fait.
+                </p>
+                {seance.jour <= aujourdhui && (
+                  <Button variant="outline" onClick={() => navigate('/pointer')}>
+                    <ClipboardCheck size={16} className="mr-1.5" /> Aller au pointage
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                  <UserCheck size={17} /> {presences.length} athlète(s) présent(s)
+                </div>
+                <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+                  {presences.map((p) => (
+                    <li key={p.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-gray-50">
+                      <button
+                        onClick={() => navigate(`/membres/${p.member.id}`)}
+                        className="text-left font-medium text-cshp-black hover:text-cshp-red"
+                      >
+                        <span className="uppercase">{p.member.lastName}</span> {p.member.firstName}
+                      </button>
+                      {p.status !== 'PRESENT' && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                          {p.status === 'EXCUSED' ? 'Excusé' : 'Absent'}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Traçabilité : nulle pour les pointages antérieurs à cette fonction */}
+                <p className="text-xs text-gray-400">
+                  {presences[0]?.pointeParNom || presences[0]?.pointeAt ? (
+                    <>
+                      Pointé{presences[0].pointeParNom ? ` par ${presences[0].pointeParNom}` : ''}
+                      {presences[0].pointeAt
+                        ? ` le ${new Date(presences[0].pointeAt).toLocaleString('fr-CA')}`
+                        : ''}
+                      {presences[0].pointeAt && jourDe(presences[0].pointeAt) > seance.jour && (
+                        <span className="text-amber-600 font-semibold"> · saisi après la date du cours</span>
+                      )}
+                    </>
+                  ) : (
+                    <>Auteur du pointage inconnu (saisi avant la mise en place de la traçabilité).</>
+                  )}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Détail d'un événement */}
       <Modal isOpen={!!ouvert} onClose={() => setOuvert(null)} title={ouvert?.titre || ''} width="lg">

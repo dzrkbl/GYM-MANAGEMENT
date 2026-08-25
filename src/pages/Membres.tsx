@@ -57,6 +57,12 @@ export function Membres() {
   const setSectionFilter = (v: string) => setFiltreUrl('groupe', v, defautSection);
   const setStatusFilter = (v: string) => setFiltreUrl('statut', v, 'ACTIF');
   
+  // Tri cliquable des colonnes. Purement local : la liste complète est déjà
+  // chargée, il n'y a pas de pagination à respecter.
+  const [tri, setTri] = useState<{ col: string; sens: 1 | -1 } | null>(null);
+  const basculerTri = (col: string) =>
+    setTri((p) => (p?.col === col ? { col, sens: p.sens === 1 ? -1 : 1 } : { col, sens: 1 }));
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // --- Mode « Factures » : cocher des membres puis générer une facture par
@@ -139,11 +145,45 @@ export function Membres() {
     { value: 'EN_ATTENTE', label: 'En attente' }
   ];
 
-  // Liste affichée : applique le filtre de suivi (renouvellements échus).
+  // Liste affichée : filtre de suivi (renouvellements échus), puis tri cliquable.
   const membersAffiches = useMemo(() => {
-    if (suiviFilter !== 'renouvellement') return members;
-    return members.filter((m) => etatPaiement(m).type === 'RENOUVELLEMENT_DU');
-  }, [members, suiviFilter]);
+    const base = suiviFilter === 'renouvellement'
+      ? members.filter((m) => etatPaiement(m).type === 'RENOUVELLEMENT_DU')
+      : members;
+    if (!tri) return base;
+
+    const totalPaye = (m: any) => (m.versements || [])
+      .filter((v: any) => v.datePaiement)
+      .reduce((s: number, v: any) => s + (v.montant || 0), 0);
+
+    // Valeur de tri par colonne. Les valeurs manquantes sont renvoyées à null
+    // et systématiquement placées EN DERNIER, quel que soit le sens : un membre
+    // sans date de fin de contrat ne doit pas squatter le haut du tableau.
+    const cle = (m: any): string | number | null => {
+      switch (tri.col) {
+        case 'lastName':   return (m.lastName || '').toLowerCase();
+        case 'firstName':  return (m.firstName || '').toLowerCase();
+        case 'groupe':     return getLabel(m.sections?.[0]?.section)?.toLowerCase() ?? null;
+        case 'presence':   return m.dernierePresence ? new Date(m.dernierePresence).getTime() : null;
+        case 'plan':       return m.plan || null;
+        case 'montant':    return m.montantFinal ?? null;
+        case 'paye':       return totalPaye(m);
+        case 'reste':      return (m.montantFinal || 0) - totalPaye(m);
+        case 'finContrat': return m.finContrat ? new Date(m.finContrat).getTime() : null;
+        case 'paiement':   return getPaiementStatus(m).label;
+        default:           return null;
+      }
+    };
+
+    return [...base].sort((a, b) => {
+      const va = cle(a), vb = cle(b);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;   // les vides toujours en bas
+      if (vb === null) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * tri.sens;
+      return String(va).localeCompare(String(vb), 'fr') * tri.sens;
+    });
+  }, [members, suiviFilter, tri, getLabel]);
 
   // Statut de paiement en temps réel — tient compte de la fin de contrat :
   // un échéancier soldé n'est « à jour » que tant que le contrat court.
@@ -343,16 +383,33 @@ export function Membres() {
                 <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 font-extrabold uppercase text-[10px] tracking-wider">
                   {modeFacture && <th className="py-3 px-4 w-10">✔</th>}
                   <th className="py-3 px-4 w-16">#</th>
-                  <th className="py-3 px-4">Nom</th>
-                  <th className="py-3 px-4">Prénom</th>
-                  <th className="py-3 px-4">Groupe</th>
-                  <th className="py-3 px-4">Dernière présence</th>
-                  <th className="py-3 px-4">Plan</th>
-                  <th className="py-3 px-4 text-right">Montant final</th>
-                  <th className="py-3 px-4 text-right">Total payé</th>
-                  <th className="py-3 px-4 text-right">Reste dû</th>
-                  <th className="py-3 px-4">Fin contrat</th>
-                  <th className="py-3 px-4 text-center">Statut paiement</th>
+                  {([
+                    ['lastName', 'Nom', ''],
+                    ['firstName', 'Prénom', ''],
+                    ['groupe', 'Groupe', ''],
+                    ['presence', 'Dernière présence', ''],
+                    ['plan', 'Plan', ''],
+                    ['montant', 'Montant final', 'text-right'],
+                    ['paye', 'Total payé', 'text-right'],
+                    ['reste', 'Reste dû', 'text-right'],
+                    ['finContrat', 'Fin contrat', ''],
+                    ['paiement', 'Statut paiement', 'text-center'],
+                  ] as const).map(([col, label, align]) => (
+                    <th key={col} className={`py-3 px-4 ${align}`}>
+                      <button
+                        onClick={() => basculerTri(col)}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-cshp-red transition-colors ${
+                          tri?.col === col ? 'text-cshp-red' : ''
+                        }`}
+                        title={`Trier par ${label.toLowerCase()}`}
+                      >
+                        {label}
+                        <span className={tri?.col === col ? '' : 'opacity-25'}>
+                          {tri?.col === col && tri.sens === -1 ? '▼' : '▲'}
+                        </span>
+                      </button>
+                    </th>
+                  ))}
                   <th className="py-3 px-4 text-center">Actions</th>
                 </tr>
               </thead>
