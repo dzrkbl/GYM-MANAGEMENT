@@ -18,6 +18,7 @@ import { Import } from './pages/admin/Import';
 import { Audit } from './pages/admin/Audit';
 import { Communications } from './pages/admin/Communications';
 import { Prospects } from './pages/admin/Prospects';
+import { Pilotage } from './pages/admin/Pilotage';
 import { Inventaire } from './pages/admin/Inventaire';
 import { Evenements } from './pages/admin/Evenements';
 
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/admin/audit" element={<Audit />} />
             <Route path="/admin/communications" element={<Communications />} />
             <Route path="/admin/prospects" element={<Prospects />} />
+            <Route path="/admin/pilotage" element={<Pilotage />} />
             <Route path="/admin/inventaire" element={<Inventaire />} />
             <Route path="/admin/evenements" element={<Evenements />} />
             <Route path="/coachs" element={<Coachs />} />

@@ -470,6 +470,15 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 - **Pointage** (coachs) : liste des ACTIFS de la section du jour + **badge de
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
   que le coach fasse le rappel en personne.
+- **Pilotage** (`/admin/pilotage`, ADMIN) : arrivées et départs mois par mois
+  (même unité, un seul axe), motifs de départ, provenance des inscriptions,
+  entonnoir des prospects, et la liste des départs (qui sert aussi de vue
+  tableau accessible). Deux teintes seulement, validées daltonisme et
+  contraste : le **bleu suit les arrivées, le rouge les départs** dans tous
+  les graphiques.
+- **Audit** (`/admin/audit`) : filtres par nature (pointages, membres,
+  paiements, erreurs) — sans eux un pointage se noyait dans les 200 dernières
+  entrées.
 - **Calendrier** (`/planning`), onglet Mois : un clic sur un cours ouvre la
   **séance** (qui était présent, lien vers chaque fiche, et « pointé par X le Y »
   avec un avertissement si la saisie est postérieure au jour du cours). Les

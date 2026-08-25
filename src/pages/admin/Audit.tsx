@@ -26,11 +26,32 @@ const ACTION_STYLE: Record<string, string> = {
 const ENTITY_LABEL: Record<string, string> = {
   Member: 'Membre',
   PaymentVersement: 'Paiement',
+  Pointage: 'Pointage',
+  Retention: 'Rétention',
+  Evenement: 'Événement',
+  CalendrierSource: 'Calendrier',
+  Lead: 'Prospect',
+  Communication: 'Courriel groupé',
+  Courriel: 'Courriel',
+  Facture: 'Facture',
+  Sauvegarde: 'Sauvegarde',
+  Inventaire: 'Inventaire',
+  Affiliation: 'Affiliation',
 };
+
+// Filtres : sans eux, un pointage se noie parmi les paiements et les fiches.
+const FILTRES = [
+  { valeur: 'TOUS', label: 'Tout' },
+  { valeur: 'Pointage', label: 'Pointages' },
+  { valeur: 'Member', label: 'Membres' },
+  { valeur: 'PaymentVersement', label: 'Paiements' },
+  { valeur: 'ERREUR', label: 'Erreurs' },
+];
 
 export function Audit() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [filtre, setFiltre] = useState('TOUS');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -47,6 +68,12 @@ export function Audit() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  const visibles = filtre === 'TOUS'
+    ? logs
+    : filtre === 'ERREUR'
+      ? logs.filter((l) => l.action === 'ERREUR')
+      : logs.filter((l) => l.entity === filtre);
+
   return (
     <div className="space-y-6">
       <div>
@@ -54,8 +81,25 @@ export function Audit() {
           <History className="text-cshp-red" /> Journal d'audit
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Traçabilité des modifications sur les membres et les paiements.
+          Traçabilité des modifications : membres, paiements, pointages, courriels.
         </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {FILTRES.map((f) => (
+          <button
+            key={f.valeur}
+            onClick={() => setFiltre(f.valeur)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+              filtre === f.valeur ? 'bg-cshp-red text-white border-cshp-red' : 'bg-white text-cshp-gray border-gray-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="text-xs text-gray-400 self-center ml-1">
+          {visibles.length} entrée(s)
+        </span>
       </div>
 
       {isLoading ? (
@@ -76,10 +120,10 @@ export function Audit() {
                 </tr>
               </thead>
               <tbody>
-                {logs.length === 0 ? (
+                {visibles.length === 0 ? (
                   <tr><td colSpan={5} className="py-6 px-4 text-center text-gray-400 italic">Aucune entrée pour le moment.</td></tr>
                 ) : (
-                  logs.map((log) => (
+                  visibles.map((log) => (
                     <tr key={log.id} className="border-t border-gray-100">
                       <td className="py-2.5 px-4 text-gray-500 whitespace-nowrap">
                         {new Date(log.createdAt).toLocaleString('fr-CA')}
