@@ -336,7 +336,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/membres` | connecté (SM filtré sur sa section) | inclut `sections` + `versements` (le Pointage et les badges s'en servent) + `dernierePresence` (dernier pointage PRESENT, une requête groupée) |
 | `POST /api/membres` | ADMIN, SM | calcule finContrat/montantFinal si plan fourni ; bienvenue + audit |
 | `PUT /api/membres/:id` | ADMIN, SM | partiel ; recalcul si plan/date/rabais changent ; **préserve l'identité des versements** (§3.5) ; `membreDepuis` → signupDate |
-| `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité |
+| `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité ; accepte `raisonDepart` (motif de départ, effacé au retour du membre). **La description d'audit `→ INACTIF` est lue par `/dashboard/churn`** : ne pas la modifier sans adapter la requête |
 | `DELETE /api/membres/:id?definitif=1` | ADMIN | refusé si paiements encaissés |
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
 | `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
@@ -355,6 +355,9 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/paiements?month&section&status` | connecté | vue mensuelle : dû ∪ payé du mois ; **le mois courant inclut tous les impayés échus** des mois passés (hors INACTIF) ; statut au jour civil |
 | `POST /api/paiements`, `PATCH /:id/payer`, etc. | ADMIN, SM | tous appellent activation + reçu |
 | `GET /api/dashboard/resume` | ADMIN | revenus (datePaiement), retards (membres distincts), **renouvellements échus**, présences semaine (lundi Montréal), masse salariale (source unique) |
+| `GET /api/dashboard/inscriptions?granularite&mois` | ADMIN | recrutement par période (semaine ISO / mois / trimestre), discipline et provenance. **Aucun filtre de statut** : un membre parti reste une inscription de son mois, sinon le passé se réécrit |
+| `GET /api/dashboard/churn?mois` | ADMIN | départs datés depuis le **journal d'audit** (`→ INACTIF`), jamais depuis `updatedAt` qui bouge à chaque retouche de fiche ; motifs, durée de vie moyenne, taux mensuel. Les départs sans trace d'audit sont marqués `dateEstimee` |
+| `GET /api/dashboard/conversion-funnel?jours` | ADMIN | entonnoir prospects → membres ; délai de conversion mesuré sur `ficheRecueAt` quand il existe |
 | `GET /api/dashboard/kpis` | ADMIN | MRR (contrats en cours seulement), recouvrement, rétention, **prévision 3 mois** (échéancier hors INACTIF + renouvellements attendus par mois) |
 | `GET /api/rapports/financier?mois&annee&cumul=` | ADMIN | mode période/cumul réel ; ou `?from&to` : rapport détaillé (encaissé = payé dans la période, retards+**renouvellementsEchus** pour la relance, présences honnêtes, masse salariale mois écoulés) |
 | `GET /api/rapports/export-csv` | ADMIN | export CSV |

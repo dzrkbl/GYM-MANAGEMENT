@@ -65,6 +65,10 @@ model Member {
   dateInscription        DateTime?
   finContrat             DateTime?
 
+  // Motif du départ, saisi au passage en INACTIF. Sert au tableau d'attrition :
+  // savoir POURQUOI on perd des membres vaut plus que le taux lui-même.
+  raisonDepart           String?
+
   // Plan tarifaire
   plan                   Plan?       // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
   prixBase               Float?

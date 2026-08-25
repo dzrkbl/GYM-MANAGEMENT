@@ -613,18 +613,31 @@ router.post('/:id/versements', authenticate, requireRole(['ADMIN', 'SECTION_MANA
 // inactif un membre parti).
 router.patch('/:id/statut', authenticate, requireRole(['ADMIN', 'SECTION_MANAGER']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { status } = z.object({ status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']) }).parse(req.body);
+    const { status, raisonDepart } = z.object({
+      status: z.enum(['ACTIF', 'INACTIF', 'EN_ATTENTE']),
+      raisonDepart: z.string().max(300).optional().nullable(),
+    }).parse(req.body);
 
     const member = await prisma.member.update({
       where: { id: req.params.id },
-      data: { status },
+      data: {
+        status,
+        // Le motif n'a de sens que sur un départ ; il s'efface au retour du
+        // membre, pour ne pas traîner un « déménagement » sur un dossier actif.
+        ...(status === 'INACTIF' ? { raisonDepart: raisonDepart || null } : { raisonDepart: null }),
+      },
     });
 
+    // La description est LUE par /api/dashboard/churn pour dater précisément
+    // les départs (`updatedAt` bouge à chaque modification de fiche et ne peut
+    // pas servir de date de départ). Ne pas changer « → INACTIF » sans adapter
+    // la requête correspondante.
     logAudit(req, {
       action: 'UPDATE',
       entity: 'Member',
       entityId: member.id,
-      description: `Statut de ${member.firstName} ${member.lastName} → ${status}`,
+      description: `Statut de ${member.firstName} ${member.lastName} → ${status}`
+        + (status === 'INACTIF' && raisonDepart ? ` (motif : ${raisonDepart})` : ''),
     });
 
     return sendSuccess(res, member);
