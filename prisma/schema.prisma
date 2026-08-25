@@ -221,6 +221,24 @@ model Lead {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  notes       LeadNote[]
+}
+
+// Fil de suivi d'un prospect : qui l'a appelé, ce qui s'est dit, quoi faire.
+// Ajout SEULEMENT (jamais réécrit) : deux administrateurs qui se partagent les
+// relances doivent voir l'historique complet, pas la dernière version écrasée.
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  texte     String
+  auteurId  String?
+  auteurNom String?  // dénormalisé comme AuditLog : survit à la suppression du compte
+  createdAt DateTime @default(now())
+
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
 }
 
 model Section {
