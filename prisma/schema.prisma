@@ -160,10 +160,20 @@ model Attendance {
   date      DateTime
   status    String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED
 
+  // Traçabilité du pointage : QUAND la saisie a eu lieu (à ne pas confondre
+  // avec `date`, le jour du COURS) et QUI l'a faite. Volontairement nullables
+  // et SANS valeur par défaut : les pointages antérieurs à cette traçabilité
+  // n'ont pas d'historique, et les dater du jour de la migration serait
+  // mensonger. Une valeur nulle se lit « inconnu ».
+  pointeAt     DateTime?
+  pointeParId  String?
+  pointeParNom String?   // dénormalisé, comme AuditLog : survit à la suppression du compte
+
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([memberId, courseId, date])
+  @@index([courseId, date])
 }
 
 model Grade {
