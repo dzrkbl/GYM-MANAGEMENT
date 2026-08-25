@@ -99,8 +99,22 @@ router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: 
   try {
     const status = req.query.status as string | undefined;
     const where = status && (STATUTS as readonly string[]).includes(status) ? { status } : {};
-    const leads = await prisma.lead.findMany({ where, orderBy: { createdAt: 'desc' } });
-    return sendSuccess(res, leads);
+    const leads = await prisma.lead.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { notes: true } },
+        // Seulement la dernière : le badge affiche un compte, la modale le fil.
+        notes: { orderBy: { createdAt: 'desc' }, take: 1, select: { texte: true, auteurNom: true, createdAt: true } },
+      },
+    });
+    return sendSuccess(res, leads.map((l) => ({
+      ...l,
+      nbNotes: l._count.notes,
+      derniereNote: l.notes[0] ?? null,
+      _count: undefined,
+      notes: undefined,
+    })));
   } catch (error) {
     return sendError(res, 'Erreur lors de la récupération des prospects', 500);
   }
@@ -197,6 +211,56 @@ router.post('/:id/convert', authenticate, requireRole(['ADMIN']), async (req: Re
     return sendSuccess(res, { membreId: membre.id }, 201);
   } catch (error) {
     return sendError(res, 'Erreur lors de la conversion', 500);
+  }
+});
+
+// ---------- Fil de suivi (notes internes) ----------
+// En ajout seulement : deux administrateurs qui se partagent les relances
+// doivent voir l'historique complet, pas la dernière version écrasée.
+
+// GET /api/leads/:id/notes
+router.get('/:id/notes', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const notes = await prisma.leadNote.findMany({
+      where: { leadId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return sendSuccess(res, notes);
+  } catch {
+    return sendError(res, 'Erreur lors du chargement du suivi', 500);
+  }
+});
+
+// POST /api/leads/:id/notes
+router.post('/:id/notes', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { texte } = z.object({ texte: z.string().min(1, 'Note vide').max(2000) }).parse(req.body);
+    const lead = await prisma.lead.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!lead) return sendError(res, 'Prospect introuvable', 404);
+
+    const u = req.user;
+    const note = await prisma.leadNote.create({
+      data: {
+        leadId: lead.id,
+        texte: texte.trim(),
+        auteurId: u?.userId ?? null,
+        auteurNom: u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.userId : null,
+      },
+    });
+    return sendSuccess(res, note, 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Note invalide', 400, error.issues);
+    return sendError(res, "Erreur lors de l'ajout de la note", 500);
+  }
+});
+
+// DELETE /api/leads/notes/:noteId — corriger une saisie, pas réécrire l'histoire.
+router.delete('/notes/:noteId', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    await prisma.leadNote.delete({ where: { id: req.params.noteId } });
+    return sendSuccess(res, { ok: true });
+  } catch {
+    return sendError(res, 'Erreur lors de la suppression', 500);
   }
 });
 

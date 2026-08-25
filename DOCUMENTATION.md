@@ -337,6 +337,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `POST /api/membres` | ADMIN, SM | calcule finContrat/montantFinal si plan fourni ; bienvenue + audit |
 | `PUT /api/membres/:id` | ADMIN, SM | partiel ; recalcul si plan/date/rabais changent ; **préserve l'identité des versements** (§3.5) ; `membreDepuis` → signupDate |
 | `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité ; accepte `raisonDepart` (motif de départ, effacé au retour du membre). **La description d'audit `→ INACTIF` est lue par `/dashboard/churn`** : ne pas la modifier sans adapter la requête |
+| ⚠️ `PUT /api/membres/:id` **n'écrit PAS le statut** | | seul `PATCH /:id/statut` le change. Le sélecteur de statut de l'assistant d'édition était donc sans effet : il a été retiré, remplacé par un renvoi vers la fiche |
 | `DELETE /api/membres/:id?definitif=1` | ADMIN | refusé si paiements encaissés |
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
 | `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
@@ -366,6 +367,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `POST /api/import` | ADMIN | CSV membres + versements (§9.3) |
 | `POST /api/inscription` (public, rate-limité), `GET /api/inscription/sections`, `POST /api/inscription/inviter` (ADMIN/SM) | | fiche en ligne (§2) ; inviter = envoi du lien par courriel |
 | `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) ; renseigne `membreId`. **Filet anti-perte** : si l'écriture en base échoue, le lead part par courriel à INSCRIPTION_NOTIF_EMAIL et le site reçoit un succès |
+| `GET/POST /api/leads/:id/notes`, `DELETE /api/leads/notes/:noteId` | ADMIN | fil de suivi d'un prospect, **en ajout seulement** (deux administrateurs se partagent les relances : l'historique ne doit jamais être écrasé). La liste des prospects renvoie `nbNotes` pour le compteur du bouton |
 | `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections via `sendEmailsEnMasse` (batch Resend 100/requête — l'envoi parallèle individuel plafonnait à ~10 : limite 2 req/s) ; test vers adresse au choix ; diagnostic transport |
 | `POST /api/backup` | ADMIN | sauvegarde Excel immédiate |
 | `GET/POST/PUT/DELETE /api/inventaire` + `POST /:id/stock {delta}` | ADMIN | CRUD articles ; DELETE = suppression si aucune vente, sinon désactivation ; `POST /api/inventaire/seed-karate` = catalogue karaté idempotent (prix de VENTE fournis par le club, coût de revient à saisir) |
@@ -499,6 +501,8 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   d'abord), liens `tel:` et `sms:` avec message pré-rédigé, bouton « Noté »
   (marquage optimiste, annulable). Le fond de la démarche : §2 et §3 de
   `marketing/11-croissance-par-les-donnees.md`.
+- **Prospects** : bouton **« Note · n »** ouvrant le fil de suivi en modale
+  (aucune hauteur ajoutée à la carte) ; chaque note est signée et horodatée.
 - **Prospects** : leads avec date de demande + badge « X j sans suivi »,
   conversion, invitation à la fiche en ligne. Carte **verte** + badge
   « 📋 Fiche reçue le X » quand la fiche en ligne correspondante arrive,

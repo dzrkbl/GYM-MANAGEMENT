@@ -7,7 +7,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Spinner } from '../../components/ui/Spinner';
 import { Badge } from '../../components/ui/Badge';
-import { UserPlus, ArrowRightCircle, Trash2 } from 'lucide-react';
+import { UserPlus, ArrowRightCircle, Trash2, MessageSquare } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
 
 interface Lead {
   id: string;
@@ -25,6 +26,15 @@ interface Lead {
   createdAt: string;
   ficheRecueAt: string | null; // fiche d'inscription en ligne reçue
   membreId: string | null;     // dossier membre créé par la fiche ou la conversion
+  nbNotes: number;
+  derniereNote: { texte: string; auteurNom: string | null; createdAt: string } | null;
+}
+
+interface Note {
+  id: string;
+  texte: string;
+  auteurNom: string | null;
+  createdAt: string;
 }
 
 const STATUTS: { value: string; label: string; variant: any }[] = [
@@ -46,6 +56,45 @@ export function Prospects() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', sport: 'KARATE', requestType: 'ESSAI' });
   const [saving, setSaving] = useState(false);
+
+  // Fil de suivi : ouvert dans une modale, pour ne pas alourdir la carte.
+  const [suivi, setSuivi] = useState<Lead | null>(null);
+  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [nouvelleNote, setNouvelleNote] = useState('');
+  const [envoiNote, setEnvoiNote] = useState(false);
+
+  useEffect(() => {
+    if (!suivi) { setNotes(null); setNouvelleNote(''); return; }
+    let annule = false;
+    apiFetch<Note[]>(`/leads/${suivi.id}/notes`)
+      .then((r) => { if (!annule) setNotes(r); })
+      .catch(() => { if (!annule) setNotes([]); });
+    return () => { annule = true; };
+  }, [suivi]);
+
+  const ajouterNote = async () => {
+    const texte = nouvelleNote.trim();
+    if (!texte || !suivi) return;
+    setEnvoiNote(true);
+    try {
+      const note = await apiFetch<Note>(`/leads/${suivi.id}/notes`, { method: 'POST', body: JSON.stringify({ texte }) });
+      setNotes((p) => [note, ...(p || [])]);
+      setNouvelleNote('');
+      // Le compteur de la carte suit sans recharger toute la liste.
+      setLeads((p) => p.map((l) => (l.id === suivi.id ? { ...l, nbNotes: (l.nbNotes || 0) + 1 } : l)));
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors de l'ajout de la note");
+    } finally { setEnvoiNote(false); }
+  };
+
+  const supprimerNote = async (id: string) => {
+    if (!confirm('Supprimer cette note du fil de suivi ?')) return;
+    try {
+      await apiFetch(`/leads/notes/${id}`, { method: 'DELETE' });
+      setNotes((p) => (p || []).filter((n) => n.id !== id));
+      setLeads((p) => p.map((l) => (l.id === suivi?.id ? { ...l, nbNotes: Math.max(0, (l.nbNotes || 1) - 1) } : l)));
+    } catch (err: any) { setError(err?.message || 'Suppression impossible'); }
+  };
 
   const load = async () => {
     setIsLoading(true);
@@ -234,6 +283,15 @@ export function Prospects() {
                     <ArrowRightCircle size={16} className="mr-1" /> Convertir
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  onClick={() => setSuivi(l)}
+                  className={`!min-h-0 h-9 px-3 text-xs ${l.nbNotes > 0 ? '!border-slate-400 !text-slate-800' : ''}`}
+                  title="Fil de suivi : qui a appelé, ce qui s'est dit"
+                >
+                  <MessageSquare size={15} className="mr-1" />
+                  Note{l.nbNotes > 0 ? ` · ${l.nbNotes}` : ''}
+                </Button>
                 {l.membreId && (
                   <Button
                     variant="outline"
@@ -253,6 +311,66 @@ export function Prospects() {
           })}
         </div>
       )}
+
+      {/* Fil de suivi. Volontairement hors de la carte : la liste reste dense,
+          et l'historique complet vit ici. */}
+      <Modal
+        isOpen={!!suivi}
+        onClose={() => setSuivi(null)}
+        title={suivi ? `Suivi — ${suivi.firstName} ${suivi.lastName}` : ''}
+        width="lg"
+      >
+        {suivi && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <textarea
+                value={nouvelleNote}
+                onChange={(e) => setNouvelleNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ajouterNote(); }}
+                rows={3}
+                placeholder="Appelé, pas de réponse. Rappeler jeudi soir…"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cshp-red"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-gray-400">
+                  Signé de votre nom et horodaté. Ctrl+Entrée pour enregistrer.
+                </span>
+                <Button onClick={ajouterNote} disabled={envoiNote || !nouvelleNote.trim()} className="!min-h-0 h-9 px-4 text-xs">
+                  {envoiNote ? 'Ajout…' : 'Ajouter'}
+                </Button>
+              </div>
+            </div>
+
+            {notes === null ? (
+              <div className="py-6 flex justify-center"><Spinner /></div>
+            ) : notes.length === 0 ? (
+              <p className="text-sm text-gray-400 italic py-4 text-center">
+                Aucune note. La première trace de suivi commence ici.
+              </p>
+            ) : (
+              <ul className="space-y-2 max-h-[45vh] overflow-y-auto">
+                {notes.map((n) => (
+                  <li key={n.id} className="group p-3 rounded-lg border border-gray-100 bg-gray-50/60">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-cshp-black whitespace-pre-line flex-1">{n.texte}</p>
+                      <button
+                        onClick={() => supprimerNote(n.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity shrink-0"
+                        title="Supprimer cette note"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {n.auteurNom || 'Auteur inconnu'} · {new Date(n.createdAt).toLocaleString('fr-CA')}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
