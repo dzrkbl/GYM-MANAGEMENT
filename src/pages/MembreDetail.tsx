@@ -463,10 +463,21 @@ export function MembreDetail() {
                   value={member.status}
                   onChange={async (e) => {
                     const nouveau = e.target.value;
+                    // Le motif de départ alimente le tableau d'attrition :
+                    // savoir POURQUOI on perd des membres vaut plus que le taux.
+                    // Facultatif : annuler la saisie enregistre quand même.
+                    let raisonDepart: string | null = null;
+                    if (nouveau === 'INACTIF') {
+                      raisonDepart = prompt(
+                        `Pourquoi ${member.firstName} quitte-t-il/elle le centre ?\n\n` +
+                        'Exemples : déménagement · horaire · budget · blessure · perte d\'intérêt · autre sport\n' +
+                        '(facultatif, mais très utile pour comprendre les départs)'
+                      );
+                    }
                     try {
                       await apiFetch(`/membres/${member.id}/statut`, {
                         method: 'PATCH',
-                        body: JSON.stringify({ status: nouveau }),
+                        body: JSON.stringify({ status: nouveau, raisonDepart: raisonDepart?.trim() || null }),
                       });
                       fetchMemberData();
                     } catch (err: any) {
