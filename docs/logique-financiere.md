@@ -1,0 +1,169 @@
+# Logique financière : Paiements, Finances, Rapports
+
+Établi le 26 août 2026 en relisant le code. Ce document répond à une question
+simple et légitime : **quand un chiffre s'affiche, est-il avec ou sans taxes ?**
+
+---
+
+## 1. La règle d'or : tout prix affiché est TAXES INCLUSES
+
+C'est la méthode québécoise, et elle est appliquée partout dans le code.
+
+| Formule | Prix affiché au parent | Ce qui reste au club | Taxes à remettre |
+|---|---:|---:|---:|
+| Trimestriel | 250,00 $ | **217,44 $** | 32,56 $ |
+| Annuel | 790,00 $ | **687,11 $** | 102,89 $ |
+
+Le diviseur est `DIVISEUR_TAXES = 1,14975` (TPS 5 % + TVQ 9,975 %), défini une
+seule fois dans `src/lib/finances.ts` et importé partout ailleurs.
+
+**Conséquence importante :** le montant qu'un parent paie n'est jamais le
+revenu du club. Environ **13 % de chaque encaissement appartient à Revenu
+Québec** et devra être remis.
+
+### Où la conversion a lieu
+
+| Endroit | Ce qui est affiché |
+|---|---|
+| Fiche membre, échéancier, page Paiements | Montants **taxes incluses** (ce que le parent doit) |
+| Reçu PDF (`recus.ts`) | Détail : sous-total, TPS, TVQ, total |
+| Facture annuelle (`factures.ts`) | Même détail |
+| Module financier, ligne « Revenus avant taxes » | Montant **net** (÷ 1,14975) |
+| Rapport de rentabilité, « revenuAnnuelNet » | Montant **net** |
+
+Il n'y a donc **aucune incohérence côté revenus** : tout ce qui est affiché au
+parent est taxes incluses, et tout ce qui sert à mesurer la rentabilité est
+ramené net. La cohérence est réelle.
+
+---
+
+## 2. Les charges : aucune taxe n'est traitée
+
+Les dépenses sont additionnées **telles que saisies**, sans aucune conversion :
+
+```
+totalCharges = charges fixes + loyer + masse salariale
+```
+
+Rien dans le code ne distingue une charge taxable d'une charge exonérée.
+
+---
+
+## 3. L'asymétrie, et pourquoi elle compte
+
+Le résultat est calculé ainsi, dans le module financier comme dans le rapport
+de rentabilité :
+
+```
+marge = (revenus ÷ 1,14975)  −  (charges telles que saisies)
+         ^^^^^^^^^^^^^^^^^      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         NET de taxes            TAXES INCLUSES
+```
+
+**On compare deux choses qui ne sont pas dans la même unité.** Le loyer de
+5 660 $ est un montant taxes incluses ; sa part de taxes est récupérable en
+crédits de taxe sur les intrants (CTI et RTI), puisque le centre est inscrit
+aux fichiers TPS et TVQ (les numéros figurent sur les reçus).
+
+Impact mensuel, avec les charges actuelles :
+
+| Charge | Montant saisi | Taxable ? | Taxe récupérable |
+|---|---:|---|---:|
+| Loyer | 5 660,00 $ | Oui | 737,19 $ |
+| Location automobile | 608,00 $ | Oui | 79,19 $ |
+| Cellulaires | 254,00 $ | Oui | 33,08 $ |
+| Hydro-Québec | 250,00 $ | Oui | 32,56 $ |
+| Assurance auto | 160,00 $ | **Non** (service financier exonéré) | — |
+| Assurance gym | 222,00 $ | **Non** (service financier exonéré) | — |
+| Masse salariale | variable | **Non** (aucune taxe sur les salaires) | — |
+
+**Total non déduit : environ 882 $/mois, soit près de 10 600 $ par an.**
+
+Autrement dit, **le résultat affiché est plus pessimiste que la réalité**, et
+le nombre de membres nécessaires à l'équilibre est surestimé d'autant.
+
+### Ce qu'il faut décider (question de comptabilité, pas de code)
+
+Deux traitements sont défendables, et le choix appartient au comptable :
+
+1. **Le club réclame ses CTI/RTI** (cas normal d'une entreprise inscrite) :
+   les charges taxables devraient être ramenées nettes, comme les revenus. Le
+   calcul actuel sous-estime alors le résultat.
+2. **Le club ne les réclame pas** : le calcul actuel est correct, mais il faut
+   savoir que le centre laisse ~10 600 $ par an sur la table.
+
+Tant que ce n'est pas tranché, **ne pas modifier le calcul** : un chiffre faux
+dans un sens vaut mieux qu'un chiffre changé sans décision.
+
+---
+
+## 4. Comment les plans s'annualisent
+
+Le rapport de rentabilité annualise le contrat de chaque membre ACTIF :
+
+| Plan | Calcul | Brut annuel | Net annuel |
+|---|---|---:|---:|
+| Annuel | `montantFinal` | 790,00 $ | 687,11 $ |
+| Trimestriel | `montantFinal × 4` | 1 000,00 $ | 869,75 $ |
+
+**Un membre trimestriel rapporte 210 $ de plus par an qu'un membre annuel**,
+soit 27 % de plus. Ce n'est pas une anomalie : l'annuel est un **rabais de
+21 % accordé contre un paiement d'avance**, ce qui achète de la trésorerie et
+supprime le risque d'impayé pendant douze mois.
+
+**La limite à connaître :** l'annualisation suppose que le membre trimestriel
+renouvelle **quatre fois**. Avec de l'attrition, c'est optimiste. Le rapport
+l'assume dans son en-tête (« hypothèse effectif constant »), mais gardez en
+tête que la projection des trimestriels est un plafond, pas une prévision.
+
+---
+
+## 5. Le seuil de rentabilité
+
+```
+membresNecessaires = (chargesAnnuelles + ponctuelles12Mois) ÷ revenuMoyenNetParMembre
+```
+
+Avec :
+
+- `chargesAnnuelles` = (masse salariale + loyer + charges récurrentes du mois
+  courant) × 12. **Le mois courant est extrapolé sur toute l'année** : un mois
+  atypique fausse la projection.
+- `ponctuelles12Mois` = dépenses ponctuelles des 12 derniers mois (fenêtre
+  glissante).
+- `revenuMoyenNetParMembre` = revenu annuel net ÷ membres payants.
+
+**Trois réserves à garder en tête :**
+
+1. Le numérateur est taxes incluses, le dénominateur est net (voir §3) : le
+   seuil est donc **surestimé**.
+2. Les membres sans plan ni montant sont exclus du calcul et listés dans
+   `sansContrat` : s'il y en a beaucoup, le seuil est faussé.
+3. Les revenus d'équipement, d'affiliations et de frais de fédération sont
+   **volontairement exclus** : ce ne sont pas des revenus de cotisation, et les
+   frais de fédération ne font que transiter par le club.
+
+---
+
+## 6. Vocabulaire piégeux
+
+Deux noms de champs prêtent à confusion et méritent d'être lus avec attention :
+
+| Champ | Ce que le nom suggère | Ce que c'est vraiment |
+|---|---|---|
+| `revenusAvantTaxes` | « avant d'avoir payé les taxes » | Le montant **net**, une fois les taxes retirées |
+| `brut` (dans les revenus) | Chiffre d'affaires | Encaissé **+ en attente**, taxes incluses |
+
+---
+
+## 7. Ce qui est solide
+
+Pour finir sur ce qui ne bouge pas :
+
+- **Une seule source pour la masse salariale** (`masseSalarialePourMois`) :
+  tableau de bord, module financier et rapports passent tous par elle.
+- **Une seule constante de taxes** (`DIVISEUR_TAXES`), importée partout.
+- **Les membres INACTIF sont exclus des créances** : un départ n'est pas une
+  dette à recouvrer.
+- **Le jour civil de Montréal** sert de référence pour « échu », pas l'heure
+  UTC du serveur.
