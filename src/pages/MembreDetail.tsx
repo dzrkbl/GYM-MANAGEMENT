@@ -47,6 +47,27 @@ export function MembreDetail() {
   const [quickEdit, setQuickEdit] = useState<any>({});
   const [isQuickSaving, setIsQuickSaving] = useState(false);
 
+  // --- Diagnostic des courriels automatiques (ADMIN) : répond à « pourquoi
+  // ce membre ne reçoit-il rien ? » sans fouiller la base. ---
+  const [courriels, setCourriels] = useState<any>(null);
+  const [isRearming, setIsRearming] = useState(false);
+  const chargerCourriels = () => {
+    if (id && user?.role === 'ADMIN') {
+      apiFetch<any>(`/membres/${id}/courriels`).then(setCourriels).catch(() => setCourriels(null));
+    }
+  };
+  useEffect(chargerCourriels, [id, user?.role]);
+
+  const reactiverRenouvellement = async () => {
+    if (!id) return;
+    setIsRearming(true);
+    try {
+      await apiFetch(`/membres/${id}/reactiver-renouvellement`, { method: 'POST' });
+      chargerCourriels();
+    } catch { /* l'état affiché reste inchangé */ }
+    finally { setIsRearming(false); }
+  };
+
   const openQuickEdit = () => {
     setQuickEdit({
       groupe: member?.sections?.[0]?.section || '',
@@ -388,7 +409,12 @@ export function MembreDetail() {
     <div className="max-w-3xl mx-auto space-y-6 pb-12 px-4">
       {/* Bouton retour et modification */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-0 md:relative z-10">
-        <button onClick={() => navigate('/membres')} className="flex items-center text-gray-500 hover:text-gray-800 cursor-pointer font-semibold text-sm">
+        <button
+          // Retour à la page précédente (conserve le groupe/filtre consulté) ;
+          // repli sur la liste si la fiche a été ouverte par lien direct.
+          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/membres'))}
+          className="flex items-center text-gray-500 hover:text-gray-800 cursor-pointer font-semibold text-sm"
+        >
           <ArrowLeft className="mr-2" size={20} /> Retour aux membres
         </button>
         <div className="flex items-center gap-2">
@@ -437,10 +463,21 @@ export function MembreDetail() {
                   value={member.status}
                   onChange={async (e) => {
                     const nouveau = e.target.value;
+                    // Le motif de départ alimente le tableau d'attrition :
+                    // savoir POURQUOI on perd des membres vaut plus que le taux.
+                    // Facultatif : annuler la saisie enregistre quand même.
+                    let raisonDepart: string | null = null;
+                    if (nouveau === 'INACTIF') {
+                      raisonDepart = prompt(
+                        `Pourquoi ${member.firstName} quitte-t-il/elle le centre ?\n\n` +
+                        'Exemples : déménagement · horaire · budget · blessure · perte d\'intérêt · autre sport\n' +
+                        '(facultatif, mais très utile pour comprendre les départs)'
+                      );
+                    }
                     try {
                       await apiFetch(`/membres/${member.id}/statut`, {
                         method: 'PATCH',
-                        body: JSON.stringify({ status: nouveau }),
+                        body: JSON.stringify({ status: nouveau, raisonDepart: raisonDepart?.trim() || null }),
                       });
                       fetchMemberData();
                     } catch (err: any) {
@@ -624,6 +661,66 @@ export function MembreDetail() {
               </div>
             )}
           </Card>
+
+          {/* Courriels automatiques : qui reçoit quoi, et le renouvellement
+              en cours est-il armé ? (diagnostic ADMIN) */}
+          {user?.role === 'ADMIN' && courriels && (
+            <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-widest border-b pb-1">Courriels automatiques</h3>
+              <div className="space-y-3 text-sm">
+                <div>
+                  <span className="text-gray-400 block text-xs uppercase font-extrabold">Destinataire des rappels et reçus</span>
+                  {courriels.destinataire ? (
+                    <span className="text-gray-800 font-semibold break-all">{courriels.destinataire}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-red-600 font-bold">
+                      <AlertTriangle size={14} /> AUCUNE adresse : ce membre ne reçoit aucun courriel automatique
+                    </span>
+                  )}
+                  {courriels.statut === 'INACTIF' && (
+                    <span className="block text-xs text-red-600 font-semibold mt-1">Membre INACTIF : exclu de tous les rappels automatiques.</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-xs uppercase font-extrabold">Rappels de renouvellement (contrat en cours)</span>
+                  {courriels.renouvellement.etat === 'SANS_CONTRAT' && (
+                    <span className="text-gray-500 font-medium">Pas de fin de contrat définie : aucun rappel prévu.</span>
+                  )}
+                  {courriels.renouvellement.etat === 'ARME' && (
+                    <span className="text-emerald-600 font-semibold">🟢 Armés : partiront automatiquement (30 jours avant, 7 jours avant, à l'échéance).</span>
+                  )}
+                  {courriels.renouvellement.etat === 'COUVERT' && (
+                    <div className="space-y-2">
+                      <span className="text-amber-600 font-semibold block">
+                        🟠 Déjà couverts ({courriels.renouvellement.etapesCouvertes.join(', ')}) : plus aucun rappel ne partira pour ce contrat.
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        Soit ils ont réellement été envoyés, soit ils ont été neutralisés lors d'un import
+                        (protection anti-rattrapage). Réarmer efface ces traces : la prochaine tournée
+                        renverra l'étape appropriée au parent.
+                      </p>
+                      <Button variant="outline" onClick={reactiverRenouvellement} disabled={isRearming}>
+                        {isRearming ? 'Réarmement…' : 'Réarmer les rappels de renouvellement'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {courriels.historique?.length > 0 && (
+                  <div>
+                    <span className="text-gray-400 block text-xs uppercase font-extrabold mb-1">Derniers courriels automatiques envoyés</span>
+                    <ul className="space-y-0.5 text-xs text-gray-600">
+                      {courriels.historique.slice(0, 8).map((h: any, i: number) => (
+                        <li key={i} className="flex justify-between gap-2">
+                          <span className="font-semibold">{h.type}</span>
+                          <span className="text-gray-400">{new Date(h.sentAt).toLocaleDateString('fr-CA')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* Grille de Ceintures et Historique des Passages de Grades */}
           <Card className="p-6 bg-white border border-gray-100 shadow-sm space-y-4">

@@ -6,7 +6,7 @@ contexte. Lisez les sections 1 à 3 avant de toucher au code : elles contiennent
 les règles métier et les conventions dont la violation a déjà causé des bugs
 réels (documentés en §10).
 
-Dernière mise à jour majeure : **2026-08-12**.
+Dernière mise à jour majeure : **2026-08-22**.
 
 ---
 
@@ -96,6 +96,19 @@ commence par défaut à la FIN de l'ancien** (continuité du service : l'athlèt
 a continué à venir même si le parent paie avec quelques semaines de retard) —
 la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 `signupDate` ne bouge jamais ; `finContrat` se recalcule.
+
+### Taxes : la règle d'or
+
+**Tout prix affiché est TAXES INCLUSES** (250 $ et 790 $ comprennent TPS et
+TVQ). Le diviseur `DIVISEUR_TAXES = 1,14975` vit dans `src/lib/finances.ts` et
+est importé partout. Un encaissement de 790 $ laisse **687,11 $ au club** ;
+102,89 $ appartiennent à Revenu Québec.
+
+⚠️ **Asymétrie connue, non corrigée** : le résultat compare des revenus NETS
+de taxes à des charges TAXES INCLUSES. Si le club réclame ses crédits de taxe
+sur les intrants, le résultat affiché est pessimiste d'environ 880 $/mois.
+Décision de comptabilité, pas de code : détail complet et impact chiffré dans
+`docs/logique-financiere.md`.
 
 ### Paiements, reçus, frais de retard, factures
 - Un paiement = un **versement** (`PaymentVersement`). Statut **dérivé** :
@@ -221,6 +234,11 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 - **UptimeRobot** pinge `GET /api/health` toutes les ~5 min : triple rôle —
   garder l'app éveillée (Render gratuit dort), démarrage rapide pour les
   usagers, et **déclencher la tournée quotidienne** (§7.1).
+- **Surveillance complète** (pannes silencieuses, site public, CORS, leads) :
+  voir `docs/surveillance.md` — workflow GitHub `surveillance.yml` 2×/jour,
+  bilan profond `/api/health/complet`, filet anti-perte de leads (courriel de
+  secours à l'admin si la base est indisponible), alerte immédiate si les
+  migrations échouent au déploiement.
 - **Bruit normal dans les logs** (ne pas « corriger ») :
   - `terminating connection due to administrator command` (57P01) : Neon coupe
     les connexions au repos ; Prisma se reconnecte seul.
@@ -269,6 +287,10 @@ la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 - **Attendance** — présences pointées (unique memberId+courseId+date). **Seuls
   les présents sont pointés** — il n'existe jamais de ligne ABSENT (d'où les
   taux calculés sur `séances × effectif`, §10.16).
+- **Evenement** porte `statut` (`CALENDRIER` = date de fédération informative,
+  `RETENU` = le club participe), `source`/`sourceUid` (dédup iCal, unique
+  ensemble), `dateFin` (dernier jour INCLUS) et `horaire`. **CalendrierSource**
+  = un abonnement .ics (code, url, discipline, dernière synchro).
 - **Lead**, **Section**, **Grade**, **User** (staff : ADMIN / SECTION_MANAGER /
   COACH ; mots de passe bcrypt), **AuditLog** (traçabilité, incl. les erreurs
   courriel `action='ERREUR', entity='Courriel'`), **ReminderLog** (§3.4),
@@ -324,12 +346,22 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | Route | Accès | Points clés |
 |---|---|---|
 | `POST /api/auth/login`, `GET /api/auth/me` | public / connecté | me lit la base (rôle à jour) |
-| `GET /api/membres` | connecté (SM filtré sur sa section) | inclut `sections` + `versements` (le Pointage et les badges s'en servent) |
+| `GET /api/membres` | connecté (SM filtré sur sa section) | inclut `sections` + `versements` (le Pointage et les badges s'en servent) + `dernierePresence` (dernier pointage PRESENT, une requête groupée) |
 | `POST /api/membres` | ADMIN, SM | calcule finContrat/montantFinal si plan fourni ; bienvenue + audit |
 | `PUT /api/membres/:id` | ADMIN, SM | partiel ; recalcul si plan/date/rabais changent ; **préserve l'identité des versements** (§3.5) ; `membreDepuis` → signupDate |
-| `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité |
+| `PATCH /api/membres/:id/statut` | ADMIN, SM | ACTIF/INACTIF/EN_ATTENTE, audité ; accepte `raisonDepart` (motif de départ, effacé au retour du membre). **La description d'audit `→ INACTIF` est lue par `/dashboard/churn`** : ne pas la modifier sans adapter la requête |
+| ⚠️ `PUT /api/membres/:id` **n'écrit PAS le statut** | | seul `PATCH /:id/statut` le change. Le sélecteur de statut de l'assistant d'édition était donc sans effet : il a été retiré, remplacé par un renvoi vers la fiche |
 | `DELETE /api/membres/:id?definitif=1` | ADMIN | refusé si paiements encaissés |
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
+| `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
+| `GET /api/retention` | connecté (portée par discipline) | liste d'appels : membres ACTIFS ayant manqué ≥ 2 **séances tenues** depuis leur dernière présence. Une séance « tenue » = date où au moins un membre du cours a été pointé → les fermetures et cours annulés ne comptent pour personne, sans calendrier à maintenir. Absences EXCUSED ignorées ; membres jamais pointés exclus (comptés à part) |
+| `POST/DELETE /api/retention/:id/contact` | connecté | note l'appel pour l'épisode d'absence en cours (`ReminderLog` type `RETENTION_APPEL`, refKey `membreId:dateDerniérePrésence`) : si le membre revient puis décroche à nouveau, un nouvel épisode démarre |
+| `POST /api/presences/pointer` | connecté | enregistre en plus `pointeAt`, `pointeParId`, `pointeParNom` (QUI a saisi et QUAND, distinct de `date` = jour du COURS) et UNE entrée d'audit par séance, pas par athlète |
+| `GET /api/presences?courseId&date` | connecté | présences d'une séance, triées par nom, avec la traçabilité. Alimente le panneau « séance » du calendrier |
+| `GET /api/calendrier?debut&fin` | connecté | événements DATÉS chevauchant la fenêtre (calendrier de saison + club). Les cours récurrents n'y sont PAS : la vue mois les projette depuis `/api/cours` |
+| `GET/POST/PUT/DELETE /api/calendrier/sources` + `POST /sources/:id/sync` | ADMIN | abonnements .ics des fédérations ; la synchro n'écrase que les champs de la fédération (titre, dates, horaire, lieu) et ne touche jamais au `statut` ni aux frais saisis au club. Supprimer une source NE supprime PAS les dates importées |
+| `PATCH /api/evenements/:id/statut` | ADMIN, SM | bascule `CALENDRIER` ↔ `RETENU` (le bouton « Intégrer au module Événements »). Refuse le retour à CALENDRIER si des inscriptions existent |
+| `POST /api/membres/:id/reactiver-renouvellement` | ADMIN | efface les traces R30/R7/ECHU du contrat en cours → la prochaine tournée renvoie l'étape appropriée ; audité |
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
 | `PATCH /api/versements/:id/annuler-paiement` | ADMIN | corrige une erreur d'encaissement : redevient à percevoir (échéance/montant inchangés, receiptSentAt effacé pour renvoyer un reçu au vrai paiement), audité |
@@ -337,6 +369,9 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/paiements?month&section&status` | connecté | vue mensuelle : dû ∪ payé du mois ; **le mois courant inclut tous les impayés échus** des mois passés (hors INACTIF) ; statut au jour civil |
 | `POST /api/paiements`, `PATCH /:id/payer`, etc. | ADMIN, SM | tous appellent activation + reçu |
 | `GET /api/dashboard/resume` | ADMIN | revenus (datePaiement), retards (membres distincts), **renouvellements échus**, présences semaine (lundi Montréal), masse salariale (source unique) |
+| `GET /api/dashboard/inscriptions?granularite&mois` | ADMIN | recrutement par période (semaine ISO / mois / trimestre), discipline et provenance. **Aucun filtre de statut** : un membre parti reste une inscription de son mois, sinon le passé se réécrit |
+| `GET /api/dashboard/churn?mois` | ADMIN | départs datés depuis le **journal d'audit** (`→ INACTIF`), jamais depuis `updatedAt` qui bouge à chaque retouche de fiche ; motifs, durée de vie moyenne, taux mensuel. Les départs sans trace d'audit sont marqués `dateEstimee` |
+| `GET /api/dashboard/conversion-funnel?jours` | ADMIN | entonnoir prospects → membres ; délai de conversion mesuré sur `ficheRecueAt` quand il existe |
 | `GET /api/dashboard/kpis` | ADMIN | MRR (contrats en cours seulement), recouvrement, rétention, **prévision 3 mois** (échéancier hors INACTIF + renouvellements attendus par mois) |
 | `GET /api/rapports/financier?mois&annee&cumul=` | ADMIN | mode période/cumul réel ; ou `?from&to` : rapport détaillé (encaissé = payé dans la période, retards+**renouvellementsEchus** pour la relance, présences honnêtes, masse salariale mois écoulés) |
 | `GET /api/rapports/export-csv` | ADMIN | export CSV |
@@ -344,15 +379,17 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET/POST/PUT/DELETE /api/coachs` | ADMIN (liste : connecté) | **comptes staff, y compris ADMIN** ; mot de passe temporaire renvoyé une fois ; garde-fou : impossible de rétrograder/désactiver le **dernier admin actif** ; tout audité |
 | `POST /api/import` | ADMIN | CSV membres + versements (§9.3) |
 | `POST /api/inscription` (public, rate-limité), `GET /api/inscription/sections`, `POST /api/inscription/inviter` (ADMIN/SM) | | fiche en ligne (§2) ; inviter = envoi du lien par courriel |
-| `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) |
-| `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections ; test vers adresse au choix ; diagnostic transport |
+| `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) ; renseigne `membreId`. **Filet anti-perte** : si l'écriture en base échoue, le lead part par courriel à INSCRIPTION_NOTIF_EMAIL et le site reçoit un succès |
+| `GET/POST /api/leads/:id/notes`, `DELETE /api/leads/notes/:noteId` | ADMIN | fil de suivi d'un prospect, **en ajout seulement** (deux administrateurs se partagent les relances : l'historique ne doit jamais être écrasé). La liste des prospects renvoie `nbNotes` pour le compteur du bouton |
+| `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections via `sendEmailsEnMasse` (batch Resend 100/requête — l'envoi parallèle individuel plafonnait à ~10 : limite 2 req/s) ; test vers adresse au choix ; diagnostic transport |
 | `POST /api/backup` | ADMIN | sauvegarde Excel immédiate |
 | `GET/POST/PUT/DELETE /api/inventaire` + `POST /:id/stock {delta}` | ADMIN | CRUD articles ; DELETE = suppression si aucune vente, sinon désactivation ; `POST /api/inventaire/seed-karate` = catalogue karaté idempotent (prix de VENTE fournis par le club, coût de revient à saisir) |
 | `GET/POST /api/inventaire/ventes`, `DELETE /ventes/:id` | ADMIN | vente (décrémente stock, prix copié, membre optionnel), annulation (réincrémente) ; `?membreId=` → achats d'un dossier |
 | `GET/POST/PUT/DELETE /api/affiliations` | ADMIN | par membre/discipline/saison (doublon → 400) ; GET renvoie aussi `saisonCourante` |
 | `GET/POST/PUT/DELETE /api/evenements` + `/:id/inscriptions` | ADMIN | détail = participants avec `admissibilite` calculée (affiliation de la saison de l'événement + `solde` dû au club) ; PATCH inscription `{fraisPaye}` ; DELETE événement = archivage si inscriptions |
 | `GET /api/audit` | ADMIN | journal (cherchez `ERREUR / Courriel` pour les envois ratés) |
-| `GET /api/health` | public | ping UptimeRobot |
+| `GET /api/health` | public | ping UptimeRobot (léger EXPRÈS : ne touche pas la base, Neon doit dormir) |
+| `GET /api/health/complet` | public | bilan profond : base + latence, migrations, transport courriel, canal admin ; 503 si un maillon casse. Réveille Neon → quelques appels/jour max (voir `docs/surveillance.md`) |
 | `GET /api/cron/reminders` | Bearer CRON_SECRET | tournée à la demande |
 
 ## 7. Les automatisations (le cœur du système)
@@ -396,6 +433,13 @@ sinon le compteur couru. Les erreurs d'envoi vont dans l'Audit
 - **Invitation à s'inscrire** (bouton Prospects) — lien vers la fiche en ligne.
 - **Notification de fiche reçue** (admin) — avec provenance.
 - Envoi groupé manuel : page Courriels (multi-sections, échecs listés).
+  Transport : `sendEmailsEnMasse` (mailer.ts) — batch Resend par lots de 100
+  avec pause 600 ms (limite 2 req/s), repli SMTP séquentiel. Quota Resend du
+  club : 100/jour, 3 000/mois → privilégier les envois par groupe.
+- **Fiche en ligne reçue → prospect marqué** : correspondance élargie en
+  mémoire (courriels multiples parent+athlète, téléphones en chiffres, nom de
+  l'athlète) → statut CONVERTED + `ficheRecueAt` + `membreId` (badge vert
+  « Fiche reçue » dans Prospects).
 
 ### 7.3 Sauvegarde quotidienne (`src/lib/sauvegarde.ts`)
 Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
@@ -420,9 +464,12 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   → `/paiements?statut=EN_RETARD` ; « Renouvellements échus » →
   `/membres?suivi=renouvellement`. Prévision de trésorerie 3 mois (échéancier +
   renouvellements attendus). Toutes les définitions en §3.6.
-- **Membres** : table avec badges d'état (`etatPaiement`), filtres
-  section/statut/recherche, filtre URL `?suivi=renouvellement`, mode
-  **Factures** (cases à cocher + année + génération par famille).
+- **Membres** : table avec badges d'état (`etatPaiement`), colonne
+  **Dernière présence** (vert ≤ 7 j, ambre ≤ 21 j, rouge au-delà), filtres
+  section/statut/recherche **portés par l'URL** (`?groupe=`, `?statut=` — le
+  retour depuis une fiche restaure le groupe consulté), filtre URL
+  `?suivi=renouvellement`, mode **Factures** (cases à cocher + année +
+  génération par famille).
 - **Fiche membre** (`/membres/:id`) : **Édition rapide** (groupe, ceinture,
   coordonnées, dates, poids, notes — ne touche JAMAIS au plan/échéancier) vs
   **Profil complet** (assistant 4 étapes). Onglet Paiements : bannières
@@ -438,8 +485,41 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 - **Pointage** (coachs) : liste des ACTIFS de la section du jour + **badge de
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
   que le coach fasse le rappel en personne.
+- **Pilotage** (`/admin/pilotage`, ADMIN) : arrivées et départs mois par mois
+  (même unité, un seul axe), motifs de départ, provenance des inscriptions,
+  entonnoir des prospects, et la liste des départs (qui sert aussi de vue
+  tableau accessible). Deux teintes seulement, validées daltonisme et
+  contraste : le **bleu suit les arrivées, le rouge les départs** dans tous
+  les graphiques.
+- **Audit** (`/admin/audit`) : filtres par nature (pointages, membres,
+  paiements, erreurs) — sans eux un pointage se noyait dans les 200 dernières
+  entrées.
+- **Calendrier** (`/planning`), onglet Mois : un clic sur un cours ouvre la
+  **séance** (qui était présent, lien vers chaque fiche, et « pointé par X le Y »
+  avec un avertissement si la saisie est postérieure au jour du cours). Les
+  pointages antérieurs à la traçabilité affichent « auteur inconnu » plutôt
+  qu'une date inventée.
+- **Membres** : en-têtes de colonnes **cliquables** (nom, prénom, groupe,
+  dernière présence, plan, montants, fin de contrat, statut) ; 1er clic
+  croissant, 2e décroissant, valeurs manquantes toujours en bas.
+- **Calendrier** (`/planning`) : deux onglets. **Mois** (par défaut) projette
+  les cours récurrents sur les vraies dates et superpose les événements datés ;
+  une fermeture masque les cours du jour ; clic sur un événement = fiche avec le
+  bouton « Intégrer au module Événements ». **Semaine type** reste la grille de
+  gestion des cours récurrents. Sur téléphone, le mois devient un agenda des
+  seules journées occupées.
+- **Rétention** (`/retention`, tous les rôles, aussi dans la barre mobile) :
+  la liste d'appels du coach. Compteurs (à appeler, encore récupérables,
+  jamais pointés), tri par priorité (non contactés dans la fenêtre 2-4 séances
+  d'abord), liens `tel:` et `sms:` avec message pré-rédigé, bouton « Noté »
+  (marquage optimiste, annulable). Le fond de la démarche : §2 et §3 de
+  `marketing/11-croissance-par-les-donnees.md`.
+- **Prospects** : bouton **« Note · n »** ouvrant le fil de suivi en modale
+  (aucune hauteur ajoutée à la carte) ; chaque note est signée et horodatée.
 - **Prospects** : leads avec date de demande + badge « X j sans suivi »,
-  conversion, invitation à la fiche en ligne.
+  conversion, invitation à la fiche en ligne. Carte **verte** + badge
+  « 📋 Fiche reçue le X » quand la fiche en ligne correspondante arrive,
+  bouton « Voir la fiche membre » (`membreId`).
 - **Rapports** : période, revenus, répartition par groupe, masse salariale
   éditable par mois (total = mois écoulés), **liste de relance** (retards +
   renouvellements échus) exportable PDF/CSV.

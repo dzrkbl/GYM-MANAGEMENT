@@ -8,6 +8,7 @@ import { CourseForm } from '../components/forms/CourseForm';
 import { Plus, Edit2, Trash2, CalendarDays } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { useSections } from '../hooks/useSections';
+import { CalendrierMois } from '../components/calendrier/CalendrierMois';
 
 const DAYS = [
   { code: 'LUN', label: 'Lundi' },
@@ -30,6 +31,10 @@ export function Planning() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // « Mois » (vraies dates, cours + événements) par défaut ; « Semaine type »
+  // reste l'outil de gestion des cours récurrents.
+  const [vue, setVue] = useState<'mois' | 'semaine'>('mois');
 
   useEffect(() => {
     fetchPlanning();
@@ -111,16 +116,32 @@ export function Planning() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-cshp-black flex items-center gap-2">
           <CalendarDays className="text-cshp-red" />
-          Planning Hebdomadaire
+          Calendrier
         </h1>
-        {['ADMIN', 'SECTION_MANAGER'].includes(user?.role || '') && (
+        {vue === 'semaine' && ['ADMIN', 'SECTION_MANAGER'].includes(user?.role || '') && (
           <Button onClick={openAddModal} className="w-full sm:w-auto h-11 px-5">
             <Plus size={20} className="mr-2" /> Ajouter un cours
           </Button>
         )}
       </div>
 
-      {isLoading ? (
+      <div className="flex gap-2">
+        {([['mois', 'Mois'], ['semaine', 'Semaine type']] as const).map(([code, label]) => (
+          <button
+            key={code}
+            onClick={() => setVue(code)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              vue === code ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {vue === 'mois' ? (
+        <CalendrierMois />
+      ) : isLoading ? (
         <div className="flex justify-center p-12"><Spinner /></div>
       ) : error ? (
         <div className="p-4 bg-red-50 text-red-600 rounded-lg">{error}</div>

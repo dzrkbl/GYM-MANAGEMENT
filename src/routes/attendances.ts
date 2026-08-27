@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
 
@@ -21,6 +22,14 @@ router.post('/pointer', authenticate, async (req: Request, res: Response): Promi
     // Normalize memberIds to an array
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [data.memberIds];
 
+    // Traçabilité : qui a saisi le pointage, et quand. `pointeAt` est le moment
+    // de la SAISIE, distinct de `date` qui est le jour du COURS. L'écart entre
+    // les deux révèle un pointage fait en retard.
+    const u = req.user;
+    const pointeParNom = u
+      ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.userId
+      : null;
+
     // Insertion en masse ; la contrainte unique (memberId, courseId, date) évite les doublons.
     const result = await prisma.attendance.createMany({
       data: memberIds.map((memberId) => ({
@@ -28,9 +37,23 @@ router.post('/pointer', authenticate, async (req: Request, res: Response): Promi
         courseId: data.courseId,
         date,
         status: 'PRESENT',
+        pointeAt: new Date(),
+        pointeParId: u?.userId ?? null,
+        pointeParNom,
       })),
       skipDuplicates: true,
     });
+
+    // UNE entrée d'audit par séance, pas une par athlète : un cours de 20 enfants
+    // produirait sinon 20 lignes et noierait le journal.
+    if (result.count > 0) {
+      logAudit(req, {
+        action: 'CREATE',
+        entity: 'Pointage',
+        entityId: data.courseId,
+        description: `Pointage du ${data.date} : ${result.count} présence(s) enregistrée(s)`,
+      });
+    }
 
     return sendSuccess(res, { pointed: result.count, skipped: memberIds.length - result.count });
   } catch (error) {
@@ -54,8 +77,9 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
         date: new Date((date as string) + 'T12:00:00')
       },
       include: {
-        member: { select: { firstName: true, lastName: true } }
-      }
+        member: { select: { id: true, firstName: true, lastName: true, sections: { select: { section: true } } } }
+      },
+      orderBy: { member: { lastName: 'asc' } },
     });
 
     return sendSuccess(res, attendances);

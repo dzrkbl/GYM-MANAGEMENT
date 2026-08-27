@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { sendEmail, htmlCourriel, parseDestinataires, configCourriel } from '../lib/mailer';
+import { sendEmail, sendEmailsEnMasse, htmlCourriel, parseDestinataires, configCourriel } from '../lib/mailer';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -81,19 +81,15 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 
     const html = htmlCourriel(`<div style="white-space:pre-line">${data.message}</div>`);
 
-    const resultats = await Promise.allSettled(
-      destinataires.map((to) => sendEmail({ to, subject: data.sujet, html }))
-    );
-    const envoyes = resultats.filter((r) => r.status === 'fulfilled').length;
-    const echecs = resultats.length - envoyes;
-
-    // Détail des échecs : adresses concernées + message d'erreur réel (une erreur de
-    // configuration est identique pour tous — on remonte la première à l'interface).
-    const echecsDetails = resultats.flatMap((r, i) =>
-      r.status === 'rejected'
-        ? [{ adresse: destinataires[i], erreur: r.reason instanceof Error ? r.reason.message : String(r.reason) }]
-        : []
-    );
+    // Envoi par lots (API batch de Resend) : l'ancien envoi individuel en
+    // parallèle dépassait la limite de 2 requêtes/seconde de Resend et tout
+    // échouait en 429 au-delà d'une dizaine de destinataires.
+    const { envoyes, echecs: echecsDetails } = await sendEmailsEnMasse({
+      destinataires,
+      subject: data.sujet,
+      html,
+    });
+    const echecs = echecsDetails.length;
 
     logAudit(req, {
       action: echecs > 0 && envoyes === 0 ? 'ERREUR' : 'CREATE',

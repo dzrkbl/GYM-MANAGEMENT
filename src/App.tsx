@@ -6,6 +6,7 @@ import { Inscription } from './pages/Inscription';
 import { Dashboard } from './pages/Dashboard';
 import { Pointer } from './pages/Pointer';
 import { Membres } from './pages/Membres';
+import { Retention } from './pages/Retention';
 import { MembreDetail } from './pages/MembreDetail';
 import { Paiements } from './pages/Paiements';
 import { Coachs } from './pages/Coachs';
@@ -17,6 +18,7 @@ import { Import } from './pages/admin/Import';
 import { Audit } from './pages/admin/Audit';
 import { Communications } from './pages/admin/Communications';
 import { Prospects } from './pages/admin/Prospects';
+import { Pilotage } from './pages/admin/Pilotage';
 import { Inventaire } from './pages/admin/Inventaire';
 import { Evenements } from './pages/admin/Evenements';
 
@@ -33,12 +35,14 @@ export default function App() {
             <Route path="/membres" element={<Membres />} />
             <Route path="/membres/:id" element={<MembreDetail />} />
             <Route path="/pointer" element={<Pointer />} />
+            <Route path="/retention" element={<Retention />} />
             <Route path="/paiements" element={<Paiements />} />
             <Route path="/admin/finances" element={<Finances />} />
             <Route path="/admin/import" element={<Import />} />
             <Route path="/admin/audit" element={<Audit />} />
             <Route path="/admin/communications" element={<Communications />} />
             <Route path="/admin/prospects" element={<Prospects />} />
+            <Route path="/admin/pilotage" element={<Pilotage />} />
             <Route path="/admin/inventaire" element={<Inventaire />} />
             <Route path="/admin/evenements" element={<Evenements />} />
             <Route path="/coachs" element={<Coachs />} />

@@ -1,0 +1,139 @@
+# Surveillance du site public et de l'API de gestion.
+#
+# Tourne deux fois par jour (7 h 17 et 19 h 17, heure de Montréal en été) et
+# vérifie toute la chaîne qui amène un lead : site Hostinger → CORS → API
+# Render → base Neon. Chaque vérification échouée fait échouer le run, et le
+# dernier step envoie une alerte courriel via Resend si les secrets
+# RESEND_API_KEY et ALERTE_EMAIL sont configurés (sinon : notification GitHub
+# seulement, visible dans l'onglet Actions).
+#
+# IMPORTANT : les workflows planifiés ne tournent que sur la branche par
+# défaut (main). Déclenchement manuel : Actions → Surveillance → Run workflow.
+#
+# ─── Révision du 25 août 2026, après le premier vrai échec (run #9) ─────────
+# Le run a échoué sur « curl: (28) Connection timed out », quatre fois de
+# suite : la connexion TCP ne s'est jamais établie. Ce n'est ni un 403, ni une
+# page vide, ni un site lent — c'est l'absence totale de réponse réseau, la
+# signature d'un pare-feu qui JETTE les paquets. Hostinger protège ses
+# serveurs contre les adresses de centres de données, et les exécuteurs
+# GitHub tournent sur Azure.
+# Trois corrections en découlent :
+#   1. `if: always()` sur chaque vérification. Auparavant, l'échec de la
+#      première masquait les cinq suivantes : on ignorait si l'API allait
+#      bien. Un moniteur qui cache des pannes est pire qu'aucun moniteur.
+#   2. Un vrai agent utilisateur de navigateur. Beaucoup de pare-feu
+#      applicatifs jettent silencieusement tout ce qui s'annonce « curl/… ».
+#   3. Des messages distincts selon la COUCHE qui lâche : « injoignable »
+#      (réseau) ne se soigne pas comme « répond mais mauvais contenu »
+#      (déploiement). Le message dit quoi vérifier en premier.
+
+name: Surveillance site + API
+
+on:
+  schedule:
+    - cron: '17 11,23 * * *' # UTC : 7 h 17 et 19 h 17 à Montréal (UTC-4)
+  workflow_dispatch:
+
+env:
+  # Certains pare-feu applicatifs jettent les requêtes qui s'annoncent « curl ».
+  NAVIGATEUR: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36'
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Site — accueil joignable et CTA présent
+        if: always()
+        run: |
+          # --connect-timeout séparé de --max-time : distingue « pas de
+          # connexion » (pare-feu, DNS, hôte mort) de « connexion établie mais
+          # réponse lente ».
+          reponse=$(mktemp)
+          if ! code=$(curl -sS -o "$reponse" -w '%{http_code}' \
+              --connect-timeout 15 --max-time 45 \
+              --retry 2 --retry-delay 15 --retry-all-errors \
+              -A "$NAVIGATEUR" \
+              https://centresportifhp.com/); then
+            echo "::error::SITE INJOIGNABLE — aucune connexion établie depuis GitHub Actions."
+            echo "::error::La connexion TCP n'aboutit pas : pare-feu Hostinger bloquant les"
+            echo "::error::serveurs GitHub (Azure), hôte arrêté, ou DNS cassé."
+            echo "::error::VÉRIFIEZ D'ABORD depuis votre téléphone en données mobiles :"
+            echo "::error::si le site s'ouvre normalement, c'est le MONITEUR qui est bloqué,"
+            echo "::error::pas le site — vos visiteurs ne sont pas touchés."
+            exit 1
+          fi
+          echo "Code HTTP : $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Le site répond mais renvoie $code au lieu de 200 (403 = permissions ou .htaccess, 5xx = serveur)."
+            exit 1
+          fi
+          if ! grep -qi "essai gratuit" "$reponse"; then
+            echo "::error::Le site répond 200 mais l'accueil ne contient plus « essai gratuit » : mauvais contenu déployé ou page vide."
+            exit 1
+          fi
+
+      - name: Site — version.txt (déploiement sain)
+        if: always()
+        run: |
+          curl -sSf --connect-timeout 15 --max-time 45 \
+            --retry 2 --retry-delay 15 --retry-all-errors \
+            -A "$NAVIGATEUR" https://centresportifhp.com/version.txt
+
+      - name: API — health léger (Render debout)
+        if: always()
+        run: |
+          # --max-time large : le premier accès après une sieste Render est long.
+          curl -sSf --connect-timeout 20 --max-time 90 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
+            https://cshp-backend.onrender.com/api/health
+
+      - name: API — health complet (base, migrations, courriel)
+        if: always()
+        run: |
+          rep=$(curl -sS --connect-timeout 20 --max-time 90 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
+            https://cshp-backend.onrender.com/api/health/complet)
+          echo "$rep"
+          echo "$rep" | grep -q '"ok":true' || {
+            echo "::error::Santé dégradée : voir le JSON ci-dessus (base, migrations, courriel ou canal admin)."
+            exit 1
+          }
+
+      - name: API — CORS du formulaire de leads
+        if: always()
+        run: |
+          entetes=$(curl -sS --connect-timeout 20 --max-time 90 \
+            --retry 3 --retry-delay 15 --retry-all-errors \
+            -X OPTIONS \
+            -H "Origin: https://centresportifhp.com" \
+            -H "Access-Control-Request-Method: POST" \
+            -D - -o /dev/null \
+            https://cshp-backend.onrender.com/api/leads)
+          echo "$entetes"
+          echo "$entetes" | grep -qi "access-control-allow-origin" || {
+            echo "::error::CORS cassé : le navigateur bloquera le POST du formulaire du site."
+            exit 1
+          }
+
+      - name: Alerte courriel en cas d'échec
+        if: failure()
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTE_EMAIL: ${{ secrets.ALERTE_EMAIL }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$ALERTE_EMAIL" ]; then
+            echo "Secrets RESEND_API_KEY / ALERTE_EMAIL absents : pas de courriel, alerte GitHub seulement."
+            exit 0
+          fi
+          curl -sS https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @- <<JSON
+          {
+            "from": "CSHP Surveillance <payements@centresportifhp.com>",
+            "to": ["$ALERTE_EMAIL"],
+            "subject": "🚨 Surveillance CSHP : une vérification a échoué",
+            "text": "Une vérification automatique a échoué.\n\nChaque vérification tourne indépendamment : ouvrez le run pour voir lesquelles sont rouges et lesquelles sont vertes.\n\nSi seule la vérification du SITE est rouge avec « injoignable », testez d'abord depuis votre téléphone en données mobiles. Si le site s'ouvre, c'est le moniteur qui est bloqué par le pare-feu de Hostinger, pas le site : vos visiteurs ne sont pas touchés.\n\nDétails du run : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\nRéflexes : docs/surveillance.md dans le dépôt GYM-MANAGEMENT."
+          }
+          JSON

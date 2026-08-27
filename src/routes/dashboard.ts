@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { masseSalarialePourMois } from '../lib/finances';
+import { clePeriode, debutFenetre, jourMontreal, type Granularite } from '../lib/periodes';
 
 const router = Router();
 
@@ -346,311 +347,235 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
   }
 });
 
-// GET /api/dashboard/inscriptions — nouvelles inscriptions par période
+// ─────────────────────────────────────────────────────────────────────────────
+// Indicateurs de pilotage : recrutement, attrition, entonnoir des prospects.
+// Toutes les clés de période passent par `src/lib/periodes.ts`, donc par le
+// jour civil de MONTRÉAL : le serveur tourne en UTC et une inscription du
+// 31 août à 20 h basculerait sinon dans le mois de septembre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function granulariteDe(v: unknown): Granularite {
+  return v === 'semaine' || v === 'trimestre' ? v : 'mois';
+}
+const borne = (v: unknown, defaut: number, max: number) => {
+  const n = parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : defaut;
+};
+
+// GET /api/dashboard/inscriptions?granularite=mois|semaine|trimestre&mois=6
+// Nouvelles inscriptions par période, par discipline et par provenance.
 router.get('/inscriptions', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const period = req.query.period as string || 'month'; // 'week', 'month', 'quarter'
-    const monthsParam = req.query.months as string || '6';
-    const monthsCount = parseInt(monthsParam, 10) || 6;
+    const granularite = granulariteDe(req.query.granularite);
+    const mois = borne(req.query.mois, 6, 60);
+    const debut = debutFenetre(mois);
 
-    const now = new Date();
-    const startDate = new Date(now);
-    
-    // Calculer la date de début selon la période
-    if (period === 'week') {
-      startDate.setMonth(now.getMonth() - monthsCount);
-    } else if (period === 'quarter') {
-      startDate.setMonth(now.getMonth() - (monthsCount * 3));
-    } else {
-      startDate.setMonth(now.getMonth() - monthsCount);
-    }
-
-    // Récupérer tous les membres ACTIFS inscrits depuis startDate
-    // On utilise signupDate (ancienneté) ou dateInscription (début contrat en cours)
-    const nouveauxMembres = await prisma.member.findMany({
-      where: {
-        status: 'ACTIF',
-        signupDate: { gte: startDate },
-      },
+    // AUCUN filtre sur le statut : un membre inscrit en mars puis parti en juin
+    // reste une inscription de mars. Filtrer sur ACTIF ferait rétrécir le passé
+    // à chaque départ, et le graphique se réécrirait tout seul.
+    const membres = await prisma.member.findMany({
+      where: { signupDate: { gte: debut } },
       select: {
+        status: true,
         signupDate: true,
-        sections: { select: { section: true } },
         provenance: true,
-        refereParNom: true,
+        sections: { select: { section: true } },
       },
       orderBy: { signupDate: 'asc' },
     });
 
-    // Grouper par période (semaine ou mois)
-    const parPeriode: Record<string, { count: number; parDiscipline: Record<string, number> }> = {};
-    const parProvenance: Record<string, number> = {};
+    const parPeriode = new Map<string, { total: number; parDiscipline: Record<string, number> }>();
     const parDiscipline: Record<string, number> = {};
+    const parProvenance: Record<string, number> = {};
+    let encoreActifs = 0;
 
-    for (const m of nouveauxMembres) {
-      const date = new Date(m.signupDate);
-      let key: string;
-      
-      if (period === 'week') {
-        // Clé = AAAA-Semaine (ISO week)
-        const weekNumber = Math.ceil(((date.getDate() - date.getDay() + 10) - 10) / 7);
-        key = `${date.getFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
-      } else {
-        // Clé = AAAA-MM
-        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      }
-
-      if (!parPeriode[key]) {
-        parPeriode[key] = { count: 0, parDiscipline: {} };
-      }
-      parPeriode[key].count += 1;
+    for (const m of membres) {
+      const cle = clePeriode(m.signupDate, granularite);
+      if (!parPeriode.has(cle)) parPeriode.set(cle, { total: 0, parDiscipline: {} });
+      const bloc = parPeriode.get(cle)!;
+      bloc.total++;
 
       const discipline = m.sections[0]?.section || 'AUTRE';
-      parPeriode[key].parDiscipline[discipline] = (parPeriode[key].parDiscipline[discipline] || 0) + 1;
+      bloc.parDiscipline[discipline] = (bloc.parDiscipline[discipline] || 0) + 1;
       parDiscipline[discipline] = (parDiscipline[discipline] || 0) + 1;
 
-      // Provenance
       const prov = m.provenance || 'NON_SPECIFIE';
       parProvenance[prov] = (parProvenance[prov] || 0) + 1;
+      if (m.status === 'ACTIF') encoreActifs++;
     }
 
-    // Calculer le taux de conversion Leads → Membres
-    const leadsTotal = await prisma.lead.count({
-      where: {
-        createdAt: { gte: startDate },
-        status: { in: ['CONVERTED', 'LOST'] },
-      },
-    });
-    const leadsConvertis = await prisma.lead.count({
-      where: {
-        createdAt: { gte: startDate },
-        status: 'CONVERTED',
-      },
-    });
-
-    const conversionRate = leadsTotal > 0 
-      ? Math.round((leadsConvertis / leadsTotal) * 1000) / 10 
-      : 0;
-
-    // Trier les périodes chronologiquement
-    const sortedPeriods = Object.keys(parPeriode).sort();
-    const parMois = sortedPeriods.map((key) => ({
-      periode: key,
-      count: parPeriode[key].count,
-      parDiscipline: parPeriode[key].parDiscipline,
-    }));
-
     return sendSuccess(res, {
-      parMois,
-      parProvenance,
+      granularite,
+      depuis: jourMontreal(debut),
+      periodes: [...parPeriode.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([periode, v]) => ({ periode, ...v })),
       parDiscipline,
-      conversionRate: {
-        leadsTotal,
-        converts: leadsConvertis,
-        taux: conversionRate,
-      },
-      total: nouveauxMembres.length,
+      parProvenance,
+      total: membres.length,
+      // Combien de ces recrues sont encore là : la rétention des cohortes
+      // récentes, sans fausser le compte des inscriptions.
+      encoreActifs,
     });
   } catch (error) {
-    console.error('Erreur dans GET /api/dashboard/inscriptions:', error);
-    return sendError(res, 'Erreur lors de la récupération des inscriptions', 500);
+    console.error('Erreur GET /api/dashboard/inscriptions:', error);
+    return sendError(res, 'Erreur lors du calcul des inscriptions', 500);
   }
 });
 
-// GET /api/dashboard/churn — membres partis (attrition)
+// GET /api/dashboard/churn?mois=6 — départs et motifs.
 router.get('/churn', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const monthsParam = req.query.months as string || '3';
-    const monthsCount = parseInt(monthsParam, 10) || 3;
+    const mois = borne(req.query.mois, 6, 60);
+    const debut = debutFenetre(mois);
 
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setMonth(now.getMonth() - monthsCount);
-
-    // Récupérer les membres devenus INACTIF récemment
-    // On regarde updatedAt car le statut est changé manuellement
-    const membresPartis = await prisma.member.findMany({
-      where: {
-        status: 'INACTIF',
-        updatedAt: { gte: startDate },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        sections: { select: { section: true } },
-        updatedAt: true,
-        raisonDepart: true,
-        notes: true,
-      },
-      orderBy: { updatedAt: 'desc' },
+    // La date de départ vient du JOURNAL D'AUDIT, pas de `updatedAt` : ce
+    // dernier bouge à chaque modification de fiche (téléphone corrigé,
+    // paiement encaissé, ceinture changée), et daterait un départ de janvier
+    // au jour de la dernière retouche. `PATCH /membres/:id/statut` écrit
+    // « → INACTIF » dans la description ; c'est cette trace qui fait foi.
+    const traces = await prisma.auditLog.findMany({
+      where: { entity: 'Member', description: { contains: '→ INACTIF' }, createdAt: { gte: debut } },
+      select: { entityId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
     });
-
-    // Grouper par mois de départ
-    const parMois: Record<string, { count: number; parDiscipline: Record<string, number> }> = {};
-    const parProvenance: Record<string, number> = {};
-    const parDiscipline: Record<string, number> = {};
-    const avecRaison = membresPartis.filter((m) => m.raisonDepart).length;
-
-    for (const m of membresPartis) {
-      const date = new Date(m.updatedAt);
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-      if (!parMois[key]) {
-        parMois[key] = { count: 0, parDiscipline: {} };
-      }
-      parMois[key].count += 1;
-
-      const discipline = m.sections[0]?.section || 'AUTRE';
-      parMois[key].parDiscipline[discipline] = (parMois[key].parDiscipline[discipline] || 0) + 1;
-      parDiscipline[discipline] = (parDiscipline[discipline] || 0) + 1;
+    const dateDepartParMembre = new Map<string, Date>();
+    for (const t of traces) {
+      if (t.entityId && !dateDepartParMembre.has(t.entityId)) dateDepartParMembre.set(t.entityId, t.createdAt);
     }
 
-    // Calculer le taux de churn mensuel moyen
-    const totalActifs = await prisma.member.count({ where: { status: 'ACTIF' } });
-    const totalInactifs = membresPartis.length;
-    const churnMensuel = monthsCount > 0 && totalActifs > 0
-      ? Math.round(((totalInactifs / monthsCount) / (totalActifs + totalInactifs)) * 1000) / 10
-      : 0;
+    const inactifs = await prisma.member.findMany({
+      where: { status: 'INACTIF' },
+      select: {
+        id: true, firstName: true, lastName: true, raisonDepart: true,
+        signupDate: true, updatedAt: true, sections: { select: { section: true } },
+      },
+    });
 
-    const sortedPeriods = Object.keys(parMois).sort();
-    const parMoisArray = sortedPeriods.map((key) => ({
-      periode: key,
-      count: parMois[key].count,
-      parDiscipline: parMois[key].parDiscipline,
-    }));
+    const parPeriode = new Map<string, number>();
+    const parDiscipline: Record<string, number> = {};
+    const parRaison: Record<string, number> = {};
+    const departs: any[] = [];
 
-    return sendSuccess(res, {
-      parMois: parMoisArray,
-      parDiscipline,
-      membresPartis: membresPartis.map((m) => ({
+    for (const m of inactifs) {
+      const precise = dateDepartParMembre.get(m.id);
+      // Sans trace d'audit (départ antérieur à la journalisation, ou statut
+      // changé par un autre chemin), on retombe sur `updatedAt` — mais c'est
+      // signalé, jamais présenté comme une date sûre.
+      const date = precise ?? (m.updatedAt >= debut ? m.updatedAt : null);
+      if (!date) continue;
+
+      const cle = clePeriode(date, 'mois');
+      parPeriode.set(cle, (parPeriode.get(cle) || 0) + 1);
+      const discipline = m.sections[0]?.section || 'AUTRE';
+      parDiscipline[discipline] = (parDiscipline[discipline] || 0) + 1;
+      const raison = m.raisonDepart || 'Non spécifiée';
+      parRaison[raison] = (parRaison[raison] || 0) + 1;
+
+      departs.push({
         id: m.id,
         nom: `${m.firstName} ${m.lastName}`,
-        section: m.sections[0]?.section || '—',
-        dateDepart: m.updatedAt.toISOString().split('T')[0],
-        raison: m.raisonDepart || 'Non spécifiée',
-      })),
-      churnMensuel,
-      total: totalInactifs,
-      avecRaison,
+        discipline,
+        dateDepart: jourMontreal(date),
+        dateEstimee: !precise,
+        raison: m.raisonDepart || null,
+        moisDeVie: m.signupDate
+          ? Math.max(0, Math.round((date.getTime() - m.signupDate.getTime()) / (30 * 86_400_000)))
+          : null,
+      });
+    }
+    departs.sort((a, b) => b.dateDepart.localeCompare(a.dateDepart));
+
+    const actifs = await prisma.member.count({ where: { status: 'ACTIF' } });
+    // Approximation assumée : départs par mois rapportés au parc moyen
+    // (actifs actuels + partis sur la fenêtre). La formule exacte demanderait
+    // l'effectif au premier jour de chaque mois, que l'historique ne conserve pas.
+    const parcMoyen = actifs + departs.length;
+    const tauxMensuelPct = parcMoyen > 0
+      ? Math.round(((departs.length / mois) / parcMoyen) * 1000) / 10
+      : 0;
+
+    const dureeMoyenneMois = departs.filter((d) => d.moisDeVie !== null).length
+      ? Math.round(departs.reduce((s, d) => s + (d.moisDeVie || 0), 0) / departs.filter((d) => d.moisDeVie !== null).length)
+      : null;
+
+    return sendSuccess(res, {
+      depuis: jourMontreal(debut),
+      periodes: [...parPeriode.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([periode, total]) => ({ periode, total })),
+      parDiscipline,
+      parRaison,
+      departs,
+      total: departs.length,
+      datesEstimees: departs.filter((d) => d.dateEstimee).length,
+      avecRaison: departs.filter((d) => d.raison).length,
+      actifs,
+      tauxMensuelPct,
+      dureeMoyenneMois,
     });
   } catch (error) {
-    console.error('Erreur dans GET /api/dashboard/churn:', error);
-    return sendError(res, 'Erreur lors de la récupération du churn', 500);
+    console.error('Erreur GET /api/dashboard/churn:', error);
+    return sendError(res, "Erreur lors du calcul de l'attrition", 500);
   }
 });
 
-// GET /api/dashboard/conversion-funnel — funnel Leads → Membres
+// GET /api/dashboard/conversion-funnel?jours=30 — prospects → membres.
 router.get('/conversion-funnel', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const daysParam = req.query.days as string || '30';
-    const days = parseInt(daysParam, 10) || 30;
+    const jours = borne(req.query.jours, 30, 730);
+    const debut = new Date(Date.now() - jours * 86_400_000);
 
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setDate(now.getDate() - days);
-
-    // Récupérer tous les leads de la période
     const leads = await prisma.lead.findMany({
-      where: {
-        createdAt: { gte: startDate },
-      },
+      where: { createdAt: { gte: debut } },
       select: {
-        status: true,
-        sport: true,
-        requestType: true,
-        createdAt: true,
+        status: true, sport: true, requestType: true, source: true,
+        createdAt: true, updatedAt: true, ficheRecueAt: true,
       },
     });
 
-    // Compter par statut
-    const parStatut: Record<string, number> = {
-      NEW: 0,
-      CONTACTED: 0,
-      CONVERTED: 0,
-      LOST: 0,
-    };
-    for (const lead of leads) {
-      parStatut[lead.status] = (parStatut[lead.status] || 0) + 1;
-    }
-
-    // Calculer les taux de conversion
-    const totalLeads = leads.length;
-    const contactes = parStatut.CONTACTED + parStatut.CONVERTED + parStatut.LOST;
-    const convertis = parStatut.CONVERTED;
-
-    const tauxContact = totalLeads > 0 
-      ? Math.round((contactes / totalLeads) * 1000) / 10 
-      : 0;
-    const tauxConversion = contactes > 0 
-      ? Math.round((convertis / contactes) * 1000) / 10 
-      : 0;
-    const tauxGlobal = totalLeads > 0 
-      ? Math.round((convertis / totalLeads) * 1000) / 10 
-      : 0;
-
-    // Répartition par type de demande
-    const parRequestType: Record<string, number> = {};
-    for (const lead of leads) {
-      parRequestType[lead.requestType] = (parRequestType[lead.requestType] || 0) + 1;
-    }
-
-    // Répartition par sport
+    const parStatut: Record<string, number> = { NEW: 0, CONTACTED: 0, CONVERTED: 0, LOST: 0 };
     const parSport: Record<string, number> = {};
-    for (const lead of leads) {
-      parSport[lead.sport] = (parSport[lead.sport] || 0) + 1;
+    const parDemande: Record<string, number> = {};
+    const parSource: Record<string, number> = {};
+    for (const l of leads) {
+      parStatut[l.status] = (parStatut[l.status] || 0) + 1;
+      parSport[l.sport] = (parSport[l.sport] || 0) + 1;
+      parDemande[l.requestType] = (parDemande[l.requestType] || 0) + 1;
+      parSource[l.source || 'NON_SPECIFIE'] = (parSource[l.source || 'NON_SPECIFIE'] || 0) + 1;
     }
 
-    // Délai moyen de conversion (pour les convertis)
-    const leadsConverties = await prisma.lead.findMany({
-      where: {
-        createdAt: { gte: startDate },
-        status: 'CONVERTED',
-      },
-      select: {
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    const total = leads.length;
+    // « Sortis de la file d'attente » : tout sauf NEW. Un prospect marqué LOST
+    // sans avoir été appelé y figure aussi — d'où le nom, plutôt que « contactés ».
+    const traites = total - parStatut.NEW;
+    const convertis = parStatut.CONVERTED;
+    const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
 
-    let delaiMoyenJours = 0;
-    if (leadsConverties.length > 0) {
-      const totalDelais = leadsConverties.reduce((sum, lead) => {
-        const delai = (new Date(lead.updatedAt).getTime() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-        return sum + delai;
-      }, 0);
-      delaiMoyenJours = Math.round(totalDelais / leadsConverties.length);
-    }
+    // Délai de conversion : `ficheRecueAt` est posé à l'instant exact où la
+    // fiche d'inscription arrive. `updatedAt` ne sert que de repli, car il
+    // bouge à chaque retouche du prospect.
+    const delais = leads
+      .filter((l) => l.status === 'CONVERTED')
+      .map((l) => ((l.ficheRecueAt ?? l.updatedAt).getTime() - l.createdAt.getTime()) / 86_400_000)
+      .filter((d) => d >= 0);
+    const delaiMoyenJours = delais.length
+      ? Math.round((delais.reduce((s, d) => s + d, 0) / delais.length) * 10) / 10
+      : null;
 
     return sendSuccess(res, {
-      periode: {
-        jours: days,
-        debut: startDate.toISOString().split('T')[0],
-        fin: now.toISOString().split('T')[0],
-      },
-      funnel: {
-        total: totalLeads,
-        contactes,
-        convertis,
-        perdus: parStatut.LOST,
-        enAttente: parStatut.NEW,
-      },
+      periode: { jours, debut: jourMontreal(debut), fin: jourMontreal(new Date()) },
+      entonnoir: { total, traites, convertis, perdus: parStatut.LOST, enAttente: parStatut.NEW },
       taux: {
-        contact: tauxContact,
-        conversion: tauxConversion,
-        global: tauxGlobal,
+        traitementPct: pct(traites, total),
+        conversionPct: pct(convertis, traites),
+        globalPct: pct(convertis, total),
       },
-      parStatut,
-      parRequestType,
-      parSport,
+      parStatut, parSport, parDemande, parSource,
       delaiMoyenJours,
-      seuils: {
-        contact: { cible: 80, alerte: 60 }, // % de leads contactés
-        conversion: { cible: 55, alerte: 40 }, // % de closing
-      },
+      delaisMesures: delais.length,
     });
   } catch (error) {
-    console.error('Erreur dans GET /api/dashboard/conversion-funnel:', error);
-    return sendError(res, 'Erreur lors de la récupération du funnel de conversion', 500);
+    console.error('Erreur GET /api/dashboard/conversion-funnel:', error);
+    return sendError(res, "Erreur lors du calcul de l'entonnoir", 500);
   }
 });
 

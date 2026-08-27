@@ -555,20 +555,16 @@ export function MembreForm({ membre, onSuccess, onCancel }: MembreFormProps) {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-cshp-black mb-1">Statut d'activité</label>
-                <select
-                  value={status}
-                  onChange={e => setStatus(e.target.value as any)}
-                  className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-cshp-red"
-                >
-                  <option value="ACTIF">Actif</option>
-                  <option value="INACTIF">Inactif</option>
-                  <option value="EN_ATTENTE">En attente</option>
-                </select>
-              </div>
-            </div>
+            {/* Le statut ne se change PAS ici : « PUT /membres/:id » l'ignore, et
+                seul « PATCH /:id/statut » (le sélecteur en haut de la fiche)
+                capte le motif de départ et laisse la trace d'audit qui date le
+                départ. Un sélecteur ici serait un bouton sans effet. */}
+            {membre && (
+              <p className="text-xs text-gray-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                Le <strong>statut d'activité</strong> se change depuis la fiche du membre,
+                à côté de son nom : c'est là que le motif de départ est demandé.
+              </p>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-cshp-black mb-1">Notes médicales ou générales</label>

@@ -4,6 +4,34 @@ export const TPS_RATE  = 0.05;
 export const TVQ_RATE  = 0.09975;
 export const DIVISEUR_TAXES = 1 + TPS_RATE + TVQ_RATE; // 1.14975
 
+/**
+ * LES DEUX BASES DE COMPARAISON
+ *
+ * Tout montant saisi dans l'application est TAXES INCLUSES : les 790 $ que
+ * paie un parent, les 5 660 $ du loyer. Deux lectures cohérentes existent, et
+ * la règle absolue est de ne JAMAIS les mélanger dans un même calcul :
+ *
+ *  - « net »  : ce qui reste vraiment. Revenus et charges taxables ramenés
+ *               hors taxes. C'est le VRAI bénéfice, celui qui dit si le club
+ *               gagne de l'argent.
+ *  - « brut » : les mouvements d'argent tels qu'ils passent au compte. Utile
+ *               pour la trésorerie, mais il compte comme revenu les taxes
+ *               perçues, qui appartiennent à Revenu Québec.
+ *
+ * L'écart entre les deux N'EST PAS un choix d'affichage : il vaut exactement
+ * la REMISE de taxes (TPS/TVQ perçues − crédits sur les intrants). C'est
+ * pourquoi les deux vues affichent toujours cette remise en clair.
+ */
+export type BaseFinanciere = 'net' | 'brut';
+
+const arrondir = (m: number) => Math.round(m * 100) / 100;
+/** Montant hors taxes, à partir d'un montant taxes incluses. */
+export const sansTaxes = (m: number) => arrondir(m / DIVISEUR_TAXES);
+/** Part de taxes contenue dans un montant taxes incluses. */
+export const partTaxes = (m: number) => arrondir(m - m / DIVISEUR_TAXES);
+/** Convertit un montant taxes incluses vers la base demandée. */
+export const versBase = (m: number, base: BaseFinanciere) => (base === 'net' ? sansTaxes(m) : arrondir(m));
+
 // Calcul du loyer pour une année donnée (auto ou override)
 export async function getLoyerPourAnnee(annee: number): Promise<number> {
   // 1. Override manuel ?
@@ -55,17 +83,65 @@ export async function getChargesPeriode(mois: number, annee: number) {
   // Masse salariale : source unique (override du mois sinon salaires actifs).
   const masseSalariale = await masseSalarialePourMois(mois, annee);
 
+  const configLoyer = await prisma.depenseConfig.findUnique({ where: { code: 'LOYER' } });
+  const loyerTaxable = configLoyer?.taxable ?? true;
+
   const totalFixes = fixes.reduce((acc, d) => acc + d.montant, 0);
-  const totalCharges = totalFixes + loyer + masseSalariale;
+  const totalCharges = arrondir(totalFixes + loyer + masseSalariale);
+
+  // Crédits de taxe sur les intrants : uniquement sur les charges taxables.
+  // La masse salariale ne porte aucune taxe, les assurances en sont exonérées.
+  const creditsIntrants = arrondir(
+    fixes.filter((d) => d.taxable).reduce((acc, d) => acc + partTaxes(d.montant), 0)
+    + (loyerTaxable ? partTaxes(loyer) : 0)
+  );
+  // Total NET : on ne retire la taxe QUE là où elle est récupérable.
+  const totalChargesNet = arrondir(totalCharges - creditsIntrants);
 
   return {
     loyer: {
       montant: loyer,
+      taxable: loyerTaxable,
       isOverride: !!(await prisma.depense.findFirst({ where: { configCode: 'LOYER', annee, isOverride: true } }))
     },
     depenses: fixes,
     masseSalariale,
-    totalCharges,
+    totalCharges,        // taxes incluses (base « brut »)
+    totalChargesNet,     // hors taxes récupérables (base « net »)
+    creditsIntrants,
+  };
+}
+
+/**
+ * Le résultat d'une période, calculé DANS UNE SEULE BASE.
+ * Les deux membres de la soustraction sont convertis de la même façon : c'est
+ * tout l'enjeu, et c'est ce qui manquait auparavant (revenus nets moins
+ * charges taxes incluses).
+ */
+export function calculerResultat(
+  encaisseBrut: number,
+  charges: { totalCharges: number; totalChargesNet: number; creditsIntrants: number },
+  base: BaseFinanciere
+) {
+  const revenus = base === 'net' ? sansTaxes(encaisseBrut) : arrondir(encaisseBrut);
+  const chargesBase = base === 'net' ? charges.totalChargesNet : charges.totalCharges;
+  const marge = arrondir(revenus - chargesBase);
+  const taxesPercues = partTaxes(encaisseBrut);
+
+  return {
+    base,
+    revenus,
+    charges: chargesBase,
+    marge,
+    margePct: revenus > 0 ? Math.round((marge / revenus) * 1000) / 10 : 0,
+    statut: marge >= 0 ? 'POSITIF' : 'DEFICIT',
+    // Toujours affiché, quelle que soit la base : c'est exactement l'écart
+    // entre les deux lectures, et c'est une sortie d'argent bien réelle.
+    taxes: {
+      percues: taxesPercues,
+      creditsIntrants: charges.creditsIntrants,
+      remiseARevenuQuebec: arrondir(taxesPercues - charges.creditsIntrants),
+    },
   };
 }
 

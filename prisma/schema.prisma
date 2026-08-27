@@ -65,6 +65,10 @@ model Member {
   dateInscription        DateTime?
   finContrat             DateTime?
 
+  // Motif du départ, saisi au passage en INACTIF. Sert au tableau d'attrition :
+  // savoir POURQUOI on perd des membres vaut plus que le taux lui-même.
+  raisonDepart           String?
+
   // Plan tarifaire
   plan                   Plan?       // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
   prixBase               Float?
@@ -160,10 +164,20 @@ model Attendance {
   date      DateTime
   status    String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED
 
+  // Traçabilité du pointage : QUAND la saisie a eu lieu (à ne pas confondre
+  // avec `date`, le jour du COURS) et QUI l'a faite. Volontairement nullables
+  // et SANS valeur par défaut : les pointages antérieurs à cette traçabilité
+  // n'ont pas d'historique, et les dater du jour de la migration serait
+  // mensonger. Une valeur nulle se lit « inconnu ».
+  pointeAt     DateTime?
+  pointeParId  String?
+  pointeParNom String?   // dénormalisé, comme AuditLog : survit à la suppression du compte
+
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([memberId, courseId, date])
+  @@index([courseId, date])
 }
 
 model Grade {
@@ -191,8 +205,40 @@ model Lead {
   sport       String   // KARATE, JUDO, TAEKWONDO, KICKBOXING, PRIVATE
   requestType String   // ESSAI, RAPPEL, TARIFS, AUTRE
   status      String   @default("NEW") // NEW, CONTACTED, CONVERTED, LOST
+
+  // Attribution marketing (landing pages du site, pubs Meta…)
+  source      String?  // ex: "landing-karate-enfant", "meta-instant-form"
+  utmSource   String?
+  utmCampaign String?
+  utmContent  String?  // nom du créatif/de la pub
+  note        String?  // texte libre (ex: âge de l'enfant)
+
+  // Lien avec la fiche d'inscription en ligne : quand une fiche correspondant
+  // au prospect est reçue, on horodate et on pointe le dossier membre créé
+  // (badge « Fiche reçue » dans Prospects, lien direct vers le dossier).
+  ficheRecueAt DateTime?
+  membreId     String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  notes       LeadNote[]
+}
+
+// Fil de suivi d'un prospect : qui l'a appelé, ce qui s'est dit, quoi faire.
+// Ajout SEULEMENT (jamais réécrit) : deux administrateurs qui se partagent les
+// relances doivent voir l'historique complet, pas la dernière version écrasée.
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  texte     String
+  auteurId  String?
+  auteurNom String?  // dénormalisé comme AuditLog : survit à la suppression du compte
+  createdAt DateTime @default(now())
+
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
 }
 
 model Section {
@@ -244,9 +290,13 @@ model DepenseConfig {
   id            String   @id @default(uuid())
   code          String   @unique   // ex: "LOYER"
   label         String             // ex: "Loyer"
-  montantBase   Float              // montant de référence
+  montantBase   Float              // montant de référence (TAXES INCLUSES)
   anneeBase     Int                // année du montantBase (ex: 2024)
   tauxHaussePct Float    @default(0) // ex: 2.0 pour +2%/an automatique
+  // Le loyer commercial, l'électricité, la téléphonie sont taxables : leur part
+  // de TPS/TVQ revient au club en crédits sur les intrants. Les assurances en
+  // sont exonérées, et les salaires ne portent aucune taxe.
+  taxable       Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -255,7 +305,9 @@ model DepenseConfig {
 model Depense {
   id          String          @id @default(uuid())
   label       String
-  montant     Float
+  montant     Float           // TAXES INCLUSES, comme tout montant saisi
+  // Voir DepenseConfig.taxable : détermine si la part de taxe est récupérable.
+  taxable     Boolean         @default(true)
   mois        Int?            // 1-12 = mois précis | null = tous les mois de l'année
   annee       Int
   categorie   CategorieDepense @default(FIXE)
@@ -376,17 +428,47 @@ model Affiliation {
 model Evenement {
   id               String   @id @default(uuid())
   titre            String
-  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, AUTRE
+  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, FORMATION, FERMETURE, AUTRE
   discipline       String?           // KARATE, JUDO, TOUS…
   date             DateTime
+  dateFin          DateTime?         // dernier jour INCLUS (compétition sur plusieurs jours, fermeture)
+  horaire          String?           // « 09:00 à 13:00 » si l'événement porte une heure
   lieu             String?
   fraisInscription Float?
   note             String?
   actif            Boolean  @default(true)
+
+  // Calendrier de saison : une date importée d'une fédération arrive en
+  // CALENDRIER (informative, visible au calendrier, aucune inscription).
+  // Le bouton « Intégrer au module Événements » la passe à RETENU, ce qui
+  // débloque inscriptions, frais et calcul d'admissibilité.
+  statut           String   @default("RETENU")  // CALENDRIER | RETENU
+  source           String?           // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ… (null = saisi au club)
+  sourceUid        String?           // UID iCal, pour ne pas réimporter deux fois
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   inscriptions     EvenementInscription[]
+
+  // Deux valeurs nulles ne se heurtent jamais en Postgres : les événements
+  // saisis à la main (source nulle) ne sont donc pas contraints.
+  @@unique([source, sourceUid])
+  @@index([date])
+}
+
+// Abonnement à un calendrier de fédération (fichier .ics public).
+model CalendrierSource {
+  id            String    @id @default(uuid())
+  code          String    @unique  // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ…
+  nom           String              // « Karaté Québec — saison 2025/2026 »
+  url           String              // lien .ics d'abonnement
+  discipline    String?             // discipline appliquée aux événements importés
+  actif         Boolean   @default(true)
+  dernierSyncAt DateTime?
+  dernierSyncMsg String?            // résultat de la dernière synchronisation
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model EvenementInscription {

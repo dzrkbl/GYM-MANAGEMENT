@@ -29,11 +29,14 @@ import backupRouter from './src/routes/backup';
 import inventaireRouter from './src/routes/inventaire';
 import evenementsRouter from './src/routes/evenements';
 import affiliationsRouter from './src/routes/affiliations';
+import retentionRouter from './src/routes/retention';
+import calendrierRouter from './src/routes/calendrier';
 
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
 import { bootstrapIfEmpty } from './src/lib/seedData';
 import { rateLimit } from './src/middleware/rateLimit';
+import { configCourriel, sendEmailBackground, htmlCourriel } from './src/lib/mailer';
 
 // Sans secret JWT, aucune authentification ne peut fonctionner : on refuse de
 // démarrer avec un message clair plutôt que d'échouer au premier login.
@@ -66,6 +69,10 @@ let rappelsEnCours = false;
 // nouvelle colonne, un ping entrant déclenchait la tournée quelques secondes
 // AVANT que « prisma migrate deploy » (en arrière-plan) ne l'ait créée.
 let basePrete = !process.env.DATABASE_URL;
+// État interne exposé par /api/health/complet (auto-surveillance).
+let etatMigrations: 'EN_COURS' | 'OK' | 'ECHEC' = process.env.DATABASE_URL ? 'EN_COURS' : 'OK';
+let erreurMigrations: string | null = null;
+let derniereTourneeOk: Date | null = null;
 function heureMontreal(): number {
   return parseInt(
     new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto', hour: '2-digit', hour12: false })
@@ -80,7 +87,12 @@ app.use((_req, _res, next) => {
     rappelsEnCours = true;
     derniereTentativeRappels = maintenant;
     runAllReminders()
-      .then((r: any) => { if (!r?.ignore) console.log('✅ Tournée de rappels quotidienne exécutée.'); })
+      .then((r: any) => {
+        if (!r?.ignore) {
+          console.log('✅ Tournée de rappels quotidienne exécutée.');
+          derniereTourneeOk = new Date();
+        }
+      })
       .catch((e) => console.error('Erreur rappels quotidiens:', e))
       .finally(() => { rappelsEnCours = false; });
   }
@@ -122,10 +134,54 @@ app.use('/api/backup', backupRouter);
 app.use('/api/inventaire', inventaireRouter);
 app.use('/api/evenements', evenementsRouter);
 app.use('/api/affiliations', affiliationsRouter);
+app.use('/api/retention', retentionRouter);
+app.use('/api/calendrier', calendrierRouter);
 
 // Basic health check
+// LÉGER exprès : pingé toutes les ~5 min par UptimeRobot pour garder Render
+// éveillé. Il ne touche PAS la base (Neon doit pouvoir dormir entre deux
+// vraies requêtes). La vérification profonde vit sur /api/health/complet.
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'CSHP API is running!' });
+});
+
+// Bilan de santé PROFOND : base, migrations, transport courriel, canal admin.
+// Réveille Neon à chaque appel : à pinger seulement quelques fois par jour
+// (workflow GitHub « surveillance », moniteur UptimeRobot espacé), jamais
+// toutes les 5 minutes. Répond 503 dès qu'un maillon est cassé, pour que
+// n'importe quel moniteur HTTP le voie sans parser le JSON.
+app.get('/api/health/complet', async (_req, res) => {
+  const bilan: Record<string, any> = { horodatage: new Date().toISOString() };
+  let ok = true;
+
+  const debut = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    bilan.base = { ok: true, latenceMs: Date.now() - debut };
+  } catch (e) {
+    ok = false;
+    bilan.base = { ok: false, erreur: e instanceof Error ? e.message : String(e) };
+  }
+
+  bilan.migrations = { ok: etatMigrations !== 'ECHEC', etat: etatMigrations };
+  if (erreurMigrations) bilan.migrations.erreur = erreurMigrations;
+  if (etatMigrations === 'ECHEC') ok = false;
+
+  const cfg = configCourriel();
+  bilan.courriel = { ok: !!cfg.provider, transport: cfg.provider || 'aucun' };
+  if (!cfg.provider) ok = false;
+
+  // Sans ce canal, toutes les alertes admin (leads de secours, inscriptions,
+  // retards) sont muettes : c'est un maillon de la chaîne, pas un détail.
+  bilan.canalAdmin = { ok: !!process.env.INSCRIPTION_NOTIF_EMAIL };
+  if (!process.env.INSCRIPTION_NOTIF_EMAIL) ok = false;
+
+  // Redémarre à null à chaque déploiement : « null » signifie « aucune tournée
+  // depuis le dernier redémarrage », pas « jamais » (le témoin fiable reste le
+  // courriel de sauvegarde quotidien).
+  bilan.derniereTournee = derniereTourneeOk ? derniereTourneeOk.toISOString() : null;
+
+  res.status(ok ? 200 : 503).json({ ok, ...bilan });
 });
 
 // Cron : relances automatiques (déclenché par un service externe avec le Bearer CRON_SECRET).
@@ -137,6 +193,7 @@ app.get('/api/cron/reminders', async (req, res) => {
       return res.status(401).json({ error: 'Non autorisé' });
     }
     const resultats = await runAllReminders();
+    if (!(resultats as any)?.ignore) derniereTourneeOk = new Date();
     res.json({ success: true, resultats });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -166,9 +223,28 @@ async function startServer() {
         // soit inchangé depuis le déploiement précédent.
         basePrete = true;
         if (error) {
+          etatMigrations = 'ECHEC';
+          erreurMigrations = error.message;
           console.error(`❌ Migration error: ${error.message}`);
+          // Un déploiement avec migrations cassées tournait jusqu'ici en
+          // silence (schéma décalé, erreurs 500 aléatoires) : on prévient
+          // l'admin immédiatement par le canal habituel.
+          if (process.env.INSCRIPTION_NOTIF_EMAIL) {
+            sendEmailBackground({
+              to: process.env.INSCRIPTION_NOTIF_EMAIL,
+              subject: '🚨 CSHP Gestion : échec des migrations au déploiement',
+              html: htmlCourriel(`
+                <p>Le serveur a démarré mais <strong>les migrations de base de
+                données ont échoué</strong>. L'application tourne avec un schéma
+                possiblement décalé : certaines pages peuvent renvoyer des erreurs.</p>
+                <p>Erreur : ${error.message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+                <p>À vérifier dans les logs Render (service cshp-backend).</p>`,
+                { salutation: null }),
+            }, 'Alerte migrations échouées');
+          }
           return;
         }
+        etatMigrations = 'OK';
         if (stderr) {
           console.warn(`⚠️ Migration stderr: ${stderr}`);
         }
