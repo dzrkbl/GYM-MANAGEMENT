@@ -49,7 +49,56 @@ Rien dans le code ne distingue une charge taxable d'une charge exonérée.
 
 ---
 
-## 3. L'asymétrie, et pourquoi elle compte
+## 3. LES DEUX BASES — corrigé le 26 août 2026
+
+Auparavant, le résultat mélangeait les unités : revenus nets moins charges
+taxes incluses. C'est réparé. **Le module financier affiche désormais un
+sélecteur Net / Brut, et les DEUX membres de la soustraction changent
+ensemble.** On ne peut plus comparer des pommes et des oranges.
+
+| Base | Revenus | Charges | Ce que le chiffre dit |
+|---|---|---|---|
+| **Net** (défaut) | hors taxes | hors taxes **récupérables** | Le bénéfice réel : ce qui reste au club |
+| **Brut** | taxes incluses | taxes incluses | Les mouvements du compte |
+
+### Pourquoi « net » reste le défaut
+
+Les deux lectures sont cohérentes, mais elles ne disent pas la même chose, et
+**l'écart entre elles n'est pas un choix d'affichage** : il vaut exactement la
+remise de taxes.
+
+Exemple, sur 20 000 $ encaissés et 10 154 $ de charges :
+
+```
+NET  : 17 395,09 − 9 271,98 = 8 123,11 $   ← bénéfice réel
+BRUT : 20 000,00 − 10 154,00 = 9 846,00 $   ← mouvements du compte
+Écart :                          1 722,89 $
+       = TPS/TVQ perçues 2 604,91 − crédits sur intrants 882,02
+       = exactement ce qui part chez Revenu Québec
+```
+
+En base brut, le solde compte comme revenu **des taxes qui ne vous
+appartiennent pas**. C'est utile pour la trésorerie, dangereux pour décider.
+D'où la règle retenue : **les deux vues affichent toujours, en clair, la
+remise à Revenu Québec.** Aucune des deux ne peut donc induire en erreur.
+
+### Toutes les charges ne portent pas de taxe récupérable
+
+Le champ `taxable` (sur `Depense` et `DepenseConfig`) tranche au cas par cas :
+
+| Charge | Taxable ? |
+|---|---|
+| Loyer commercial, électricité, téléphonie, location automobile | **Oui** — crédit récupérable |
+| Assurances | **Non** — service financier exonéré |
+| Masse salariale | **Non** — aucune taxe sur les salaires |
+
+La migration a coché « non taxable » sur tout libellé contenant
+« assurance ». C'est une aide à la saisie, pas une vérité : vérifiez vos
+charges et corrigez au besoin.
+
+---
+
+## 3 bis. L'ancienne asymétrie (historique)
 
 Le résultat est calculé ainsi, dans le module financier comme dans le rapport
 de rentabilité :

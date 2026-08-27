@@ -290,9 +290,13 @@ model DepenseConfig {
   id            String   @id @default(uuid())
   code          String   @unique   // ex: "LOYER"
   label         String             // ex: "Loyer"
-  montantBase   Float              // montant de référence
+  montantBase   Float              // montant de référence (TAXES INCLUSES)
   anneeBase     Int                // année du montantBase (ex: 2024)
   tauxHaussePct Float    @default(0) // ex: 2.0 pour +2%/an automatique
+  // Le loyer commercial, l'électricité, la téléphonie sont taxables : leur part
+  // de TPS/TVQ revient au club en crédits sur les intrants. Les assurances en
+  // sont exonérées, et les salaires ne portent aucune taxe.
+  taxable       Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -301,7 +305,9 @@ model DepenseConfig {
 model Depense {
   id          String          @id @default(uuid())
   label       String
-  montant     Float
+  montant     Float           // TAXES INCLUSES, comme tout montant saisi
+  // Voir DepenseConfig.taxable : détermine si la part de taxe est récupérable.
+  taxable     Boolean         @default(true)
   mois        Int?            // 1-12 = mois précis | null = tous les mois de l'année
   annee       Int
   categorie   CategorieDepense @default(FIXE)

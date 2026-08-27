@@ -52,18 +52,28 @@ interface FinancierData {
     depenses: Depense[];
     masseSalariale: number;
     totalCharges: number;
+    totalChargesNet: number;
+    creditsIntrants: number;
   };
-  resultat: {
-    revenusAvantTaxes: number;
-    totalCharges: number;
-    margeNette: number;
-    margeNettePct: number;
-    statut: 'POSITIF' | 'DEFICIT';
-  };
+  resultat: Resultat;
+  resultatAutreBase: Resultat;
+}
+
+interface Resultat {
+  base: 'net' | 'brut';
+  revenus: number;
+  charges: number;
+  marge: number;
+  margePct: number;
+  statut: 'POSITIF' | 'DEFICIT';
+  taxes: { percues: number; creditsIntrants: number; remiseARevenuQuebec: number };
 }
 
 export function Finances() {
   const { user } = useAuth();
+  // Base de comparaison. « net » par défaut : c'est le bénéfice réel, celui qui
+  // dit si le club gagne de l'argent. « brut » montre les mouvements du compte.
+  const [base, setBase] = useState<'net' | 'brut'>('net');
   const [mois, setMois] = useState<number>(new Date().getMonth() + 1);
   const [annee, setAnnee] = useState<number>(new Date().getFullYear());
   const [modeCumulatif, setModeCumulatif] = useState<boolean>(false);
@@ -110,7 +120,7 @@ export function Finances() {
     try {
       setLoading(true);
       setError(null);
-      const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}&cumul=${modeCumulatif}`);
+      const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}&cumul=${modeCumulatif}&base=${base}`);
       // Projection annuelle à effectif constant (indépendante du mois consulté).
       apiFetch<any>('/rapports/rentabilite').then(setRentabilite).catch(() => {});
       setData(res);
@@ -124,7 +134,7 @@ export function Finances() {
 
   useEffect(() => {
     fetchFinancialReport();
-  }, [mois, annee, modeCumulatif]);
+  }, [mois, annee, modeCumulatif, base]);
 
   const openAddDepense = () => {
     setEditingDepense(null);
@@ -544,43 +554,92 @@ export function Finances() {
             {/* CARD 4: RESULTATS (RENTABILITÉ) */}
             <Card className="p-6 lg:col-span-2 flex flex-col justify-between" id="card-results">
               <div>
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                   <h3 className="text-sm font-bold text-cshp-gray uppercase tracking-wider">Rentabilité & Marge Opérationnelle</h3>
-                  <Badge variant={data.resultat.statut === 'POSITIF' ? 'success' : 'danger'}>
-                    {data.resultat.statut === 'POSITIF' ? 'Bénéficiaire' : 'Déficit'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {/* Une seule base pour les DEUX membres de la soustraction.
+                        Basculer change les deux à la fois, jamais un seul. */}
+                    <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+                      {([['net', 'Net'], ['brut', 'Brut']] as const).map(([code, label]) => (
+                        <button
+                          key={code}
+                          onClick={() => setBase(code)}
+                          className={`px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            base === code ? 'bg-slate-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title={code === 'net'
+                            ? 'Hors taxes des deux côtés : le bénéfice réel'
+                            : 'Taxes incluses des deux côtés : les mouvements du compte'}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <Badge variant={data.resultat.statut === 'POSITIF' ? 'success' : 'danger'}>
+                      {data.resultat.statut === 'POSITIF' ? 'Bénéficiaire' : 'Déficit'}
+                    </Badge>
+                  </div>
                 </div>
+                <p className="text-xs text-gray-500 mb-5">
+                  {base === 'net'
+                    ? 'Revenus ET charges hors taxes : ce qui reste vraiment au club.'
+                    : 'Revenus ET charges taxes incluses : les mouvements du compte. Attention, les taxes perçues ne vous appartiennent pas.'}
+                </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm divide-y md:divide-y-0 md:divide-x divide-gray-100 mb-6">
                   <div className="space-y-4">
                     <div className="flex justify-between items-center pr-0 md:pr-6 pt-1">
                       <span className="text-cshp-gray font-medium flex items-center gap-1.5">
-                        <ArrowUpRight size={16} className="text-green-600 shrink-0" /> Revenus nets (taxes fondues)
+                        <ArrowUpRight size={16} className="text-green-600 shrink-0" />
+                        Revenus encaissés {base === 'net' ? '(hors taxes)' : '(taxes incluses)'}
                       </span>
-                      <span className="font-bold text-cshp-black">{formatMontant(data.resultat.revenusAvantTaxes)}</span>
+                      <span className="font-bold text-cshp-black">{formatMontant(data.resultat.revenus)}</span>
                     </div>
                     <div className="flex justify-between items-center pr-0 md:pr-6">
                       <span className="text-cshp-gray font-medium flex items-center gap-1.5">
-                        <ArrowDownRight size={16} className="text-red-600 shrink-0" /> Total provisions et charges
+                        <ArrowDownRight size={16} className="text-red-600 shrink-0" />
+                        Charges {base === 'net' ? '(hors taxes récupérables)' : '(taxes incluses)'}
                       </span>
-                      <span className="font-bold text-cshp-black">-{formatMontant(data.resultat.totalCharges)}</span>
+                      <span className="font-bold text-cshp-black">-{formatMontant(data.resultat.charges)}</span>
                     </div>
                   </div>
 
                   <div className="space-y-4 pl-0 md:pl-6 pt-4 md:pt-1">
                     <div className="flex justify-between items-center">
-                      <span className="text-cshp-gray font-medium">Bénéfice Net</span>
-                      <span className={`font-black text-lg ${data.resultat.margeNette >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatMontant(data.resultat.margeNette)}
+                      <span className="text-cshp-gray font-medium">{base === 'net' ? 'Bénéfice réel' : 'Solde des mouvements'}</span>
+                      <span className={`font-black text-lg ${data.resultat.marge >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatMontant(data.resultat.marge)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-cshp-gray font-medium">Marge Opérationnelle</span>
-                      <span className={`font-extrabold text-sm ${data.resultat.margeNettePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {data.resultat.margeNettePct.toFixed(1)}%
+                      <span className={`font-extrabold text-sm ${data.resultat.margePct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {data.resultat.margePct.toFixed(1)}%
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* La remise de taxes : elle vaut EXACTEMENT l'écart entre les
+                    deux bases, et c'est une sortie d'argent bien réelle. */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-1.5 mb-5">
+                  <div className="flex justify-between text-gray-600">
+                    <span>TPS et TVQ perçues sur les encaissements</span>
+                    <span className="font-semibold">{formatMontant(data.resultat.taxes.percues)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Moins les crédits sur les intrants (charges taxables)</span>
+                    <span className="font-semibold">-{formatMontant(data.resultat.taxes.creditsIntrants)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-cshp-black pt-1.5 border-t border-slate-200">
+                    <span>À remettre à Revenu Québec</span>
+                    <span>{formatMontant(data.resultat.taxes.remiseARevenuQuebec)}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 pt-1">
+                    Cette remise est exactement l'écart entre les deux bases : en{' '}
+                    {base === 'net' ? 'brut' : 'net'}, le solde afficherait{' '}
+                    {formatMontant(data.resultatAutreBase.marge)}.
+                  </p>
                 </div>
               </div>
 
