@@ -122,7 +122,7 @@ export function Finances() {
       setError(null);
       const res = await apiFetch<FinancierData>(`/rapports/financier?mois=${mois}&annee=${annee}&cumul=${modeCumulatif}&base=${base}`);
       // Projection annuelle à effectif constant (indépendante du mois consulté).
-      apiFetch<any>('/rapports/rentabilite').then(setRentabilite).catch(() => {});
+      apiFetch<any>(`/rapports/rentabilite?base=${base}`).then(setRentabilite).catch(() => {});
       setData(res);
     } catch (err: any) {
       console.error(err);
@@ -670,19 +670,33 @@ export function Finances() {
                 </div>
                 <p className="text-xs text-cshp-gray mb-5">
                   Hypothèse : les <strong>{rentabilite.membresPayants}</strong> membres actifs payants d'aujourd'hui restent et renouvellent aux mêmes prix.
-                  Revenus nets de taxes ; charges actuelles projetées sur 12 mois. Ventes d'équipement et frais de fédération exclus.
+                  Revenus et charges {base === 'net' ? 'hors taxes' : 'taxes incluses'} — la même base des deux côtés.
+                  Charges actuelles projetées sur 12 mois. Ventes d'équipement et frais de fédération exclus.
                 </p>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
                   <div className="p-3 bg-slate-50 rounded-xl">
-                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Revenu annuel (net)</span>
-                    <span className="text-lg font-black text-cshp-black">{formatMontant(rentabilite.revenuAnnuelNet)}</span>
-                    <span className="text-[11px] text-cshp-gray block">{formatMontant(rentabilite.revenuAnnuelBrut)} taxes incluses</span>
+                    <span className="text-[11px] uppercase font-bold text-cshp-gray block">Revenu annuel ({base})</span>
+                    <span className="text-lg font-black text-cshp-black">{formatMontant(rentabilite.revenusBase ?? rentabilite.revenuAnnuelNet)}</span>
+                    <span className="text-[11px] text-cshp-gray block">
+                      {base === 'net'
+                        ? `${formatMontant(rentabilite.revenuAnnuelBrut)} taxes incluses`
+                        : `${formatMontant(rentabilite.revenuAnnuelNet)} hors taxes`}
+                    </span>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl">
                     <span className="text-[11px] uppercase font-bold text-cshp-gray block">Charges annuelles</span>
-                    <span className="text-lg font-black text-cshp-black">{formatMontant(rentabilite.chargesAnnuelles + rentabilite.ponctuelles12Mois)}</span>
-                    <span className="text-[11px] text-cshp-gray block">{formatMontant(rentabilite.chargesMensuelles)}/mois + {formatMontant(rentabilite.ponctuelles12Mois)} ponctuelles</span>
+                    {/* MÊME base que le résultat : afficher les charges brutes à
+                        côté d'un résultat net remettrait l'incohérence corrigée. */}
+                    <span className="text-lg font-black text-cshp-black">
+                      {formatMontant((rentabilite.chargesBase ?? rentabilite.chargesAnnuelles) + rentabilite.ponctuelles12Mois)}
+                    </span>
+                    <span className="text-[11px] text-cshp-gray block">
+                      dont {formatMontant(rentabilite.ponctuelles12Mois)} ponctuelles
+                      {base === 'net' && rentabilite.creditsIntrantsAnnuels
+                        ? ` · ${formatMontant(rentabilite.creditsIntrantsAnnuels)} de crédits déduits`
+                        : ''}
+                    </span>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl">
                     <span className="text-[11px] uppercase font-bold text-cshp-gray block">Résultat projeté</span>
@@ -692,7 +706,9 @@ export function Finances() {
                   <div className="p-3 bg-slate-50 rounded-xl">
                     <span className="text-[11px] uppercase font-bold text-cshp-gray block">Seuil de rentabilité</span>
                     <span className="text-lg font-black text-cshp-black">≈ {rentabilite.membresNecessaires ?? '—'} membres</span>
-                    <span className="text-[11px] text-cshp-gray block">à {formatMontant(rentabilite.revenuMoyenNetParMembre)}/membre/an net</span>
+                    <span className="text-[11px] text-cshp-gray block">
+                      à {formatMontant(rentabilite.revenuMoyenParMembre ?? rentabilite.revenuMoyenNetParMembre)}/membre/an {base}
+                    </span>
                   </div>
                 </div>
 

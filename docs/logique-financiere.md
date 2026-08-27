@@ -170,6 +170,32 @@ tête que la projection des trimestriels est un plafond, pas une prévision.
 
 ---
 
+## 4 bis. D'où vient « 702,37 $/membre/an net »
+
+C'est `revenuMoyenParMembre` : le revenu annuel projeté divisé par le nombre de
+membres **payants** (ceux qui ont un plan et un montant ; les autres sont
+listés dans `sansContrat` et exclus des deux côtés de la division).
+
+```
+702,37 $ net  ×  1,14975  =  807,55 $ brut par membre et par an
+```
+
+Ce panier moyen se situe **au-dessus du tarif annuel plein de 790 $**, ce qui
+s'explique par la présence de membres trimestriels : ils paient 1 000 $ sur
+l'année. Environ 8 % de trimestriels suffisent à produire cette moyenne, et la
+part réelle est un peu plus haute puisque les rabais famille tirent vers le bas.
+
+| Profil | Brut annuel | Net annuel |
+|---|---:|---:|
+| Annuel plein | 790,00 $ | 687,11 $ |
+| Annuel avec rabais famille (−10 %) | 711,00 $ | 618,40 $ |
+| Trimestriel (×4) | 1 000,00 $ | 869,75 $ |
+
+Le seuil se lit alors simplement : **121 membres × 702,37 $ = 84 987 $** de
+charges annuelles à couvrir, soit environ **7 082 $ par mois**.
+
+---
+
 ## 5. Le seuil de rentabilité
 
 ```
