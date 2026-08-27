@@ -113,6 +113,46 @@ Le filet côté app est déjà en place : si la base est indisponible mais que
 Resend fonctionne, le lead arrive par courriel à l'admin et le visiteur voit
 un succès normal.
 
+## 6 bis. Lire une alerte : quelle COUCHE a lâché ?
+
+Le premier vrai échec, le 25 août 2026 (run #9), a montré que le message
+comptait autant que la détection. Le journal disait :
+
+```
+curl: (28) Connection timed out after 30002 milliseconds   (× 4)
+```
+
+**« Connection timed out » n'est pas « le site est en panne ».** C'est
+l'absence totale de réponse au niveau TCP : la connexion ne s'établit même
+pas. Un site vraiment arrêté répond en général « Connection refused »
+(immédiat), et un site surchargé accepte la connexion puis renvoie une 5xx.
+Un silence complet est la signature d'un **pare-feu qui jette les paquets** —
+et Hostinger protège ses serveurs contre les adresses de centres de données,
+alors que les exécuteurs GitHub tournent sur Azure.
+
+| Symptôme dans le journal | Couche | Ce que ça veut dire | Vos visiteurs sont-ils touchés ? |
+|---|---|---|---|
+| `Connection timed out` | Réseau | Pare-feu, hôte arrêté, DNS cassé | **Probablement pas** — vérifiez d'abord depuis votre téléphone en données mobiles |
+| `Connection refused` | Réseau | Rien n'écoute sur le port | Oui |
+| Code HTTP 403 / 5xx | Serveur | `.htaccess`, permissions, ou serveur en erreur | Oui |
+| 200 mais « essai gratuit » absent | Contenu | Mauvais déploiement, page vide | Oui |
+
+**Le réflexe, dans l'ordre :** ouvrez `centresportifhp.com` sur votre téléphone
+en **données mobiles** (pas le wifi du dojo, qui pourrait avoir son propre
+cache). Si le site s'ouvre normalement, c'est le moniteur qui est bloqué, pas
+le site. Vérifiez alors le tableau de bord UptimeRobot : lui interroge depuis
+plusieurs points du monde et tranchera.
+
+Deux corrections ont suivi cet incident :
+
+- **`if: always()` sur chaque vérification.** Avant, l'échec de la première
+  masquait les cinq suivantes : ce run-là ne dit toujours pas si l'API allait
+  bien. Un moniteur qui cache des pannes est pire qu'aucun moniteur.
+- **Agent utilisateur de navigateur** sur les appels au site : beaucoup de
+  pare-feu applicatifs jettent silencieusement ce qui s'annonce « curl/… ».
+
+---
+
 ## 7. Playbook : une alerte arrive, dans quel ordre regarder
 
 1. `https://centresportifhp.com/version.txt` : le site répond-il, et avec la

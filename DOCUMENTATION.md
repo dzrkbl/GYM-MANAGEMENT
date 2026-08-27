@@ -97,6 +97,19 @@ a continué à venir même si le parent paie avec quelques semaines de retard) �
 la date reste modifiable dans le modal si l'athlète a fait une vraie pause.
 `signupDate` ne bouge jamais ; `finContrat` se recalcule.
 
+### Taxes : la règle d'or
+
+**Tout prix affiché est TAXES INCLUSES** (250 $ et 790 $ comprennent TPS et
+TVQ). Le diviseur `DIVISEUR_TAXES = 1,14975` vit dans `src/lib/finances.ts` et
+est importé partout. Un encaissement de 790 $ laisse **687,11 $ au club** ;
+102,89 $ appartiennent à Revenu Québec.
+
+⚠️ **Asymétrie connue, non corrigée** : le résultat compare des revenus NETS
+de taxes à des charges TAXES INCLUSES. Si le club réclame ses crédits de taxe
+sur les intrants, le résultat affiché est pessimiste d'environ 880 $/mois.
+Décision de comptabilité, pas de code : détail complet et impact chiffré dans
+`docs/logique-financiere.md`.
+
 ### Paiements, reçus, frais de retard, factures
 - Un paiement = un **versement** (`PaymentVersement`). Statut **dérivé** :
   payé si `datePaiement` non nulle ; sinon en retard si le **jour civil de

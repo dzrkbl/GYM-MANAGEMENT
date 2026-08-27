@@ -2,10 +2,12 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
-import { masseSalarialePourMois, getLoyerPourAnnee } from '../lib/finances';
-import { getRevenusperiode, getChargesPeriode } from '../lib/finances';
-
-const DIVISEUR_TAXES = 1.14975;
+// SOURCE UNIQUE des taxes : `DIVISEUR_TAXES` était auparavant redéclaré en dur
+// ici, en doublon de la constante partagée — deux vérités pour un même taux.
+import {
+  DIVISEUR_TAXES, getRevenusperiode, getChargesPeriode, masseSalarialePourMois,
+  getLoyerPourAnnee, calculerResultat, sansTaxes, partTaxes, type BaseFinanciere,
+} from '../lib/finances';
 
 const router = Router();
 
@@ -127,14 +129,24 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
       parSport.set(sport, e);
     }
     revenuAnnuelBrut = Math.round(revenuAnnuelBrut * 100) / 100;
-    const revenuAnnuelNet = Math.round((revenuAnnuelBrut / DIVISEUR_TAXES) * 100) / 100;
+    const revenuAnnuelNet = sansTaxes(revenuAnnuelBrut);
+    const base: BaseFinanciere = _req.query.base === 'brut' ? 'brut' : 'net';
 
     const masseSalarialeMensuelle = await masseSalarialePourMois(mois, annee);
     const loyerMensuel = await getLoyerPourAnnee(annee);
+    const configLoyer = await prisma.depenseConfig.findUnique({ where: { code: 'LOYER' } });
     const recurrentes = await prisma.depense.findMany({ where: { annee, mois: null, isOverride: false } });
     const depensesRecurrentesMensuelles = Math.round(recurrentes.reduce((a, d) => a + d.montant, 0) * 100) / 100;
     const chargesMensuelles = Math.round((masseSalarialeMensuelle + loyerMensuel + depensesRecurrentesMensuelles) * 100) / 100;
     const chargesAnnuelles = Math.round(chargesMensuelles * 12 * 100) / 100;
+
+    // Crédits sur les intrants : seulement sur les charges taxables (jamais
+    // les salaires, jamais les assurances).
+    const creditsMensuels = Math.round((
+      recurrentes.filter((d) => d.taxable).reduce((a, d) => a + partTaxes(d.montant), 0)
+      + ((configLoyer?.taxable ?? true) ? partTaxes(loyerMensuel) : 0)
+    ) * 100) / 100;
+    const chargesAnnuellesNet = Math.round((chargesAnnuelles - creditsMensuels * 12) * 100) / 100;
 
     // Dépenses ponctuelles des 12 derniers mois (fenêtre glissante).
     const cle = (a: number, m: number) => a * 12 + m;
@@ -145,12 +157,16 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
         .reduce((a, d) => a + d.montant, 0) * 100
     ) / 100;
 
-    const resultatRecurrent = Math.round((revenuAnnuelNet - chargesAnnuelles) * 100) / 100;
+    // Les DEUX membres de chaque soustraction sont dans la même base.
+    const revenusBase = base === 'net' ? revenuAnnuelNet : revenuAnnuelBrut;
+    const chargesBase = base === 'net' ? chargesAnnuellesNet : chargesAnnuelles;
+    const resultatRecurrent = Math.round((revenusBase - chargesBase) * 100) / 100;
     const resultatPrudent = Math.round((resultatRecurrent - ponctuelles12Mois) * 100) / 100;
     const membresPayants = membres.length - sansContrat.length;
-    const revenuMoyenNetParMembre = membresPayants > 0 ? Math.round((revenuAnnuelNet / membresPayants) * 100) / 100 : 0;
-    const membresNecessaires = revenuMoyenNetParMembre > 0
-      ? Math.ceil((chargesAnnuelles + ponctuelles12Mois) / revenuMoyenNetParMembre)
+    const revenuMoyenParMembre = membresPayants > 0 ? Math.round((revenusBase / membresPayants) * 100) / 100 : 0;
+    // Seuil de rentabilité : numérateur et dénominateur dans la même base.
+    const membresNecessaires = revenuMoyenParMembre > 0
+      ? Math.ceil((chargesBase + ponctuelles12Mois) / revenuMoyenParMembre)
       : null;
 
     return sendSuccess(res, {
@@ -166,11 +182,18 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
       depensesRecurrentesMensuelles,
       chargesMensuelles,
       chargesAnnuelles,
+      chargesAnnuellesNet,
+      creditsIntrantsAnnuels: Math.round(creditsMensuels * 12 * 100) / 100,
       ponctuelles12Mois,
+      base,
+      revenusBase,
+      chargesBase,
       resultatRecurrent,
       resultatPrudent,
-      margePct: revenuAnnuelNet > 0 ? Math.round((resultatPrudent / revenuAnnuelNet) * 1000) / 10 : 0,
-      revenuMoyenNetParMembre,
+      margePct: revenusBase > 0 ? Math.round((resultatPrudent / revenusBase) * 1000) / 10 : 0,
+      revenuMoyenParMembre,
+      // Conservé sous son ancien nom : la page Finances l'affiche encore.
+      revenuMoyenNetParMembre: membresPayants > 0 ? Math.round((revenuAnnuelNet / membresPayants) * 100) / 100 : 0,
       membresNecessaires,
     });
   } catch (error) {
@@ -193,23 +216,18 @@ router.get('/financier', authenticate, requireRole(['ADMIN']), async (req: Reque
         getChargesPeriode(parsedMois, parsedAnnee),
       ]);
 
-      const revenusAvantTaxes = Math.round((revenus.encaisse / DIVISEUR_TAXES) * 100) / 100;
-      const margeNette = Math.round((revenusAvantTaxes - charges.totalCharges) * 100) / 100;
-      const margeNettePct = revenusAvantTaxes > 0
-        ? Math.round((margeNette / revenusAvantTaxes) * 10000) / 100
-        : 0;
+      // Une SEULE base pour les deux membres de la soustraction (?base=net|brut).
+      const base: BaseFinanciere = req.query.base === 'brut' ? 'brut' : 'net';
+      const resultat = calculerResultat(revenus.encaisse, charges, base);
 
       return sendSuccess(res, {
         periode: { mois: parsedMois, annee: parsedAnnee },
         revenus,
         charges,
-        resultat: {
-          revenusAvantTaxes,
-          totalCharges: charges.totalCharges,
-          margeNette,
-          margeNettePct,
-          statut: margeNette >= 0 ? 'POSITIF' : 'DEFICIT',
-        }
+        resultat,
+        // L'autre lecture, pour que le basculement soit instantané et que
+        // l'écart entre les deux reste vérifiable d'un coup d'œil.
+        resultatAutreBase: calculerResultat(revenus.encaisse, charges, base === 'net' ? 'brut' : 'net'),
       });
     }
     
