@@ -505,6 +505,11 @@ router.post('/:id/renouveler', authenticate, requireRole(['ADMIN', 'SECTION_MANA
 
     // Échéancier : même répartition des arrondis que le formulaire membre
     // (montant de base au cent inférieur, solde sur le dernier versement).
+    // Les échéances SUIVANTES s'ancrent sur la date du 1er PAIEMENT quand il y
+    // en a un : un contrat rétroactif (continuité du service) payé aujourd'hui
+    // doit réclamer le 2e versement un mois après le paiement — pas un mois
+    // après un début de contrat déjà passé (sinon « en retard » immédiat).
+    const ancrage = data.premierPaiement ? data.premierPaiement.datePaiement : data.dateDebut;
     const base = Math.floor((data.montant / nbVersements) * 100) / 100;
     const numeroDepart = membre.versements.reduce((max, v) => Math.max(max, v.numeroVersement), 0) + 1;
     const nouveaux = Array.from({ length: nbVersements }, (_, i) => ({
@@ -513,7 +518,7 @@ router.post('/:id/renouveler', authenticate, requireRole(['ADMIN', 'SECTION_MANA
       montant: i === nbVersements - 1
         ? Math.round((data.montant - base * (nbVersements - 1)) * 100) / 100
         : base,
-      datePrevue: dateAMidi(ajouterMoisISO(data.dateDebut, i)),
+      datePrevue: dateAMidi(i === 0 ? data.dateDebut : ajouterMoisISO(ancrage, i)),
       datePaiement: i === 0 && data.premierPaiement ? dateAMidi(data.premierPaiement.datePaiement) : null,
       methodePaiement: i === 0 && data.premierPaiement ? methode : null,
       note: `Renouvellement du ${data.dateDebut}`,

@@ -164,4 +164,34 @@ router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request,
   }
 });
 
+// PATCH /api/versements/:id/reporter — déplace l'échéance d'un versement NON
+// payé (entente avec le parent, correction d'un plan rétroactif). Le statut
+// retard/à venir étant dérivé de la date, il se recalcule tout seul.
+router.patch('/:id/reporter', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { datePrevue } = z.object({ datePrevue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide (AAAA-MM-JJ)') }).parse(req.body);
+    const existant = await prisma.paymentVersement.findUnique({
+      where: { id: req.params.id },
+      include: { member: { select: { firstName: true, lastName: true } } },
+    });
+    if (!existant) return sendError(res, 'Versement introuvable', 404);
+    if (existant.datePaiement) return sendError(res, 'Ce versement est déjà payé — son échéance ne se déplace plus', 400);
+
+    const versement = await prisma.paymentVersement.update({
+      where: { id: existant.id },
+      data: { datePrevue: dateAMidi(datePrevue) },
+    });
+    logAudit(req, {
+      action: 'UPDATE',
+      entity: 'PaymentVersement',
+      entityId: versement.id,
+      description: `Échéance reportée : versement #${existant.numeroVersement} de ${existant.montant.toFixed(2)} $ — du ${existant.datePrevue.toISOString().slice(0, 10)} au ${datePrevue} — ${existant.member.firstName} ${existant.member.lastName}`,
+    });
+    return sendSuccess(res, versement);
+  } catch (error) {
+    if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    return sendError(res, "Erreur lors du report de l'échéance", 500);
+  }
+});
+
 export default router;

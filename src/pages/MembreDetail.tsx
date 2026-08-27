@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
 import { etatPaiement } from '../lib/echeances';
+import { ajouterMoisISO } from '../lib/tarifs';
 import { saisonCourante, saisonsChoix } from '../lib/saison';
 import { CEINTURES_LIST } from '../components/membres/MembreForm';
 import { useSections } from '../hooks/useSections';
@@ -1087,6 +1088,27 @@ export function MembreDetail() {
                         )}
                         {user?.role === 'ADMIN' && (
                           <div className="flex gap-3">
+                            {!isPaid && (
+                              <button
+                                onClick={async () => {
+                                  const saisie = prompt(
+                                    `Nouvelle échéance pour le versement #${v.numeroVersement} (AAAA-MM-JJ)\nActuelle : ${String(v.datePrevue).split('T')[0]}`,
+                                    String(v.datePrevue).split('T')[0]
+                                  );
+                                  if (!saisie) return;
+                                  try {
+                                    await apiFetch(`/versements/${v.id}/reporter`, { method: 'PATCH', body: JSON.stringify({ datePrevue: saisie.trim() }) });
+                                    fetchMemberData();
+                                  } catch (err: any) {
+                                    alert(err?.message || 'Erreur lors du report');
+                                  }
+                                }}
+                                className="text-[11px] underline text-gray-400 hover:text-blue-700 cursor-pointer"
+                                title="Déplacer l'échéance de ce versement (entente avec le parent, plan rétroactif)"
+                              >
+                                📅 Reporter
+                              </button>
+                            )}
                             {isPaid && (
                               <button
                                 onClick={() => annulerPaiementVersement(v)}
@@ -1343,15 +1365,34 @@ export function MembreDetail() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-cshp-black font-medium">
-            <input
-              type="checkbox"
-              checked={!!renew.encaisser}
-              onChange={(e) => setRenew((p: any) => ({ ...p, encaisser: e.target.checked }))}
-              className="w-5 h-5 rounded text-cshp-red focus:ring-cshp-red"
-            />
-            Encaisser le 1ᵉʳ versement maintenant
-          </label>
+          <div className="space-y-2">
+            <label className={`flex items-start gap-2 text-sm p-3 rounded-lg border cursor-pointer ${renew.encaisser ? 'border-cshp-red bg-red-50/40 font-medium' : 'border-gray-200'}`}>
+              <input
+                type="radio"
+                name="modeRenouvellement"
+                checked={!!renew.encaisser}
+                onChange={() => setRenew((p: any) => ({ ...p, encaisser: true }))}
+                className="w-4 h-4 mt-0.5 text-cshp-red focus:ring-cshp-red"
+              />
+              <span>
+                Encaisser le 1ᵉʳ versement maintenant
+                <span className="block text-xs text-cshp-gray font-normal">Le parent paie tout de suite — reçu automatique (sauf comptant).</span>
+              </span>
+            </label>
+            <label className={`flex items-start gap-2 text-sm p-3 rounded-lg border cursor-pointer ${!renew.encaisser ? 'border-cshp-red bg-red-50/40 font-medium' : 'border-gray-200'}`}>
+              <input
+                type="radio"
+                name="modeRenouvellement"
+                checked={!renew.encaisser}
+                onChange={() => setRenew((p: any) => ({ ...p, encaisser: false }))}
+                className="w-4 h-4 mt-0.5 text-cshp-red focus:ring-cshp-red"
+              />
+              <span>
+                Créer le plan de paiements seulement
+                <span className="block text-xs text-cshp-gray font-normal">Aucun encaissement : chaque versement aura son bouton « Encaisser » dans l'échéancier.</span>
+              </span>
+            </label>
+          </div>
           {renew.encaisser && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
               <div>
@@ -1371,12 +1412,36 @@ export function MembreDetail() {
             </div>
           )}
 
-          <div className="text-xs text-cshp-gray bg-slate-50 border border-slate-200 rounded-lg p-3">
-            Résumé : contrat du <strong>{renew.dateDebut}</strong>, {renew.plan === 'ANNUEL' ? 'annuel' : 'trimestriel'},{' '}
-            <strong>{Number(renew.montant || 0).toFixed(2)} $</strong> en{' '}
-            {renew.plan === 'TRIMESTRIEL' ? 1 : renew.nbVersements} versement(s)
-            {renew.encaisser ? ' — 1ᵉʳ versement encaissé immédiatement.' : ' — aucun encaissement immédiat.'}
-          </div>
+          {(() => {
+            // Aperçu du plan : mêmes règles que le serveur (arrondi au cent
+            // inférieur, solde sur le dernier ; échéances suivantes ancrées sur
+            // la date du 1er paiement s'il y en a un, sinon sur le début).
+            const n = renew.plan === 'TRIMESTRIEL' ? 1 : Number(renew.nbVersements) || 1;
+            const montant = Number(renew.montant || 0);
+            const base = Math.floor((montant / n) * 100) / 100;
+            const ancrage = renew.encaisser && renew.datePaiement ? renew.datePaiement : renew.dateDebut;
+            const lignes = renew.dateDebut ? Array.from({ length: n }, (_, i) => ({
+              no: i + 1,
+              montant: i === n - 1 ? Math.round((montant - base * (n - 1)) * 100) / 100 : base,
+              date: i === 0 ? renew.dateDebut : ajouterMoisISO(ancrage, i),
+              encaisse: i === 0 && !!renew.encaisser,
+            })) : [];
+            return (
+              <div className="text-xs text-cshp-gray bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+                <p>
+                  Contrat du <strong>{renew.dateDebut}</strong>, {renew.plan === 'ANNUEL' ? 'annuel' : 'trimestriel'},{' '}
+                  <strong>{montant.toFixed(2)} $</strong> — plan de paiements :
+                </p>
+                {lignes.map((l) => (
+                  <p key={l.no} className={l.encaisse ? 'text-emerald-700 font-semibold' : ''}>
+                    • Versement {l.no} : {l.montant.toFixed(2)} $ — {l.encaisse
+                      ? `encaissé maintenant (${formatDateLocal(renew.datePaiement)})`
+                      : `à percevoir le ${formatDateLocal(l.date)}`}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
 
           <div className="flex gap-3 pt-3 border-t border-gray-100">
             <Button variant="outline" onClick={() => setIsRenewOpen(false)} className="flex-1" disabled={isRenewing}>

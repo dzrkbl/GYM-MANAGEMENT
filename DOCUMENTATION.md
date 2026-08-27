@@ -365,6 +365,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `PUT /api/versements/:id/payer` | ADMIN, SM | paie + activation EN_ATTENTE→ACTIF + reçu (sauf CASH) |
 | `PATCH /api/versements/:id/frais-retard` | ADMIN | `{exonerer}` et/ou `{montantFacture}` (null = compteur), audité |
 | `PATCH /api/versements/:id/annuler-paiement` | ADMIN | corrige une erreur d'encaissement : redevient à percevoir (échéance/montant inchangés, receiptSentAt effacé pour renvoyer un reçu au vrai paiement), audité |
+| `PATCH /api/versements/:id/reporter` | ADMIN | déplace l'échéance d'un versement NON payé (`{datePrevue}`) — entente avec le parent, correction d'un plan rétroactif ; refusé si payé ; audité |
 | `DELETE /api/versements/:id` | ADMIN | supprime un versement (erreur de saisie, doublon) + nettoie ses ReminderLog ; ⚠️ un versement payé supprimé sort des revenus — préférer annuler-paiement pour une erreur d'encaissement ; audité |
 | `GET /api/paiements?month&section&status` | connecté | vue mensuelle : dû ∪ payé du mois ; **le mois courant inclut tous les impayés échus** des mois passés (hors INACTIF) ; statut au jour civil |
 | `POST /api/paiements`, `PATCH /:id/payer`, etc. | ADMIN, SM | tous appellent activation + reçu |
@@ -442,6 +443,11 @@ sinon le compteur couru. Les erreurs d'envoi vont dans l'Audit
   « Fiche reçue » dans Prospects).
 
 ### 7.3 Sauvegarde quotidienne (`src/lib/sauvegarde.ts`)
+
+Feuilles : Résumé, une par groupe, Transactions (échéancier complet), et
+**« Paiements reçus »** — uniquement l'argent encaissé (cotisations + ventes
+d'équipement, typées), trié du plus récent (haut) au plus ancien (bas), pour
+vérifier un paiement sans accès à la plateforme.
 Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 **auto-suffisant** calqué sur le Google Sheet d'origine :
 - **Une feuille PAR GROUPE** : fiche complète par membre + 5 paires

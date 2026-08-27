@@ -67,12 +67,18 @@ const MAX_PAIEMENTS = 5;
  * l'application tombe. S'ajoutent une feuille Résumé et le journal Transactions.
  */
 export async function genererSauvegarde(now = new Date()): Promise<DonneesSauvegarde> {
-  const [membres, sections] = await Promise.all([
+  const [membres, sections, ventes] = await Promise.all([
     prisma.member.findMany({
       include: { sections: true, versements: { orderBy: { numeroVersement: 'asc' } } },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
     }),
     prisma.section.findMany({ orderBy: { ordre: 'asc' } }),
+    prisma.venteEquipement.findMany({
+      include: {
+        article: { select: { nom: true, marque: true, couleur: true, taille: true } },
+        member: { select: { firstName: true, lastName: true } },
+      },
+    }),
   ]);
 
   const labelDe = (code: string) => sections.find((s) => s.code === code)?.label || code;
@@ -364,6 +370,60 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
     const { _statutMembre, ...donnees } = l;
     wsTx.addRow(donnees);
   }
+
+  // ---------- Feuille : Paiements reçus (vérification sans accès à l'app) ----------
+  // UNIQUEMENT l'argent encaissé (cotisations + ventes d'équipement), trié du
+  // plus récent (en haut) au plus ancien (en bas).
+  const wsPay = wb.addWorksheet('Paiements reçus');
+  wsPay.columns = [
+    { header: 'Date payé', key: 'date', width: 13 },
+    { header: 'Montant', key: 'montant', width: 11 },
+    { header: 'Type', key: 'type', width: 12 },
+    { header: 'Athlète / acheteur', key: 'qui', width: 26 },
+    { header: 'Groupe(s)', key: 'groupe', width: 24 },
+    { header: 'Méthode', key: 'methode', width: 11 },
+    { header: 'N°', key: 'no', width: 5 },
+    { header: 'Échéance prévue', key: 'prevue', width: 14 },
+    { header: 'Détail / note', key: 'note', width: 34 },
+  ];
+  wsPay.getRow(1).font = { bold: true };
+  wsPay.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const lignesPay: any[] = [];
+  for (const m of membres) {
+    for (const v of m.versements) {
+      if (!v.datePaiement) continue;
+      lignesPay.push({
+        date: fmtDate(v.datePaiement),
+        montant: v.montant,
+        type: 'Cotisation',
+        qui: `${m.firstName} ${m.lastName}`,
+        groupe: groupesDe(m),
+        methode: v.methodePaiement || '',
+        no: v.numeroVersement,
+        prevue: fmtDate(v.datePrevue),
+        note: v.note || '',
+      });
+    }
+  }
+  for (const vte of ventes) {
+    lignesPay.push({
+      date: fmtDate(vte.date),
+      montant: Math.round(vte.prixUnitaire * vte.quantite * 100) / 100,
+      type: 'Équipement',
+      qui: vte.member ? `${vte.member.firstName} ${vte.member.lastName}` : 'Comptoir',
+      groupe: '',
+      methode: vte.methode || '',
+      no: '',
+      prevue: '',
+      note: [
+        `${vte.quantite} × ${[vte.article?.nom, vte.article?.marque, vte.article?.couleur, vte.article?.taille ? `t. ${vte.article.taille}` : null].filter(Boolean).join(' ')}`,
+        vte.note || '',
+      ].filter(Boolean).join(' — '),
+    });
+  }
+  lignesPay.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const l of lignesPay) wsPay.addRow(l);
 
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
 
