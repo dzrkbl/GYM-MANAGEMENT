@@ -37,15 +37,17 @@ ramené net. La cohérence est réelle.
 
 ---
 
-## 2. Les charges : aucune taxe n'est traitée
+## 2. Les charges
 
-Les dépenses sont additionnées **telles que saisies**, sans aucune conversion :
+Les dépenses sont saisies **taxes incluses**, comme tout le reste :
 
 ```
-totalCharges = charges fixes + loyer + masse salariale
+totalCharges    = charges fixes + loyer + masse salariale   (taxes incluses)
+totalChargesNet = totalCharges − crédits sur les intrants     (hors taxes)
 ```
 
-Rien dans le code ne distingue une charge taxable d'une charge exonérée.
+Chaque charge porte un indicateur `taxable` qui détermine si sa part de taxe
+revient au club en crédit. Voir §3 pour le détail.
 
 ---
 
@@ -98,10 +100,10 @@ charges et corrigez au besoin.
 
 ---
 
-## 3 bis. L'ancienne asymétrie (historique)
+## 3 bis. L'ancienne asymétrie (historique, corrigée)
 
-Le résultat est calculé ainsi, dans le module financier comme dans le rapport
-de rentabilité :
+Ce qui suit décrit le comportement d'AVANT le 26 août 2026, conservé pour
+mémoire. Le résultat était alors calculé ainsi :
 
 ```
 marge = (revenus ÷ 1,14975)  −  (charges telles que saisies)
@@ -141,8 +143,9 @@ Deux traitements sont défendables, et le choix appartient au comptable :
 2. **Le club ne les réclame pas** : le calcul actuel est correct, mais il faut
    savoir que le centre laisse ~10 600 $ par an sur la table.
 
-Tant que ce n'est pas tranché, **ne pas modifier le calcul** : un chiffre faux
-dans un sens vaut mieux qu'un chiffre changé sans décision.
+**Tranché le 26 août 2026** : le propriétaire confirme récupérer ses taxes.
+Le calcul a donc été corrigé (§3), avec le choix de la base laissé à
+l'affichage et la remise toujours visible.
 
 ---
 
@@ -170,25 +173,27 @@ tête que la projection des trimestriels est un plafond, pas une prévision.
 ## 5. Le seuil de rentabilité
 
 ```
-membresNecessaires = (chargesAnnuelles + ponctuelles12Mois) ÷ revenuMoyenNetParMembre
+membresNecessaires = (chargesBase + ponctuelles12Mois) ÷ revenuMoyenParMembre
 ```
+
+**Numérateur et dénominateur sont dans la MÊME base** (net ou brut selon le
+sélecteur). Auparavant le seuil divisait des charges taxes incluses par un
+revenu net, et demandait donc plus de membres qu'il n'en fallait.
 
 Avec :
 
-- `chargesAnnuelles` = (masse salariale + loyer + charges récurrentes du mois
-  courant) × 12. **Le mois courant est extrapolé sur toute l'année** : un mois
-  atypique fausse la projection.
+- `chargesBase` = (masse salariale + loyer + charges récurrentes du mois
+  courant) × 12, dans la base retenue. **Le mois courant est extrapolé sur
+  toute l'année** : un mois atypique fausse la projection.
 - `ponctuelles12Mois` = dépenses ponctuelles des 12 derniers mois (fenêtre
   glissante).
-- `revenuMoyenNetParMembre` = revenu annuel net ÷ membres payants.
+- `revenuMoyenParMembre` = revenu annuel ÷ membres payants, même base.
 
-**Trois réserves à garder en tête :**
+**Deux réserves qui subsistent :**
 
-1. Le numérateur est taxes incluses, le dénominateur est net (voir §3) : le
-   seuil est donc **surestimé**.
-2. Les membres sans plan ni montant sont exclus du calcul et listés dans
+1. Les membres sans plan ni montant sont exclus du calcul et listés dans
    `sansContrat` : s'il y en a beaucoup, le seuil est faussé.
-3. Les revenus d'équipement, d'affiliations et de frais de fédération sont
+2. Les revenus d'équipement, d'affiliations et de frais de fédération sont
    **volontairement exclus** : ce ne sont pas des revenus de cotisation, et les
    frais de fédération ne font que transiter par le club.
 
