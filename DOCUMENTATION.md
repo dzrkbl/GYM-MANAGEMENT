@@ -588,6 +588,23 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   Paiements liste les « Achats d'équipement ».
 - **Courriels** (Communications) : config transport, test, envoi groupé, backup.
 - **Import**, **Audit**, **Sections**, **Planning**, **Inscription** (publique).
+- **Mobile (téléphone)** : la navigation vit dans `src/lib/navigation.ts`,
+  SOURCE UNIQUE partagée entre la Sidebar (ordinateur) et la barre mobile —
+  avant, les deux listes avaient divergé et la moitié des pages (Prospects,
+  Remboursements, Inventaire…) était introuvable au téléphone, pendant que
+  10 icônes s'écrasaient sur une rangée. La barre mobile épingle 4 onglets du
+  quotidien (admin : Accueil/Pointage/Membres/Paiements ; coach :
+  Pointage/Membres/Rétention/Calendrier) + « Menu » qui ouvre TOUTES les
+  pages du rôle en tuiles groupées (Déconnexion incluse). Règles mobiles
+  globales : contrôles de formulaire à 16 px (sinon iOS Safari ZOOME au focus
+  et la page reste cadrée de travers — c'était le « bug » du pointage),
+  `viewport-fit=cover` + `env(safe-area-inset-bottom)` (encoche iPhone),
+  marge basse du contenu = hauteur de la barre (rien de caché dessous),
+  modales ancrées en bas en feuille (`dvh`), bouton de pointage COLLANT
+  au-dessus de la barre, confirmation de pointage sans démontage de l'écran,
+  Remboursements en cartes (le tableau 7 colonnes reste sur ordinateur).
+  Toute nouvelle page s'ajoute dans navigation.ts, jamais dans les deux
+  composants séparément.
 
 ## 9. Procédures d'exploitation (recettes)
 
@@ -843,6 +860,7 @@ src/lib/ical.ts                           Lecteur iCal maison (RFC 5545) pour le
 src/lib/ocrFacture.ts                     Lecture de factures CÔTÉ CLIENT : compresserImage (canvas → JPEG ≤ 1400 px), lireFacture (tesseract.js chargé à la demande, fra+eng), analyserTexteFacture (extraction fournisseur/date/sous-total/TPS/TVQ/total d'un reçu québécois + verdict de cohérence — les numéros d'enregistrement de taxes sans décimales sont ignorés).
 src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
 src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
+src/lib/navigation.ts                     SOURCE UNIQUE de la navigation (groupes + onglets mobiles épinglés), consommée par Sidebar ET BottomNav — toute nouvelle page s'ajoute ici.
 src/lib/seedData.ts                       seedInitialData + bootstrapIfEmpty (amorçage automatique si base vide).
 
 src/contexts/AuthContext.tsx              Session côté client (token localStorage, re-lecture de /auth/me au chargement).
@@ -873,8 +891,8 @@ src/pages/admin/Pilotage.tsx              Analytics marketing (arrivées/départ
 src/pages/admin/DepensesAdmin.tsx         Page Remboursements : facture photographiée + OCR corrigeable, « qui a payé quoi », remboursement → charge du mois (optionnelle, cochée par défaut).
 
 src/components/layout/AppLayout.tsx       Gabarit connecté (sidebar + contenu + nav mobile).
-src/components/layout/Sidebar.tsx         Menu latéral (entrées selon le rôle).
-src/components/layout/BottomNav.tsx       Navigation mobile.
+src/components/layout/Sidebar.tsx         Menu latéral ordinateur (groupes de navigation.ts, défilant).
+src/components/layout/BottomNav.tsx       Barre mobile : 4 onglets épinglés + « Menu » (feuille plein écran avec toutes les pages du rôle, Déconnexion incluse).
 src/components/membres/MembreForm.tsx     Assistant membre en 4 étapes (protections §8) — exporte CEINTURES_LIST.
 src/components/forms/CoachForm.tsx        Formulaire de compte staff/admin (rôle, sections, mot de passe).
 src/components/forms/CourseForm.tsx       Formulaire de cours (section, jours, heures, coach).

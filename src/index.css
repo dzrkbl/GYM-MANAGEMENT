@@ -11,3 +11,16 @@ body {
   font-family: ui-sans-serif, system-ui, sans-serif;
   background-color: #f9fafb;
 }
+
+/*
+ * Téléphone : iOS Safari ZOOME automatiquement sur tout champ dont la police
+ * fait moins de 16 px (nos champs « text-sm » = 14 px) — et la page reste
+ * ensuite cadrée de travers, ce qui rendait le pointage pénible. On force
+ * 16 px sur les contrôles de formulaire au téléphone ; l'apparence sur
+ * ordinateur ne change pas.
+ */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

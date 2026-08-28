@@ -276,7 +276,7 @@ export function DepensesAdmin() {
             Dépenses payées de leur poche par les administrateurs — photo de la facture, lecture automatique (corrigeable), suivi des remboursements.
           </p>
         </div>
-        <Button onClick={ouvrirAjout} className="!min-h-0 h-10"><Plus size={18} className="mr-1" /> Ajouter une facture</Button>
+        <Button onClick={ouvrirAjout} className="w-full sm:w-auto sm:!min-h-0 sm:h-10 min-h-[48px]"><Plus size={18} className="mr-1" /> Ajouter une facture</Button>
       </div>
 
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg border border-red-100 text-sm">{error}</div>}
@@ -326,7 +326,62 @@ export function DepensesAdmin() {
       {isLoading ? (
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
-        <Card className="overflow-x-auto">
+        <Card className="overflow-hidden">
+          {/* Téléphone : une CARTE par facture (le tableau à 7 colonnes se
+              lisait au microscope) — mêmes informations, mêmes actions,
+              cibles à la taille du pouce. */}
+          <ul className="md:hidden divide-y divide-gray-100">
+            {visibles.length === 0 && (
+              <li className="py-10 px-4 text-center text-gray-400 text-sm">Aucune dépense. Ajoutez la première avec « Ajouter une facture ».</li>
+            )}
+            {visibles.map((d) => (
+              <li key={d.id} className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-semibold text-cshp-black block truncate">{d.fournisseur || 'Sans fournisseur'}</span>
+                    <span className="text-xs text-gray-500">{formatDateLocal(d.dateFacture)} · payé par {d.payeurNom}</span>
+                    {d.categorie && <span className="block text-xs text-gray-400">{CATEGORIES.find((c) => c.value === d.categorie)?.label || d.categorie}</span>}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-black text-lg text-cshp-black">{fmt$(d.total)}</span>
+                    {(d.tps != null || d.tvq != null) && (
+                      <span className="block text-[11px] text-gray-400">TPS {d.tps != null ? fmt$(d.tps) : '—'} · TVQ {d.tvq != null ? fmt$(d.tvq) : '—'}</span>
+                    )}
+                  </div>
+                </div>
+                {d.note && <p className="text-xs text-gray-400 italic">{d.note}</p>}
+                <div>
+                  {d.statut === 'REMBOURSE' ? (
+                    <Badge variant="success">Remboursé {d.rembourseLe ? `le ${formatDateLocal(d.rembourseLe)}` : ''}</Badge>
+                  ) : (
+                    <Badge variant="danger">À rembourser</Badge>
+                  )}
+                  {d.statut === 'REMBOURSE' && d.depenseId && <span className="ml-2 text-[10px] text-gray-400">versé aux charges</span>}
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  {d.statut === 'A_REMBOURSER' ? (
+                    <button
+                      onClick={() => { setRembourseCible(d); setRembForm({ date: todayISO(), via: 'VIREMENT', ajouterAuxCharges: true }); }}
+                      className="flex-1 min-h-[44px] rounded-lg bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-green-700"
+                    >
+                      <CheckCircle2 size={17} /> Rembourser
+                    </button>
+                  ) : (
+                    <button onClick={() => annulerRemboursement(d)} className="flex-1 min-h-[44px] rounded-lg border border-amber-300 text-amber-700 text-sm font-semibold flex items-center justify-center gap-1.5 active:bg-amber-50">
+                      <Undo2 size={17} /> Annuler le remb.
+                    </button>
+                  )}
+                  {d.aUnePhoto && (
+                    <button onClick={() => voirPhoto(d)} className="min-h-[44px] min-w-[44px] rounded-lg border border-gray-200 text-gray-600 flex items-center justify-center active:bg-gray-50" title="Voir la facture"><ImageIcon size={18} /></button>
+                  )}
+                  <button onClick={() => ouvrirEdition(d)} className="min-h-[44px] min-w-[44px] rounded-lg border border-gray-200 text-gray-600 flex items-center justify-center active:bg-gray-50" title="Modifier"><Pencil size={18} /></button>
+                  <button onClick={() => supprimer(d)} className="min-h-[44px] min-w-[44px] rounded-lg border border-red-200 text-red-500 flex items-center justify-center active:bg-red-50" title="Supprimer"><Trash2 size={18} /></button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-100">
@@ -388,6 +443,7 @@ export function DepensesAdmin() {
               ))}
             </tbody>
           </table>
+          </div>
           <p className="text-xs text-gray-400 px-4 py-3">
             Une dépense n'entre dans les charges du Module financier <strong>qu'au remboursement</strong> (option cochée par défaut) — jamais avant, pour ne rien compter deux fois.
           </p>

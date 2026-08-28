@@ -216,8 +216,11 @@ export function Pointer() {
         })
       });
 
-      setSuccessMessage(`${res.pointed} membre(s) pointé(s) pour le ${dateCours} ! (${res.skipped} déjà pointés)`);
+      setSuccessMessage(`${res.pointed} membre(s) pointé(s) pour le ${dateCours} !${res.skipped > 0 ? ` (${res.skipped} déjà pointés)` : ''}`);
       setPointedMemberIds(new Set()); // Reset after success
+      // La confirmation s'affiche en haut : on y ramène l'écran (c'est le
+      // <main> qui défile, pas la fenêtre).
+      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       setError(err.message || 'Erreur lors du pointage');
     } finally {
@@ -234,12 +237,20 @@ export function Pointer() {
     <div className="space-y-6 max-w-md mx-auto pb-6">
       <h1 className="text-2xl font-bold text-cshp-black">Pointage Rapide</h1>
 
+      {/* La confirmation N'EFFACE PLUS l'écran : avant, tout le formulaire
+          disparaissait après « Soumettre » (l'écran semblait planter au
+          téléphone) et il fallait un clic de plus pour continuer. La liste
+          reste là, les pointés passent en vert « Déjà pointé ✓ ». */}
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex flex-col gap-2">
-          <span>{successMessage}</span>
-          <Button variant="outline" onClick={() => setSuccessMessage('')}>
-            Nouveau pointage
-          </Button>
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-start justify-between gap-2">
+          <span className="font-semibold">✅ {successMessage}</span>
+          <button
+            onClick={() => setSuccessMessage('')}
+            aria-label="Fermer la confirmation"
+            className="shrink-0 -mr-1 p-1.5 rounded-full text-green-700 hover:bg-green-100"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -249,8 +260,7 @@ export function Pointer() {
         </div>
       )}
 
-      {!successMessage && (
-        <>
+      <>
           {/* Section Selector */}
           <div className="flex flex-nowrap gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto whitespace-nowrap scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {sections.map(section => (
@@ -332,7 +342,10 @@ export function Pointer() {
                 Aucun membre actif trouvé dans {getLabel(selectedSection)}.
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
+              // Au téléphone la liste défile AVEC la page (un défilement
+              // imbriqué à hauteur bloquée était pénible au pouce) ; sur
+              // ordinateur elle garde sa hauteur bornée.
+              <ul className="divide-y divide-gray-100 md:max-h-[50vh] md:overflow-y-auto">
                 {members.map(member => {
                   const rappel = rappelPaiement(member);
                   const estDejaPointe = dejaPointes.has(member.id);
@@ -376,17 +389,21 @@ export function Pointer() {
             )}
           </div>
 
-          <Button 
-            fullWidth 
-            onClick={handleSubmit} 
-            isLoading={isSubmitting}
-            disabled={pointedMemberIds.size === 0 || !selectedCourseId}
-            className="mt-6"
-          >
-            Soumettre {pointedMemberIds.size > 0 && `(${pointedMemberIds.size})`}
-          </Button>
-        </>
-      )}
+          {/* Bouton COLLANT : toujours visible au-dessus de la barre d'onglets,
+              même au milieu d'une longue liste — plus besoin de défiler pour
+              soumettre (au téléphone il était en plus caché SOUS la barre). */}
+          <div className="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] md:bottom-4 -mx-1 px-1 pt-3 pb-1 bg-gradient-to-t from-gray-50 via-gray-50/95 to-transparent">
+            <Button
+              fullWidth
+              onClick={handleSubmit}
+              isLoading={isSubmitting}
+              disabled={pointedMemberIds.size === 0 || !selectedCourseId}
+              className="min-h-[52px] shadow-lg"
+            >
+              {pointedMemberIds.size > 0 ? `Pointer ${pointedMemberIds.size} présence(s)` : 'Soumettre'}
+            </Button>
+          </div>
+      </>
     </div>
   );
 }

@@ -18,7 +18,10 @@ export function AppLayout() {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto pb-[68px] md:pb-0">
+      {/* Marge basse = hauteur de la barre d'onglets + encoche iPhone : sans
+          elle, le bas des pages (boutons de soumission !) restait caché sous
+          la barre. */}
+      <main className="flex-1 overflow-y-auto pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0">
         <div className="p-4 md:p-8 max-w-7xl mx-auto min-h-full">
           <Outlet />
         </div>

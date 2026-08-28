@@ -31,8 +31,11 @@ export function Modal({ isOpen, onClose, title, children, width = 'md' }: ModalP
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className={`bg-white rounded-xl w-full ${widthClasses[width]} max-h-[90vh] flex flex-col shadow-xl`}>
+    // Téléphone : la fenêtre s'ancre en BAS (feuille) — un modal centré sur
+    // 90vh débordait derrière la barre d'adresse d'iOS et dansait avec le
+    // clavier. `dvh` suit la hauteur RÉELLEMENT visible. Ordinateur : centré.
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
+      <div className={`bg-white rounded-t-2xl sm:rounded-xl w-full ${widthClasses[width]} max-h-[88dvh] sm:max-h-[90dvh] flex flex-col shadow-xl pb-[env(safe-area-inset-bottom)] sm:pb-0`}>
         <div className="flex justify-between items-center p-4 md:p-6 border-b border-gray-100">
           <h2 className="text-xl font-bold text-cshp-black">{title}</h2>
           <button onClick={onClose} className="p-2 text-cshp-gray hover:bg-gray-100 rounded-lg cursor-pointer transition-colors">
