@@ -61,17 +61,22 @@ export async function seedInitialData(prisma: PrismaClient): Promise<void> {
 
   // 5. Charges fixes (créées si absentes).
   const anneeRef = 2026;
+  // « taxable » pilote les crédits de taxes sur intrants du Module financier :
+  // les primes d'ASSURANCE sont EXONÉRÉES de TPS/TVQ au Québec — les marquer
+  // taxables fabriquerait ~50 $/mois de crédits fantômes. Le seed s'exécute
+  // APRÈS les migrations : le backfill de 20260826100000_charges_taxables ne
+  // peut pas corriger ces lignes-ci, elles doivent naître justes.
   const chargesFixes = [
-    { label: 'Location automobile', montant: 608, categorie: 'FIXE' },
-    { label: 'Cellulaires', montant: 254, categorie: 'FIXE' },
-    { label: 'Assurance auto', montant: 160, categorie: 'FIXE' },
-    { label: 'Assurance gym', montant: 222, categorie: 'FIXE' },
-    { label: 'Hydro-Québec', montant: 250, categorie: 'VARIABLE' },
+    { label: 'Location automobile', montant: 608, categorie: 'FIXE', taxable: true },
+    { label: 'Cellulaires', montant: 254, categorie: 'FIXE', taxable: true },
+    { label: 'Assurance auto', montant: 160, categorie: 'FIXE', taxable: false },
+    { label: 'Assurance gym', montant: 222, categorie: 'FIXE', taxable: false },
+    { label: 'Hydro-Québec', montant: 250, categorie: 'VARIABLE', taxable: true },
   ];
   for (const charge of chargesFixes) {
     const existe = await prisma.depense.findFirst({ where: { label: charge.label, annee: anneeRef, mois: null } });
     if (!existe) {
-      await prisma.depense.create({ data: { label: charge.label, montant: charge.montant, mois: null, annee: anneeRef, categorie: charge.categorie as any } });
+      await prisma.depense.create({ data: { label: charge.label, montant: charge.montant, mois: null, annee: anneeRef, categorie: charge.categorie as any, taxable: charge.taxable } });
     }
   }
 }

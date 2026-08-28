@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate } from '../middleware/auth';
-import { porteeStaff, clauseSectionsPortee } from '../lib/portee';
+import { porteeStaff, clauseSectionsPortee, membreDansPortee } from '../lib/portee';
 import { logAudit } from '../lib/audit';
 
 const router = Router();
@@ -80,7 +80,10 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     });
     const contactParRef = new Map(contacts.map((c) => [c.refKey, c.sentAt]));
 
-    const maintenant = jourDebut(new Date());
+    // Jour civil de MONTRÉAL (le serveur tourne en UTC : après ~20 h, minuit
+    // serveur est déjà demain et « il y a X j » gonflait d'un jour le soir).
+    const isoAuj = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+    const maintenant = new Date(isoAuj + 'T00:00:00Z');
     let jamaisPointes = 0;
     const resultat: any[] = [];
 
@@ -121,7 +124,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
         email: m.email,
         parentEmail: m.parentEmail,
         dernierePresence: derniere,
-        joursDepuis: Math.floor((maintenant.getTime() - jourDebut(derniere).getTime()) / 86_400_000),
+        joursDepuis: Math.floor((maintenant.getTime() - new Date(jourDerniere + 'T00:00:00Z').getTime()) / 86_400_000),
         seancesManquees: manquees,
         niveau,
         contacteAt,
@@ -148,9 +151,15 @@ router.post('/:id/contact', authenticate, async (req: Request, res: Response): P
   try {
     const membre = await prisma.member.findUnique({
       where: { id: req.params.id },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, sections: { select: { section: true } } },
     });
     if (!membre) return sendError(res, 'Membre introuvable', 404);
+    // Même portée que la liste : marquer « appelé » dépriorise l'enfant dans
+    // la liste du coach concerné — pas de marquage hors de sa discipline.
+    const portee = await porteeStaff(req.user!);
+    if (!membreDansPortee(membre.sections, portee)) {
+      return sendError(res, 'Membre hors de votre discipline', 403);
+    }
 
     const derniere = await prisma.attendance.findFirst({
       where: { memberId: membre.id, status: 'PRESENT' },
@@ -178,14 +187,29 @@ router.post('/:id/contact', authenticate, async (req: Request, res: Response): P
 // DELETE /api/retention/:id/contact — annuler la marque (clic par erreur).
 router.delete('/:id/contact', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
+    const membre = await prisma.member.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, firstName: true, lastName: true, sections: { select: { section: true } } },
+    });
+    if (!membre) return sendError(res, 'Membre introuvable', 404);
+    // Même garde que le POST : effacer la marque d'appel d'un enfant hors de
+    // sa discipline le ferait remonter dans la liste d'un autre coach.
+    const portee = await porteeStaff(req.user!);
+    if (!membreDansPortee(membre.sections, portee)) {
+      return sendError(res, 'Membre hors de votre discipline', 403);
+    }
     const derniere = await prisma.attendance.findFirst({
-      where: { memberId: req.params.id, status: 'PRESENT' },
+      where: { memberId: membre.id, status: 'PRESENT' },
       orderBy: { date: 'desc' },
       select: { date: true },
     });
     if (!derniere) return sendSuccess(res, { ok: true });
     await prisma.reminderLog.deleteMany({
-      where: { type: TYPE_LOG, refKey: `${req.params.id}:${isoJour(derniere.date)}` },
+      where: { type: TYPE_LOG, refKey: `${membre.id}:${isoJour(derniere.date)}` },
+    });
+    logAudit(req, {
+      action: 'DELETE', entity: 'Retention', entityId: membre.id,
+      description: `Appel de rétention annulé — ${membre.firstName} ${membre.lastName}`,
     });
     return sendSuccess(res, { ok: true });
   } catch (error) {

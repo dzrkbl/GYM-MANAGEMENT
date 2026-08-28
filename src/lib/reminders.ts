@@ -345,15 +345,20 @@ export async function sendLeadFollowups(now = new Date(), seuilJours = 3): Promi
   const cutoff = addDays(jourDebut(now), -seuilJours);
   const leads = await prisma.lead.findMany({ where: { status: 'NEW', createdAt: { lt: cutoff } } });
 
+  // Tous ces champs viennent du formulaire PUBLIC du site : échappés pour
+  // qu'un robot ne puisse pas injecter de HTML dans la boîte de l'admin
+  // (même garde que leads.ts pour sa propre notification).
+  const echap = (v?: string | null) =>
+    (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   for (const l of leads) {
-    const provenance = [l.source, l.utmContent].filter(Boolean).join(' · ');
+    const provenance = [l.source, l.utmContent].filter(Boolean).map(echap).join(' · ');
     const html = htmlCourriel(`
       <p>Bonjour,</p>
-      <p>Le prospect <strong>${l.firstName} ${l.lastName}</strong> (${l.sport}, ${l.requestType})
+      <p>Le prospect <strong>${echap(l.firstName)} ${echap(l.lastName)}</strong> (${echap(l.sport)}, ${l.requestType})
       n'a pas encore été contacté depuis sa demande du ${formatDate(l.createdAt)}.</p>
-      <p>Coordonnées : ${l.phone || '—'} · ${l.email || '—'}</p>
+      <p>Coordonnées : ${echap(l.phone) || '—'} · ${echap(l.email) || '—'}</p>
       ${provenance ? `<p>Provenance : ${provenance}</p>` : ''}
-      ${l.note ? `<p>Note : ${l.note}</p>` : ''}
+      ${l.note ? `<p>Note : ${echap(l.note)}</p>` : ''}
       <p>Pensez à effectuer un suivi.</p>`, { salutation: null });
     const resultat = await envoyerAvecLog({
       type: 'LEAD_RELANCE', memberId: l.id, refKey: l.id,

@@ -151,22 +151,27 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
     // Dépenses ponctuelles des 12 derniers mois (fenêtre glissante).
     const cle = (a: number, m: number) => a * 12 + m;
     const ponctuelles = await prisma.depense.findMany({ where: { mois: { not: null }, isOverride: false } });
-    const ponctuelles12Mois = Math.round(
-      ponctuelles
-        .filter((d) => d.mois !== null && cle(d.annee, d.mois) > cle(annee, mois) - 12 && cle(d.annee, d.mois) <= cle(annee, mois))
-        .reduce((a, d) => a + d.montant, 0) * 100
+    const ponctuellesFenetre = ponctuelles
+      .filter((d) => d.mois !== null && cle(d.annee, d.mois) > cle(annee, mois) - 12 && cle(d.annee, d.mois) <= cle(annee, mois));
+    const ponctuelles12Mois = Math.round(ponctuellesFenetre.reduce((a, d) => a + d.montant, 0) * 100) / 100;
+    // En base « net », les ponctuelles TAXABLES perdent aussi leur part de
+    // TPS/TVQ (crédits d'intrants) — comme les récurrentes et le loyer, sinon
+    // le résultat prudent soustrait du brut à du net.
+    const ponctuelles12MoisNet = Math.round(
+      ponctuellesFenetre.reduce((a, d) => a + (d.taxable ? sansTaxes(d.montant) : d.montant), 0) * 100
     ) / 100;
+    const ponctuellesBase = base === 'net' ? ponctuelles12MoisNet : ponctuelles12Mois;
 
     // Les DEUX membres de chaque soustraction sont dans la même base.
     const revenusBase = base === 'net' ? revenuAnnuelNet : revenuAnnuelBrut;
     const chargesBase = base === 'net' ? chargesAnnuellesNet : chargesAnnuelles;
     const resultatRecurrent = Math.round((revenusBase - chargesBase) * 100) / 100;
-    const resultatPrudent = Math.round((resultatRecurrent - ponctuelles12Mois) * 100) / 100;
+    const resultatPrudent = Math.round((resultatRecurrent - ponctuellesBase) * 100) / 100;
     const membresPayants = membres.length - sansContrat.length;
     const revenuMoyenParMembre = membresPayants > 0 ? Math.round((revenusBase / membresPayants) * 100) / 100 : 0;
     // Seuil de rentabilité : numérateur et dénominateur dans la même base.
     const membresNecessaires = revenuMoyenParMembre > 0
-      ? Math.ceil((chargesBase + ponctuelles12Mois) / revenuMoyenParMembre)
+      ? Math.ceil((chargesBase + ponctuellesBase) / revenuMoyenParMembre)
       : null;
 
     return sendSuccess(res, {
@@ -185,6 +190,7 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
       chargesAnnuellesNet,
       creditsIntrantsAnnuels: Math.round(creditsMensuels * 12 * 100) / 100,
       ponctuelles12Mois,
+      ponctuelles12MoisBase: ponctuellesBase,
       base,
       revenusBase,
       chargesBase,

@@ -3,7 +3,11 @@ import { KATAS_HEIAN } from './katas';
 // Contenu de la documentation de bienvenue envoyée par courriel à un nouvel inscrit.
 // Renvoie le HTML interne (le gabarit htmlCourriel ajoute le logo, l'en-tête et la signature).
 export function contenuBienvenue(params: { nom: string; karate?: boolean; note?: string }): string {
-  const { nom, karate, note } = params;
+  const { karate, note } = params;
+  // Le nom peut venir du formulaire PUBLIC d'inscription : échappé pour
+  // qu'aucune balise ne s'injecte dans le courriel (la note, elle, est
+  // toujours composée côté serveur).
+  const nom = params.nom.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const encadreNote = note
     ? `<p style="background:#f5f5f5;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;">${note}</p>`

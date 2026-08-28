@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { parseIcal, deviner } from '../lib/ical';
+import { porteeStaff } from '../lib/portee';
 
 const router = Router();
 
@@ -25,12 +26,20 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     }
     // Un événement est visible s'il CHEVAUCHE la fenêtre : une compétition
     // du 29 au 2 doit apparaître dans les deux mois concernés.
+    const where: any = {
+      actif: true,
+      date: { lte: fin },
+      OR: [{ dateFin: null, date: { gte: debut, lte: fin } }, { dateFin: { gte: debut } }],
+    };
+    // Même portée que le module Événements : un coach ne voit que sa
+    // discipline (+ les événements « TOUS » du club) — la vue mois ne doit
+    // pas contourner le cloisonnement.
+    const portee = await porteeStaff(req.user!);
+    if (!portee.admin) {
+      where.AND = [{ OR: [{ discipline: null }, { discipline: 'TOUS' }, ...portee.sports.map((sp) => ({ discipline: sp }))] }];
+    }
     const evenements = await prisma.evenement.findMany({
-      where: {
-        actif: true,
-        date: { lte: fin },
-        OR: [{ dateFin: null, date: { gte: debut, lte: fin } }, { dateFin: { gte: debut } }],
-      },
+      where,
       orderBy: { date: 'asc' },
       include: { _count: { select: { inscriptions: true } } },
     });
@@ -77,6 +86,8 @@ router.put('/sources/:id', authenticate, requireRole(['ADMIN']), async (req: Req
   try {
     const data = sourceSchema.partial().parse(req.body);
     const source = await prisma.calendrierSource.update({ where: { id: req.params.id }, data });
+    // Changer l'URL d'une source change ce qui entre dans le calendrier : tracé.
+    logAudit(req, { action: 'UPDATE', entity: 'CalendrierSource', entityId: source.id, description: `Source calendrier modifiée : ${source.nom}${data.url ? ` (URL : ${data.url})` : ''}` });
     return sendSuccess(res, source);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
@@ -88,7 +99,8 @@ router.put('/sources/:id', authenticate, requireRole(['ADMIN']), async (req: Req
 // ceux que le club a retenus (et leurs inscriptions) doivent survivre.
 router.delete('/sources/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    await prisma.calendrierSource.delete({ where: { id: req.params.id } });
+    const source = await prisma.calendrierSource.delete({ where: { id: req.params.id } });
+    logAudit(req, { action: 'DELETE', entity: 'CalendrierSource', entityId: source.id, description: `Source calendrier supprimée : ${source.nom} (les événements importés sont conservés)` });
     return sendSuccess(res, { ok: true });
   } catch {
     return sendError(res, 'Erreur lors de la suppression', 500);

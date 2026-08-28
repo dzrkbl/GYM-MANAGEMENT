@@ -14,8 +14,8 @@ model User {
   firstName    String?
   lastName     String?
   phone        String?
-  role         String   // ADMIN, SECTION_MANAGER, COACH
-  section      String?  // Renseigné si le rôle est SECTION_MANAGER, ou comma separated
+  role         String // ADMIN, SECTION_MANAGER, COACH
+  section      String? // Renseigné si le rôle est SECTION_MANAGER, ou comma separated
   remuneration Float?   @default(0)
   actif        Boolean  @default(true)
   dateDebut    DateTime @default(now())
@@ -23,122 +23,122 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  grades       Grade[]  @relation("Examiner")
-  courses      Course[]
+  grades  Grade[]  @relation("Examiner")
+  courses Course[]
 }
 
 model Member {
-  id            String          @id @default(uuid())
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
-  gender        String?
-  phone         String?
-  email         String?
-  photoUrl      String?
-  status        String          @default("ACTIF") // ACTIF, INACTIF, EN_ATTENTE
-  signupDate    DateTime        @default(now())
-  notes         String?
-  parentName    String?         // Pour les mineurs
-  parentPhone   String?         // Pour les mineurs
-  parentEmail    String?         // Courriel du parent pour les mineurs
-  currentBelt   String?         @default("BLANCHE")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id          String    @id @default(uuid())
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime?
+  gender      String?
+  phone       String?
+  email       String?
+  photoUrl    String?
+  status      String    @default("ACTIF") // ACTIF, INACTIF, EN_ATTENTE
+  signupDate  DateTime  @default(now())
+  notes       String?
+  parentName  String? // Pour les mineurs
+  parentPhone String? // Pour les mineurs
+  parentEmail String? // Courriel du parent pour les mineurs
+  currentBelt String?   @default("BLANCHE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Infos personnelles additionnelles
-  poids                  Float?
-  adresse                String?
-  codePostal             String?
-  ville                  String?
+  poids      Float?
+  adresse    String?
+  codePostal String?
+  ville      String?
 
   // Santé
-  problemeSante          Boolean     @default(false)
-  noteSante              String?     // détail si problème de santé
+  problemeSante Boolean @default(false)
+  noteSante     String? // détail si problème de santé
 
   // Contact d'urgence (1er répondant)
-  urgenceNom             String?
-  urgenceLien            String?
-  urgenceTel             String?
+  urgenceNom  String?
+  urgenceLien String?
+  urgenceTel  String?
 
   // Contrat
-  dateInscription        DateTime?
-  finContrat             DateTime?
+  dateInscription DateTime?
+  finContrat      DateTime?
 
   // Motif du départ, saisi au passage en INACTIF. Sert au tableau d'attrition :
   // savoir POURQUOI on perd des membres vaut plus que le taux lui-même.
-  raisonDepart           String?
+  raisonDepart String?
 
   // Plan tarifaire
-  plan                   Plan?       // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
-  prixBase               Float?
-  rabaisFamille          Boolean     @default(false)
-  membreFamilleId        String?
-  rabaisCustomPct        Float?
-  raisonRabaisCustom     String?
-  montantFinal           Float?
+  plan               Plan? // 'MENSUEL', 'TRIMESTRIEL', 'ANNUEL'
+  prixBase           Float?
+  rabaisFamille      Boolean @default(false)
+  membreFamilleId    String?
+  rabaisCustomPct    Float?
+  raisonRabaisCustom String?
+  montantFinal       Float?
 
   // Référencement
   referePar              String?
   rabaisReferentPct      Float?
-  rabaisReferentApplique Boolean     @default(false)
+  rabaisReferentApplique Boolean @default(false)
 
   // Provenance (section 7 de la fiche d'inscription)
-  provenance             String?     // BOUCHE_A_OREILLE, RESEAUX_SOCIAUX, WEB, ECOLE, AUTRE
-  refereParNom           String?     // nom du membre référent tel que saisi sur la fiche
+  provenance   String? // BOUCHE_A_OREILLE, RESEAUX_SOCIAUX, WEB, ECOLE, AUTRE
+  refereParNom String? // nom du membre référent tel que saisi sur la fiche
 
   // Consentement au règlement intérieur (inscription en ligne)
-  reglementVersion       String?     // version du règlement acceptée
-  reglementAccepteAt     DateTime?   // horodatage de l'acceptation
-  reglementSignataire    String?     // nom complet saisi comme signature
+  reglementVersion    String? // version du règlement acceptée
+  reglementAccepteAt  DateTime? // horodatage de l'acceptation
+  reglementSignataire String? // nom complet saisi comme signature
 
   // Autorisations de la fiche d'inscription (toutes obligatoires en ligne ;
   // un refus du droit à l'image se règle en personne, jamais via le formulaire)
-  consentPhoto           Boolean     @default(false)  // droit à l'image (photos/vidéos promotionnelles)
-  consentUrgence         Boolean     @default(false)  // recours aux services médicaux d'urgence
-  consentCommunications  Boolean     @default(false)  // communications par courriel (rappels, reçus, horaires)
+  consentPhoto          Boolean @default(false) // droit à l'image (photos/vidéos promotionnelles)
+  consentUrgence        Boolean @default(false) // recours aux services médicaux d'urgence
+  consentCommunications Boolean @default(false) // communications par courriel (rappels, reçus, horaires)
 
   // Relations
-  sections      MemberSection[]
-  attendances   Attendance[]
-  grades        Grade[]
-  versements    PaymentVersement[]
-  achats        VenteEquipement[]
-  affiliations  Affiliation[]
-  evenements    EvenementInscription[]
+  sections     MemberSection[]
+  attendances  Attendance[]
+  grades       Grade[]
+  versements   PaymentVersement[]
+  achats       VenteEquipement[]
+  affiliations Affiliation[]
+  evenements   EvenementInscription[]
 }
 
 model PaymentVersement {
-  id              String    @id @default(uuid())
-  membreId        String
-  numeroVersement Int
-  montant         Float
-  datePrevue      DateTime
-  datePaiement    DateTime?
-  methodePaiement MethodePaiement?   // CASH, VIREMENT, CHEQUE, CARTE
-  note            String?
+  id                  String           @id @default(uuid())
+  membreId            String
+  numeroVersement     Int
+  montant             Float
+  datePrevue          DateTime
+  datePaiement        DateTime?
+  methodePaiement     MethodePaiement? // CASH, VIREMENT, CHEQUE, CARTE
+  note                String?
   // Frais de retard (10 $/semaine après 1 semaine, règlement art. 6) : calculés
   // dynamiquement ; l'admin peut les exonérer au cas par cas.
-  exonererFraisRetard Boolean @default(false)
+  exonererFraisRetard Boolean          @default(false)
   // Frais réellement chargés, décidés par l'admin (null = compteur automatique).
   // Ex. : 4 semaines de retard = 40 $ courus, l'admin décide d'en charger 10 $.
   fraisRetardFactures Float?
-  reminderSentAt  DateTime?          // Anti-doublon pour les rappels de paiement automatiques
-  receiptNumber   Int?               // Numéro de reçu (assigné à l'envoi du reçu)
-  receiptSentAt   DateTime?          // Date d'envoi du reçu par courriel (anti-doublon)
-  createdAt       DateTime  @default(now())
+  reminderSentAt      DateTime? // Anti-doublon pour les rappels de paiement automatiques
+  receiptNumber       Int? // Numéro de reçu (assigné à l'envoi du reçu)
+  receiptSentAt       DateTime? // Date d'envoi du reçu par courriel (anti-doublon)
+  createdAt           DateTime         @default(now())
 
-  member          Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [membreId], references: [id], onDelete: Cascade)
 }
 
 model MemberSection {
   id             String   @id @default(uuid())
   memberId       String
-  section        String   // KARATE, JUDO, NINJAS_GR1, NINJAS_GR2, TAEKWONDO, KICKBOXING, FITNESS, PRIVATE
+  section        String // KARATE, JUDO, NINJAS_GR1, NINJAS_GR2, TAEKWONDO, KICKBOXING, FITNESS, PRIVATE
   belt           String?  @default("Blanche")
   enrollmentDate DateTime @default(now())
-  
-  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([memberId, section])
 }
@@ -146,8 +146,8 @@ model MemberSection {
 model Course {
   id        String   @id @default(uuid())
   section   String
-  startTime String   // "17:00"
-  endTime   String   // "18:30"
+  startTime String // "17:00"
+  endTime   String // "18:30"
   coachId   String?
   jours     String[] // ["LUN", "MER", "VEN"]
   actif     Boolean  @default(true)
@@ -158,11 +158,11 @@ model Course {
 }
 
 model Attendance {
-  id        String   @id @default(uuid())
-  memberId  String
-  courseId  String
-  date      DateTime
-  status    String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED
+  id       String   @id @default(uuid())
+  memberId String
+  courseId String
+  date     DateTime
+  status   String   @default("PRESENT") // PRESENT, ABSENT, EXCUSED
 
   // Traçabilité du pointage : QUAND la saisie a eu lieu (à ne pas confondre
   // avec `date`, le jour du COURS) et QUI l'a faite. Volontairement nullables
@@ -171,10 +171,10 @@ model Attendance {
   // mensonger. Une valeur nulle se lit « inconnu ».
   pointeAt     DateTime?
   pointeParId  String?
-  pointeParNom String?   // dénormalisé, comme AuditLog : survit à la suppression du compte
+  pointeParNom String? // dénormalisé, comme AuditLog : survit à la suppression du compte
 
-  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([memberId, courseId, date])
   @@index([courseId, date])
@@ -191,27 +191,27 @@ model Grade {
   note               String?
   createdAt          DateTime @default(now())
 
-  member             Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  examinateur        User     @relation("Examiner", fields: [examinateurId], references: [id])
+  member      Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  examinateur User   @relation("Examiner", fields: [examinateurId], references: [id])
 }
 
 model Lead {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   firstName   String
   lastName    String
   gender      String?
   phone       String?
   email       String?
-  sport       String   // KARATE, JUDO, TAEKWONDO, KICKBOXING, PRIVATE
-  requestType String   // ESSAI, RAPPEL, TARIFS, AUTRE
-  status      String   @default("NEW") // NEW, CONTACTED, CONVERTED, LOST
+  sport       String // KARATE, JUDO, TAEKWONDO, KICKBOXING, PRIVATE
+  requestType String // ESSAI, RAPPEL, TARIFS, AUTRE
+  status      String  @default("NEW") // NEW, CONTACTED, CONVERTED, LOST
 
   // Attribution marketing (landing pages du site, pubs Meta…)
-  source      String?  // ex: "landing-karate-enfant", "meta-instant-form"
+  source      String? // ex: "landing-karate-enfant", "meta-instant-form"
   utmSource   String?
   utmCampaign String?
-  utmContent  String?  // nom du créatif/de la pub
-  note        String?  // texte libre (ex: âge de l'enfant)
+  utmContent  String? // nom du créatif/de la pub
+  note        String? // texte libre (ex: âge de l'enfant)
 
   // Lien avec la fiche d'inscription en ligne : quand une fiche correspondant
   // au prospect est reçue, on horodate et on pointe le dossier membre créé
@@ -219,10 +219,10 @@ model Lead {
   ficheRecueAt DateTime?
   membreId     String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  notes       LeadNote[]
+  notes LeadNote[]
 }
 
 // Fil de suivi d'un prospect : qui l'a appelé, ce qui s'est dit, quoi faire.
@@ -233,19 +233,19 @@ model LeadNote {
   leadId    String
   texte     String
   auteurId  String?
-  auteurNom String?  // dénormalisé comme AuditLog : survit à la suppression du compte
+  auteurNom String? // dénormalisé comme AuditLog : survit à la suppression du compte
   createdAt DateTime @default(now())
 
-  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId, createdAt])
 }
 
 model Section {
   id        String   @id @default(uuid())
-  code      String   @unique  // ex: "KARATE_GR1"
-  label     String            // ex: "Karaté Gr. 1"
-  sport     String            // ex: "KARATE", "JUDO", "NINJAS"
+  code      String   @unique // ex: "KARATE_GR1"
+  label     String // ex: "Karaté Gr. 1"
+  sport     String // ex: "KARATE", "JUDO", "NINJAS"
   ordre     Int      @default(0)
   actif     Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -266,14 +266,14 @@ enum MethodePaiement {
 
 model MasseSalariale {
   id        String   @id @default(uuid())
-  mois      Int      // 1-12
-  annee     Int      // 2024, 2025, 2026
+  mois      Int // 1-12
+  annee     Int // 2024, 2025, 2026
   montant   Float
   note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([mois, annee])  // un seul enregistrement par mois
+  @@unique([mois, annee]) // un seul enregistrement par mois
 }
 
 model CoachSalaire {
@@ -288,10 +288,10 @@ model CoachSalaire {
 // Config de base pour les charges avec hausse automatique annuelle
 model DepenseConfig {
   id            String   @id @default(uuid())
-  code          String   @unique   // ex: "LOYER"
-  label         String             // ex: "Loyer"
-  montantBase   Float              // montant de référence (TAXES INCLUSES)
-  anneeBase     Int                // année du montantBase (ex: 2024)
+  code          String   @unique // ex: "LOYER"
+  label         String // ex: "Loyer"
+  montantBase   Float // montant de référence (TAXES INCLUSES)
+  anneeBase     Int // année du montantBase (ex: 2024)
   tauxHaussePct Float    @default(0) // ex: 2.0 pour +2%/an automatique
   // Le loyer commercial, l'électricité, la téléphonie sont taxables : leur part
   // de TPS/TVQ revient au club en crédits sur les intrants. Les assurances en
@@ -303,19 +303,19 @@ model DepenseConfig {
 
 // Charges mensuelles ou annuelles, fixes ou variables
 model Depense {
-  id          String          @id @default(uuid())
-  label       String
-  montant     Float           // TAXES INCLUSES, comme tout montant saisi
+  id         String           @id @default(uuid())
+  label      String
+  montant    Float // TAXES INCLUSES, comme tout montant saisi
   // Voir DepenseConfig.taxable : détermine si la part de taxe est récupérable.
-  taxable     Boolean         @default(true)
-  mois        Int?            // 1-12 = mois précis | null = tous les mois de l'année
-  annee       Int
-  categorie   CategorieDepense @default(FIXE)
-  note        String?
-  isOverride  Boolean         @default(false) // true si saisie manuelle sur config auto
-  configCode  String?         // référence à DepenseConfig.code si override
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  taxable    Boolean          @default(true)
+  mois       Int? // 1-12 = mois précis | null = tous les mois de l'année
+  annee      Int
+  categorie  CategorieDepense @default(FIXE)
+  note       String?
+  isOverride Boolean          @default(false) // true si saisie manuelle sur config auto
+  configCode String? // référence à DepenseConfig.code si override
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 }
 
 enum CategorieDepense {
@@ -329,9 +329,9 @@ enum CategorieDepense {
 model AuditLog {
   id          String   @id @default(uuid())
   userId      String?
-  userNom     String?  // dénormalisé pour l'affichage
-  action      String   // CREATE, UPDATE, DELETE, PAY
-  entity      String   // Member, PaymentVersement…
+  userNom     String? // dénormalisé pour l'affichage
+  action      String // CREATE, UPDATE, DELETE, PAY
+  entity      String // Member, PaymentVersement…
   entityId    String?
   description String?
   createdAt   DateTime @default(now())
@@ -343,19 +343,15 @@ model AuditLog {
 // Journal des rappels/alertes envoyés, pour éviter les doublons (dédup par type + refKey).
 model ReminderLog {
   id          String   @id @default(uuid())
-  type        String   // PAIEMENT_J7, PAIEMENT_J0, PAIEMENT_RETARD, RENOUVELLEMENT, ABSENCE
+  type        String // PAIEMENT_J7, PAIEMENT_J0, PAIEMENT_RETARD, RENOUVELLEMENT, ABSENCE
   memberId    String
   versementId String?
-  refKey      String   // clé de déduplication (id versement, échéance, semaine…)
+  refKey      String // clé de déduplication (id versement, échéance, semaine…)
   sentAt      DateTime @default(now())
 
   @@unique([type, refKey])
   @@index([memberId])
 }
-
-
-
-
 
 // ---------- Module Inventaire ----------
 // Un article = une combinaison précise (nom + taille + couleur + marque).
@@ -363,40 +359,40 @@ model ReminderLog {
 // prixVente = prix facturé aux parents. Les deux modifiables par l'admin.
 model ArticleInventaire {
   id          String   @id @default(uuid())
-  nom         String            // ex. « Kimono karaté », « Gants »
-  categorie   String            // KIMONO, GANTS, PROTEGE_TIBIAS, PROTEGE_DENTS, CEINTURE, COQUILLE, CHANDAIL, AUTRE
-  discipline  String?           // KARATE, JUDO, NINJAS, TOUS
-  taille      String?           // « 140 », « M0 », « 2 »…
-  couleur     String?           // « Bleue », « Blanc »…
-  marque      String?           // « Jukado », « Adidas »…
-  coutAchat   Float?            // coût de revient (interne club)
-  prixVente   Float             // prix de vente aux parents
-  quantite    Int      @default(0)  // stock actuel
-  seuilAlerte Int?              // stock bas : alerte visuelle
+  nom         String // ex. « Kimono karaté », « Gants »
+  categorie   String // KIMONO, GANTS, PROTEGE_TIBIAS, PROTEGE_DENTS, CEINTURE, COQUILLE, CHANDAIL, AUTRE
+  discipline  String? // KARATE, JUDO, NINJAS, TOUS
+  taille      String? // « 140 », « M0 », « 2 »…
+  couleur     String? // « Bleue », « Blanc »…
+  marque      String? // « Jukado », « Adidas »…
+  coutAchat   Float? // coût de revient (interne club)
+  prixVente   Float // prix de vente aux parents
+  quantite    Int      @default(0) // stock actuel
+  seuilAlerte Int? // stock bas : alerte visuelle
   actif       Boolean  @default(true)
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  ventes      VenteEquipement[]
+  ventes VenteEquipement[]
 }
 
 // Vente d'équipement : trace QUI a acheté QUOI (prix de vente copié au moment
 // de la vente). N'entre PAS dans les revenus de cotisations des rapports ;
 // n'apparaît PAS automatiquement sur la facture annuelle (ajout manuel si voulu).
 model VenteEquipement {
-  id           String   @id @default(uuid())
+  id           String           @id @default(uuid())
   articleId    String
-  membreId     String?          // acheteur (null = vente comptoir sans dossier)
-  quantite     Int      @default(1)
-  prixUnitaire Float            // prix de VENTE au moment de la vente
+  membreId     String? // acheteur (null = vente comptoir sans dossier)
+  quantite     Int              @default(1)
+  prixUnitaire Float // prix de VENTE au moment de la vente
   methode      MethodePaiement?
-  date         DateTime @default(now())
+  date         DateTime         @default(now())
   note         String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime         @default(now())
 
-  article      ArticleInventaire @relation(fields: [articleId], references: [id], onDelete: Restrict)
-  member       Member?           @relation(fields: [membreId], references: [id], onDelete: SetNull)
+  article ArticleInventaire @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  member  Member?           @relation(fields: [membreId], references: [id], onDelete: SetNull)
 
   @@index([membreId])
   @@index([date])
@@ -409,15 +405,15 @@ model VenteEquipement {
 model Affiliation {
   id           String    @id @default(uuid())
   membreId     String
-  discipline   String            // KARATE, JUDO
-  saison       String            // « 2026-2027 »
-  numero       String?           // numéro de membre fédération
-  montant      Float?            // payé à la fédération (pas un revenu club)
+  discipline   String // KARATE, JUDO
+  saison       String // « 2026-2027 »
+  numero       String? // numéro de membre fédération
+  montant      Float? // payé à la fédération (pas un revenu club)
   datePaiement DateTime?
   note         String?
   createdAt    DateTime  @default(now())
 
-  member       Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [membreId], references: [id], onDelete: Cascade)
 
   @@unique([membreId, discipline, saison])
   @@index([saison])
@@ -426,30 +422,30 @@ model Affiliation {
 // Événement spécial : compétition, passage de grade, autre.
 // fraisInscription transite vers l'organisateur/fédération (pas un revenu club).
 model Evenement {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   titre            String
-  type             String   @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, FORMATION, FERMETURE, AUTRE
-  discipline       String?           // KARATE, JUDO, TOUS…
+  type             String    @default("COMPETITION") // COMPETITION, PASSAGE_GRADE, FORMATION, FERMETURE, AUTRE
+  discipline       String? // KARATE, JUDO, TOUS…
   date             DateTime
-  dateFin          DateTime?         // dernier jour INCLUS (compétition sur plusieurs jours, fermeture)
-  horaire          String?           // « 09:00 à 13:00 » si l'événement porte une heure
+  dateFin          DateTime? // dernier jour INCLUS (compétition sur plusieurs jours, fermeture)
+  horaire          String? // « 09:00 à 13:00 » si l'événement porte une heure
   lieu             String?
   fraisInscription Float?
   note             String?
-  actif            Boolean  @default(true)
+  actif            Boolean   @default(true)
 
   // Calendrier de saison : une date importée d'une fédération arrive en
   // CALENDRIER (informative, visible au calendrier, aucune inscription).
   // Le bouton « Intégrer au module Événements » la passe à RETENU, ce qui
   // débloque inscriptions, frais et calcul d'admissibilité.
-  statut           String   @default("RETENU")  // CALENDRIER | RETENU
-  source           String?           // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ… (null = saisi au club)
-  sourceUid        String?           // UID iCal, pour ne pas réimporter deux fois
+  statut    String  @default("RETENU") // CALENDRIER | RETENU
+  source    String? // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ… (null = saisi au club)
+  sourceUid String? // UID iCal, pour ne pas réimporter deux fois
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  inscriptions     EvenementInscription[]
+  inscriptions EvenementInscription[]
 
   // Deux valeurs nulles ne se heurtent jamais en Postgres : les événements
   // saisis à la main (source nulle) ne sont donc pas contraints.
@@ -459,28 +455,59 @@ model Evenement {
 
 // Abonnement à un calendrier de fédération (fichier .ics public).
 model CalendrierSource {
-  id            String    @id @default(uuid())
-  code          String    @unique  // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ…
-  nom           String              // « Karaté Québec — saison 2025/2026 »
-  url           String              // lien .ics d'abonnement
-  discipline    String?             // discipline appliquée aux événements importés
-  actif         Boolean   @default(true)
-  dernierSyncAt DateTime?
-  dernierSyncMsg String?            // résultat de la dernière synchronisation
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  code           String    @unique // KARATE_QUEBEC, JUDO_QUEBEC, CEKQ…
+  nom            String // « Karaté Québec — saison 2025/2026 »
+  url            String // lien .ics d'abonnement
+  discipline     String? // discipline appliquée aux événements importés
+  actif          Boolean   @default(true)
+  dernierSyncAt  DateTime?
+  dernierSyncMsg String? // résultat de la dernière synchronisation
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model EvenementInscription {
   id          String   @id @default(uuid())
   evenementId String
   membreId    String
-  fraisPaye   Boolean  @default(false)  // frais remis (transitent vers la fédé)
+  fraisPaye   Boolean  @default(false) // frais remis (transitent vers la fédé)
   note        String?
   createdAt   DateTime @default(now())
 
-  evenement   Evenement @relation(fields: [evenementId], references: [id], onDelete: Cascade)
-  member      Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
+  evenement Evenement @relation(fields: [evenementId], references: [id], onDelete: Cascade)
+  member    Member    @relation(fields: [membreId], references: [id], onDelete: Cascade)
 
   @@unique([evenementId, membreId])
+}
+
+// Dépense payée de sa POCHE par un membre du personnel pour le club, avec la
+// facture photographiée (OCR côté client, champs corrigeables). Suivi du
+// remboursement ; au remboursement, elle peut être versée aux charges
+// (Depense ponctuelle du mois) pour entrer dans le Module financier — jamais
+// avant (sinon double comptage : l'argent n'est sorti du club qu'au
+// remboursement).
+model DepenseAdmin {
+  id           String    @id @default(uuid())
+  payeurId     String // compte User qui a payé
+  payeurNom    String // figé : lisible même si le compte change
+  fournisseur  String?
+  dateFacture  DateTime // midi UTC (date-jour)
+  sousTotal    Float? // avant taxes
+  tps          Float?
+  tvq          Float?
+  total        Float // montant payé, taxes incluses
+  categorie    String? // MATERIEL, ENTRETIEN, ADMINISTRATIF, EVENEMENT, AUTRE
+  note         String?
+  imageDataUrl String? // photo compressée (JPEG ≤ ~1400 px, data URL)
+  ocrBrut      String? // texte OCR conservé pour vérification
+  statut       String    @default("A_REMBOURSER") // A_REMBOURSER | REMBOURSE
+  rembourseLe  DateTime?
+  rembourseVia String? // COMPTANT, VIREMENT…
+  depenseId    String? // charge Depense créée au remboursement (lien de cohérence)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([payeurId])
+  @@index([statut])
 }

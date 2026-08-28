@@ -34,14 +34,17 @@ router.get('/loyer/:annee', authenticate, requireRole(['ADMIN']), async (req: Re
 // PUT /api/depense-configs/:id — modifier le taux ou le montant de base
 router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { montantBase, anneeBase, tauxHaussePct, label } = req.body;
+    const { montantBase, anneeBase, tauxHaussePct, label, taxable } = req.body;
     const config = await prisma.depenseConfig.update({
       where: { id: req.params.id },
       data: {
         montantBase: montantBase !== undefined ? parseFloat(montantBase) : undefined,
         anneeBase: anneeBase !== undefined ? parseInt(anneeBase, 10) : undefined,
         tauxHaussePct: tauxHaussePct !== undefined ? parseFloat(tauxHaussePct) : undefined,
-        label
+        label,
+        // Crédits de taxes sur intrants : le loyer commercial est taxable par
+        // défaut, mais le champ reste corrigeable depuis l'interface.
+        taxable: taxable === undefined ? undefined : !!taxable
       }
     });
     return sendSuccess(res, config);

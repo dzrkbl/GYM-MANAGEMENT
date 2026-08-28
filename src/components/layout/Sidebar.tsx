@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target, Package, Trophy, LifeBuoy, LineChart } from 'lucide-react';
+import { Home, Users, CheckSquare, CreditCard, LogOut, UserCog, FileText, CalendarDays, Tag, Coins, UploadCloud, History, Send, Target, Package, Trophy, LifeBuoy, LineChart, ReceiptText } from 'lucide-react';
 
 /**
  * Menu latéral. La liste a grossi jusqu'à 17 entrées, et deux choses en
@@ -37,6 +37,7 @@ export function Sidebar() {
       items: admin ? [
         { to: '/paiements', icon: CreditCard, label: 'Paiements' },
         { to: '/admin/finances', icon: Coins, label: 'Finances' },
+        { to: '/admin/remboursements', icon: ReceiptText, label: 'Remboursements' },
       ] : [],
     },
     {

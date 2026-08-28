@@ -136,6 +136,12 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
   try {
     const data = updateSchema.parse(req.body);
     const lead = await prisma.lead.update({ where: { id: req.params.id }, data });
+    if (data.status) {
+      logAudit(req, {
+        action: 'UPDATE', entity: 'Lead', entityId: lead.id,
+        description: `Prospect ${lead.firstName} ${lead.lastName} → ${data.status}`,
+      });
+    }
     return sendSuccess(res, lead);
   } catch (error) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
@@ -257,7 +263,12 @@ router.post('/:id/notes', authenticate, requireRole(['ADMIN']), async (req: Requ
 // DELETE /api/leads/notes/:noteId — corriger une saisie, pas réécrire l'histoire.
 router.delete('/notes/:noteId', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    await prisma.leadNote.delete({ where: { id: req.params.noteId } });
+    const note = await prisma.leadNote.delete({ where: { id: req.params.noteId } });
+    // Le fil est « ajout seulement » : toute suppression laisse une trace.
+    logAudit(req, {
+      action: 'DELETE', entity: 'LeadNote', entityId: note.id,
+      description: `Note de suivi supprimée (prospect ${note.leadId}) : « ${note.texte.slice(0, 80)} »`,
+    });
     return sendSuccess(res, { ok: true });
   } catch {
     return sendError(res, 'Erreur lors de la suppression', 500);
@@ -267,7 +278,11 @@ router.delete('/notes/:noteId', authenticate, requireRole(['ADMIN']), async (req
 // DELETE /api/leads/:id (ADMIN)
 router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    await prisma.lead.delete({ where: { id: req.params.id } });
+    const lead = await prisma.lead.delete({ where: { id: req.params.id } });
+    logAudit(req, {
+      action: 'DELETE', entity: 'Lead', entityId: lead.id,
+      description: `Prospect supprimé : ${lead.firstName} ${lead.lastName}${lead.email ? ` (${lead.email})` : ''}`,
+    });
     return sendSuccess(res, { ok: true });
   } catch (error) {
     return sendError(res, 'Erreur lors de la suppression du prospect', 500);

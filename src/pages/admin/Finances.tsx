@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../lib/api';
 import { formatMontant } from '../../lib/format';
@@ -9,7 +9,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
-import { Plus, Edit2, Trash2, RotateCcw, ShieldAlert, ArrowUpRight, ArrowDownRight, Scale, Info } from 'lucide-react';
+import { Plus, Edit2, Trash2, RotateCcw, ShieldAlert, ArrowUpRight, ArrowDownRight, Scale, Info, ReceiptText } from 'lucide-react';
 
 interface Depense {
   id: string;
@@ -21,6 +21,7 @@ interface Depense {
   note?: string;
   isOverride: boolean;
   configCode?: string;
+  taxable?: boolean; // TPS/TVQ récupérables (base « net ») — false pour les charges exonérées
 }
 
 interface FinancierData {
@@ -93,7 +94,8 @@ export function Finances() {
     montant: '',
     moisOption: 'all', // "all" ou "current"
     categorie: 'FIXE' as 'FIXE' | 'VARIABLE' | 'SALARIALE' | 'AUTRE',
-    note: ''
+    note: '',
+    taxable: true
   });
   const [loyerForm, setLoyerForm] = useState({
     montant: ''
@@ -143,7 +145,8 @@ export function Finances() {
       montant: '',
       moisOption: 'current',
       categorie: 'FIXE',
-      note: ''
+      note: '',
+      taxable: true
     });
     setIsDepenseModalOpen(true);
   };
@@ -155,7 +158,8 @@ export function Finances() {
       montant: depense.montant.toString(),
       moisOption: depense.mois === null ? 'all' : 'current',
       categorie: depense.categorie,
-      note: depense.note || ''
+      note: depense.note || '',
+      taxable: depense.taxable !== false
     });
     setIsDepenseModalOpen(true);
   };
@@ -185,7 +189,8 @@ export function Finances() {
       mois: depenseForm.moisOption === 'all' ? null : mois,
       annee: annee,
       categorie: depenseForm.categorie,
-      note: depenseForm.note || null
+      note: depenseForm.note || null,
+      taxable: depenseForm.taxable
     };
 
     try {
@@ -261,6 +266,12 @@ export function Finances() {
         <div>
           <h1 className="text-3xl font-bold text-cshp-black">Module Financier</h1>
           <p className="text-sm text-cshp-gray">Visualisez, analysez et gérez la facturation, les charges et la rentabilité du club.</p>
+          <Link
+            to="/admin/remboursements"
+            className="inline-flex items-center gap-1.5 mt-2 text-sm font-semibold text-cshp-red hover:underline"
+          >
+            <ReceiptText size={16} /> Dépenses payées de votre poche → Remboursements
+          </Link>
         </div>
 
         {/* Date Selector */}
@@ -515,6 +526,11 @@ export function Finances() {
                           {dep.mois === null && (
                             <span className="px-1.5 py-0.5 text-[9px] font-bold bg-teal-100 text-teal-800 rounded">
                               Chaque mois (×12/an)
+                            </span>
+                          )}
+                          {dep.taxable === false && (
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-gray-200 text-gray-700 rounded" title="Aucun crédit de TPS/TVQ n'est calculé sur cette charge (base « net »)">
+                              Exonérée de taxes
                             </span>
                           )}
                         </div>
@@ -817,6 +833,24 @@ export function Finances() {
                   <option value="SALARIALE">SALARIALE (Prestataires, etc.)</option>
                   <option value="AUTRE">AUTRE (Frais divers, etc.)</option>
                 </select>
+              </div>
+
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <label className="flex items-start gap-2 text-sm text-cshp-black cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={depenseForm.taxable}
+                    onChange={(e) => setDepenseForm({ ...depenseForm, taxable: e.target.checked })}
+                    className="mt-0.5 accent-cshp-red"
+                  />
+                  <span>
+                    <span className="font-semibold">Charge taxable (TPS/TVQ incluses dans le montant)</span>
+                    <span className="block text-xs text-cshp-gray mt-0.5">
+                      Décochez pour une charge EXONÉRÉE de taxes (assurances, salaires…) :
+                      la base « net » ne calcule des crédits de TPS/TVQ que sur les charges taxables.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div>

@@ -43,7 +43,7 @@ router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: 
 // POST /api/depenses
 router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { label, montant, mois, annee, categorie, note, isOverride, configCode } = req.body;
+    const { label, montant, mois, annee, categorie, note, isOverride, configCode, taxable } = req.body;
     if (!label || montant === undefined || !annee) {
       return sendError(res, 'label, montant et annee sont requis', 400);
     }
@@ -61,7 +61,10 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
         categorie: parseCategorie(categorie)!,
         note,
         isOverride: !!isOverride,
-        configCode
+        configCode,
+        // Pilote les crédits de taxes sur intrants (base « net ») : décochable
+        // pour les charges exonérées de TPS/TVQ (assurances, salaires…).
+        taxable: taxable === undefined ? undefined : !!taxable
       }
     });
     return sendSuccess(res, depense, 201);
@@ -74,7 +77,7 @@ router.post('/', authenticate, requireRole(['ADMIN']), async (req: Request, res:
 // PUT /api/depenses/:id
 router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { label, montant, mois, annee, categorie, note } = req.body;
+    const { label, montant, mois, annee, categorie, note, taxable } = req.body;
     const depense = await prisma.depense.update({
       where: { id: req.params.id },
       data: {
@@ -83,7 +86,8 @@ router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, re
         mois: mois !== undefined ? (mois ? parseInt(mois, 10) : null) : undefined,
         annee: annee ? parseInt(annee, 10) : undefined,
         categorie: categorie !== undefined ? parseCategorie(categorie, undefined) : undefined,
-        note
+        note,
+        taxable: taxable === undefined ? undefined : !!taxable
       }
     });
     return sendSuccess(res, depense);

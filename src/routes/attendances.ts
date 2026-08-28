@@ -9,7 +9,7 @@ const router = Router();
 
 const pointerSchema = z.object({
   courseId: z.string(),
-  date: z.string(), // YYYY-MM-DD
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date invalide (AAAA-MM-JJ)'),
   memberIds: z.union([z.string(), z.array(z.string())]),
 });
 
@@ -17,7 +17,9 @@ const pointerSchema = z.object({
 router.post('/pointer', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = pointerSchema.parse(req.body);
-    const date = new Date((data.date as string) + 'T12:00:00');
+    // Midi UTC (convention `dateAMidi`) : sans le Z, la date dépendrait du
+    // fuseau du processus et ne matcherait plus la contrainte unique.
+    const date = new Date((data.date as string) + 'T12:00:00Z');
     
     // Normalize memberIds to an array
     const memberIds = Array.isArray(data.memberIds) ? data.memberIds : [data.memberIds];
@@ -56,8 +58,9 @@ router.post('/pointer', authenticate, async (req: Request, res: Response): Promi
     }
 
     return sendSuccess(res, { pointed: result.count, skipped: memberIds.length - result.count });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) return sendError(res, 'Données invalides', 400, error.issues);
+    if (error?.code === 'P2003') return sendError(res, 'Cours ou membre introuvable', 400);
     return sendError(res, 'Erreur lors du pointage', 500);
   }
 });
@@ -74,7 +77,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<any> 
     const attendances = await prisma.attendance.findMany({
       where: {
         courseId: courseId as string,
-        date: new Date((date as string) + 'T12:00:00')
+        date: new Date((date as string) + 'T12:00:00Z')
       },
       include: {
         member: { select: { id: true, firstName: true, lastName: true, sections: { select: { section: true } } } }
@@ -115,8 +118,8 @@ router.get('/stats', authenticate, async (req: Request, res: Response): Promise<
     }
 
     const [year, m] = (month as string).split('-').map(Number);
-    const startDate = new Date(year, m - 1, 1, 12, 0, 0);
-    const endDate = new Date(year, m, 0, 12, 0, 0);
+    const startDate = new Date(Date.UTC(year, m - 1, 1, 12, 0, 0));
+    const endDate = new Date(Date.UTC(year, m, 0, 12, 0, 0));
 
     // Get all completed courses for this section in the month that have attendees
     // A course session exists explicitly or via attedance links

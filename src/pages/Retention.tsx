@@ -166,7 +166,10 @@ export function Retention() {
                       </span>
                       {m.contacteAt && (
                         <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full">
-                          ✓ Appelé le {formatDateLocal(m.contacteAt)}
+                          {/* Vrai horodatage → jour LOCAL (formatDateLocal lit les
+                              composantes UTC : un appel noté après 20 h s'affichait
+                              « demain »). */}
+                          ✓ Appelé le {new Date(m.contacteAt).toLocaleDateString('fr-CA')}
                         </span>
                       )}
                     </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useSections } from '../../hooks/useSections';
+import { todayLocalISO } from '../../lib/format';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -32,8 +33,14 @@ const TYPES: Record<string, { label: string; puce: string; point: string }> = {
 };
 const typeDe = (t: string) => TYPES[t] || TYPES.AUTRE;
 
+// `iso` ne vaut QUE pour des dates-jour ancrées à midi UTC (le découpage de la
+// chaîne rend alors le bon jour civil). Pour « maintenant » ou un vrai
+// horodatage (pointeAt), c'est le jour LOCAL qui compte : après 20 h à
+// Montréal, le jour UTC est déjà demain.
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const jourDe = (valeur: string) => valeur.slice(0, 10);
+const jourLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /** Liste des jours « AAAA-MM-JJ » couverts par un événement (bornes incluses). */
 function joursCouverts(debut: string, fin: string | null): string[] {
@@ -51,9 +58,11 @@ export function CalendrierMois() {
   const { user } = useAuth();
   const { getLabel } = useSections();
 
-  const aujourdhui = iso(new Date());
-  const [annee, setAnnee] = useState(() => new Date().getUTCFullYear());
-  const [mois, setMois] = useState(() => new Date().getUTCMonth()); // 0-11
+  // Jour LOCAL du navigateur (le soir, le jour UTC est déjà demain : pastille
+  // « aujourd'hui » et mois d'ouverture étaient décalés après 20 h).
+  const aujourdhui = todayLocalISO();
+  const [annee, setAnnee] = useState(() => new Date().getFullYear());
+  const [mois, setMois] = useState(() => new Date().getMonth()); // 0-11
 
   const [cours, setCours] = useState<any[]>([]);
   const [evenements, setEvenements] = useState<any[]>([]);
@@ -140,9 +149,11 @@ export function CalendrierMois() {
     setMois(d.getUTCMonth());
   };
   const revenirAujourdhui = () => {
+    // Année/mois LOCAUX : en soirée, getUTCMonth() sur « maintenant » renvoie
+    // déjà le mois suivant le dernier jour du mois.
     const n = new Date();
-    setAnnee(n.getUTCFullYear());
-    setMois(n.getUTCMonth());
+    setAnnee(n.getFullYear());
+    setMois(n.getMonth());
   };
 
   const changerStatut = async (evenement: any, statut: 'RETENU' | 'CALENDRIER') => {
@@ -355,7 +366,10 @@ export function CalendrierMois() {
                       {presences[0].pointeAt
                         ? ` le ${new Date(presences[0].pointeAt).toLocaleString('fr-CA')}`
                         : ''}
-                      {presences[0].pointeAt && jourDe(presences[0].pointeAt) > seance.jour && (
+                      {/* Jour LOCAL de la saisie : un pointage fait le soir même
+                          après 20 h est déjà « demain » en UTC — comparer le jour
+                          UTC marquait faussement tardifs les cours de 19-20 h. */}
+                      {presences[0].pointeAt && jourLocal(new Date(presences[0].pointeAt)) > seance.jour && (
                         <span className="text-amber-600 font-semibold"> · saisi après la date du cours</span>
                       )}
                     </>

@@ -4,7 +4,9 @@
  *
  * Écrit à la main plutôt qu'avec une dépendance : le besoin se limite aux
  * VEVENT et le format est stable depuis 1998. Les pièges réellement rencontrés
- * dans le fichier de Karaté Québec sont traités et couverts par les tests :
+ * dans le fichier de Karaté Québec sont traités ci-dessous (attention : le
+ * dépôt n'a PAS de suite de tests automatisée — vérifier à la main après toute
+ * retouche, notamment le cas DTEND exclusif) :
  *  - pliage des lignes (une ligne qui commence par une espace continue la précédente) ;
  *  - échappements \, \; \n \\ dans les textes ;
  *  - trois formes de DTSTART : « ;TZID=America/New_York:AAAAMMJJTHHMMSS »,

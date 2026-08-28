@@ -69,11 +69,20 @@ function rappelPaiement(member: Member): { texte: string; enRetard: boolean } | 
 
 const fmtMontant = (m: number) => (m % 1 === 0 ? m.toFixed(0) : m.toFixed(2));
 
+const dateLocaleISO = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
 export function Pointer() {
   const { codes: sections, getLabel } = useSections();
   const [selectedSection, setSelectedSection] = useState<string>('');
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  // Jour du COURS pointé : aujourd'hui par défaut, mais modifiable vers le
+  // passé (pointage oublié — ex. le karaté d'hier). Jamais le futur.
+  const [dateCours, setDateCours] = useState<string>(dateLocaleISO());
+  const [dejaPointes, setDejaPointes] = useState<Set<string>>(new Set());
   
   const [members, setMembers] = useState<Member[]>([]);
   const [pointedMemberIds, setPointedMemberIds] = useState<Set<string>>(new Set());
@@ -84,15 +93,15 @@ export function Pointer() {
   const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState('');
 
-  // 1. Fetch courses for today
+  // 1. Cours du jour CHOISI (aujourd'hui par défaut ; une date passée liste
+  // les cours de CE jour-là pour un pointage rétroactif).
   useEffect(() => {
-    async function fetchTodayCourses() {
+    async function fetchCoursesDuJour() {
+      if (!dateCours) return;
       setIsLoadingCourses(true);
       setError('');
       try {
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-        const fetchedCourses = await apiFetch<Course[]>(`/cours?date=${todayStr}`);
+        const fetchedCourses = await apiFetch<Course[]>(`/cours?date=${dateCours}`);
         setCourses(fetchedCourses);
       } catch (err: any) {
         setError("Erreur de chargement des cours. " + err.message);
@@ -100,8 +109,8 @@ export function Pointer() {
         setIsLoadingCourses(false);
       }
     }
-    fetchTodayCourses();
-  }, []);
+    fetchCoursesDuJour();
+  }, [dateCours]);
 
   // Update selected course when sections or courses change
   useEffect(() => {
@@ -141,6 +150,22 @@ export function Pointer() {
     fetchMembers();
   }, [selectedSection]);
 
+  // Présences déjà enregistrées pour ce cours et ce jour : affichées cochées
+  // en vert et retirées de « Tout sélectionner » (le serveur ignore de toute
+  // façon les doublons).
+  useEffect(() => {
+    async function fetchDejaPointes() {
+      if (!selectedCourseId || !dateCours) { setDejaPointes(new Set()); return; }
+      try {
+        const presences = await apiFetch<any[]>(`/presences?courseId=${selectedCourseId}&date=${dateCours}`);
+        setDejaPointes(new Set(presences.map((a) => a.memberId ?? a.member?.id).filter(Boolean)));
+      } catch {
+        setDejaPointes(new Set());
+      }
+    }
+    fetchDejaPointes();
+  }, [selectedCourseId, dateCours, successMessage]);
+
   const handleToggleMember = (id: string) => {
     setPointedMemberIds(prev => {
       const newSet = new Set(prev);
@@ -154,10 +179,11 @@ export function Pointer() {
   };
 
   const handleSelectAll = () => {
-    if (pointedMemberIds.size === members.length) {
+    const restants = members.filter((m) => !dejaPointes.has(m.id)).map((m) => m.id);
+    if (pointedMemberIds.size === restants.length && restants.length > 0) {
       setPointedMemberIds(new Set());
     } else {
-      setPointedMemberIds(new Set(members.map(m => m.id)));
+      setPointedMemberIds(new Set(restants));
     }
   };
 
@@ -175,19 +201,22 @@ export function Pointer() {
     setError('');
     setSuccessMessage('');
 
+    if (dateCours > dateLocaleISO()) {
+      setError('Impossible de pointer une date future.');
+      setIsSubmitting(false);
+      return;
+    }
     try {
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const res = await apiFetch<{ pointed: number; skipped: number }>('/presences/pointer', {
         method: 'POST',
         body: JSON.stringify({
           courseId: selectedCourseId,
-          date: todayStr,
+          date: dateCours,
           memberIds: Array.from(pointedMemberIds)
         })
       });
 
-      setSuccessMessage(`${res.pointed} membre(s) pointé(s) avec succès ! (${res.skipped} déjà pointés)`);
+      setSuccessMessage(`${res.pointed} membre(s) pointé(s) pour le ${dateCours} ! (${res.skipped} déjà pointés)`);
       setPointedMemberIds(new Set()); // Reset after success
     } catch (err: any) {
       setError(err.message || 'Erreur lors du pointage');
@@ -239,16 +268,33 @@ export function Pointer() {
             ))}
           </div>
 
+          {/* Jour du cours : aujourd'hui par défaut, passé permis (pointage oublié). */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-cshp-gray">Jour du cours</label>
+            <input
+              type="date"
+              value={dateCours}
+              max={dateLocaleISO()}
+              onChange={(e) => setDateCours(e.target.value)}
+              className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:ring-2 focus:ring-cshp-red outline-none"
+            />
+            {dateCours !== dateLocaleISO() && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-semibold">
+                ⏪ Pointage rétroactif : vous enregistrez les présences du cours du {dateCours}.
+              </div>
+            )}
+          </div>
+
           {/* Course Selector */}
           <div className="space-y-1">
-            <label className="text-xs font-medium text-cshp-gray">Cours prévu aujourd'hui</label>
+            <label className="text-xs font-medium text-cshp-gray">{dateCours === dateLocaleISO() ? "Cours prévu aujourd'hui" : `Cours prévu le ${dateCours}`}</label>
             {isLoadingCourses ? (
               <div className="h-11 bg-gray-100 animate-pulse rounded-lg flex items-center px-4">
                 <span className="text-sm text-cshp-gray">Chargement...</span>
               </div>
             ) : courses.filter(c => c.section === selectedSection).length === 0 ? (
               <div className="h-11 bg-gray-50 border border-gray-200 rounded-lg flex items-center px-4">
-                <span className="text-sm text-red-500">Aucun cours trouvé aujourd'hui pour {getLabel(selectedSection)}</span>
+                <span className="text-sm text-red-500">Aucun cours prévu {dateCours === dateLocaleISO() ? "aujourd'hui" : `le ${dateCours}`} pour {getLabel(selectedSection)}</span>
               </div>
             ) : (
               <select
@@ -269,7 +315,7 @@ export function Pointer() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <span className="font-medium text-cshp-black">
-                Membres actifs ({members.length})
+                Membres actifs ({members.length}){dejaPointes.size > 0 && <span className="text-xs text-emerald-700 font-semibold"> · {dejaPointes.size} déjà pointé(s)</span>}
               </span>
               <button 
                 onClick={handleSelectAll}
@@ -289,11 +335,12 @@ export function Pointer() {
               <ul className="divide-y divide-gray-100 max-h-[50vh] overflow-y-auto">
                 {members.map(member => {
                   const rappel = rappelPaiement(member);
+                  const estDejaPointe = dejaPointes.has(member.id);
                   return (
                   <li
                     key={member.id}
-                    className="flex justify-between items-center p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => handleToggleMember(member.id)}
+                    className={`flex justify-between items-center p-4 transition-colors ${estDejaPointe ? 'bg-emerald-50/50' : 'hover:bg-gray-50 cursor-pointer'}`}
+                    onClick={() => { if (!estDejaPointe) handleToggleMember(member.id); }}
                   >
                     <div>
                       <span className="font-medium text-cshp-black block">{(member.lastName ?? '').toUpperCase()} {member.firstName ?? ''}</span>
@@ -310,13 +357,17 @@ export function Pointer() {
                         </span>
                       )}
                     </div>
-                    <div>
-                      <input
-                        type="checkbox"
-                        checked={pointedMemberIds.has(member.id)}
-                        onChange={() => {}} // handled by li onClick
-                        className="w-6 h-6 rounded border-gray-300 text-cshp-red focus:ring-cshp-red pointer-events-none"
-                      />
+                    <div className="flex items-center gap-2">
+                      {estDejaPointe ? (
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-full">Déjà pointé ✓</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={pointedMemberIds.has(member.id)}
+                          onChange={() => {}} // handled by li onClick
+                          className="w-6 h-6 rounded border-gray-300 text-cshp-red focus:ring-cshp-red pointer-events-none"
+                        />
+                      )}
                     </div>
                   </li>
                   );

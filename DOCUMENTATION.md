@@ -295,7 +295,22 @@ Décision de comptabilité, pas de code : détail complet et impact chiffré dan
   COACH ; mots de passe bcrypt), **AuditLog** (traçabilité, incl. les erreurs
   courriel `action='ERREUR', entity='Courriel'`), **ReminderLog** (§3.4),
   finances (**MasseSalariale**, **CoachSalaire**, **DepenseConfig**, **Depense**
-  — ATTENTION : `Depense.mois = null` signifie « retranchée CHAQUE mois »).
+  — ATTENTION : `Depense.mois = null` signifie « retranchée CHAQUE mois » ;
+  `taxable` (défaut true) pilote les crédits de TPS/TVQ sur intrants de la base
+  « net » — **false pour les assurances et toute charge exonérée**, champ
+  éditable dans le formulaire de charge de la page Finances).
+- **DepenseAdmin** — dépense payée **de sa poche** par un administrateur pour
+  le club : `payeurId`/`payeurNom` (figé — la dépense appartient à la session
+  qui l'a saisie), `fournisseur?`, `dateFacture` (midi UTC), `sousTotal?/tps?/
+  tvq?/total` (taxes incluses), `categorie?` (MATERIEL/ENTRETIEN/ADMINISTRATIF/
+  EVENEMENT/AUTRE), `imageDataUrl?` (photo JPEG compressée côté client,
+  ≤ ~1,8 Mo de base64), `ocrBrut?` (texte OCR conservé), `statut`
+  (A_REMBOURSER → REMBOURSE), `rembourseLe?/rembourseVia?`, `depenseId?` =
+  lien vers la charge `Depense` créée au remboursement. **Une dépense de poche
+  n'entre dans les charges du Module financier QU'AU remboursement** (Depense
+  ponctuelle du mois du remboursement, `taxable` = il y avait de la TPS/TVQ
+  sur la facture) — jamais avant : l'argent ne sort du club qu'à ce moment-là,
+  et rien n'est compté deux fois.
 - **ArticleInventaire** — équipement en stock (`nom`, `categorie` KIMONO/GANTS/
   PROTEGE_TIBIAS/PROTEGE_DENTS/CEINTURE/COQUILLE/CHANDAIL/PANTALON/AUTRE,
   `discipline?`, `taille?`, `couleur?`, `marque?`, `quantite`, `seuilAlerte?`).
@@ -316,7 +331,10 @@ Décision de comptabilité, pas de code : détail complet et impact chiffré dan
   (evenementId+membreId), `fraisPaye` = frais remis. L'admissibilité est
   calculée à la volée : affiliation valide pour la **saison de la DATE de
   l'événement** + flag « solde dû au club » (versements en retard, reste
-  impayé, renouvellement échu) — on signale, on ne bloque jamais.
+  impayé, renouvellement échu) — on signale, on ne bloque jamais. Un événement
+  `CALENDRIER` (date de fédération non retenue) n'accepte AUCUNE inscription ;
+  PATCH/DELETE d'une inscription vérifient qu'elle appartient bien à
+  l'événement de l'URL (sinon 404) et la portée sur SA discipline réelle.
 - Migrations : baseline unique + migrations additives datées. Nouvelle colonne
   → `prisma/migrations/<timestamp>_<nom>/migration.sql` écrit à la main +
   champ dans schema.prisma (le déploiement l'applique au démarrage).
@@ -355,10 +373,11 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `POST /api/membres/factures` | ADMIN | `{memberIds[], annee}` → factures par famille (PDF base64), audité |
 | `GET /api/membres/:id/courriels` | ADMIN | diagnostic courriels : destinataire effectif, renouvellement du contrat en cours ARME/COUVERT (envoyé OU muselé à l'import — même trace en base), historique ReminderLog |
 | `GET /api/retention` | connecté (portée par discipline) | liste d'appels : membres ACTIFS ayant manqué ≥ 2 **séances tenues** depuis leur dernière présence. Une séance « tenue » = date où au moins un membre du cours a été pointé → les fermetures et cours annulés ne comptent pour personne, sans calendrier à maintenir. Absences EXCUSED ignorées ; membres jamais pointés exclus (comptés à part) |
-| `POST/DELETE /api/retention/:id/contact` | connecté | note l'appel pour l'épisode d'absence en cours (`ReminderLog` type `RETENTION_APPEL`, refKey `membreId:dateDerniérePrésence`) : si le membre revient puis décroche à nouveau, un nouvel épisode démarre |
-| `POST /api/presences/pointer` | connecté | enregistre en plus `pointeAt`, `pointeParId`, `pointeParNom` (QUI a saisi et QUAND, distinct de `date` = jour du COURS) et UNE entrée d'audit par séance, pas par athlète |
+| `POST/DELETE /api/retention/:id/contact` | connecté (portée vérifiée) | note l'appel pour l'épisode d'absence en cours (`ReminderLog` type `RETENTION_APPEL`, refKey `membreId:dateDerniérePrésence`) : si le membre revient puis décroche à nouveau, un nouvel épisode démarre. Marquer/démarquer est limité aux membres de SA discipline (la marque dépriorise l'enfant dans la liste du coach concerné) ; l'annulation est auditée |
+| `POST /api/presences/pointer` | connecté | accepte n'importe quelle date (**pointage rétroactif** : la page Pointage a un champ « Jour du cours », plafonné à aujourd'hui, avec bandeau d'avertissement pour une date passée) ; doublons ignorés (contrainte unique) ; enregistre en plus `pointeAt`, `pointeParId`, `pointeParNom` (QUI a saisi et QUAND, distinct de `date` = jour du COURS) et UNE entrée d'audit par séance, pas par athlète |
+| `GET /api/cours?date=AAAA-MM-JJ` | connecté | cours du jour de la semaine de cette date (sert au pointage rétroactif : « quels cours avaient lieu ce jour-là ? ») |
 | `GET /api/presences?courseId&date` | connecté | présences d'une séance, triées par nom, avec la traçabilité. Alimente le panneau « séance » du calendrier |
-| `GET /api/calendrier?debut&fin` | connecté | événements DATÉS chevauchant la fenêtre (calendrier de saison + club). Les cours récurrents n'y sont PAS : la vue mois les projette depuis `/api/cours` |
+| `GET /api/calendrier?debut&fin` | connecté (portée par discipline) | événements DATÉS chevauchant la fenêtre (calendrier de saison + club) — un coach n'y voit que sa discipline + les événements « TOUS », comme dans le module Événements. Les cours récurrents n'y sont PAS : la vue mois les projette depuis `/api/cours` |
 | `GET/POST/PUT/DELETE /api/calendrier/sources` + `POST /sources/:id/sync` | ADMIN | abonnements .ics des fédérations ; la synchro n'écrase que les champs de la fédération (titre, dates, horaire, lieu) et ne touche jamais au `statut` ni aux frais saisis au club. Supprimer une source NE supprime PAS les dates importées |
 | `PATCH /api/evenements/:id/statut` | ADMIN, SM | bascule `CALENDRIER` ↔ `RETENU` (le bouton « Intégrer au module Événements »). Refuse le retour à CALENDRIER si des inscriptions existent |
 | `POST /api/membres/:id/reactiver-renouvellement` | ADMIN | efface les traces R30/R7/ECHU du contrat en cours → la prochaine tournée renvoie l'étape appropriée ; audité |
@@ -373,14 +392,14 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/dashboard/inscriptions?granularite&mois` | ADMIN | recrutement par période (semaine ISO / mois / trimestre), discipline et provenance. **Aucun filtre de statut** : un membre parti reste une inscription de son mois, sinon le passé se réécrit |
 | `GET /api/dashboard/churn?mois` | ADMIN | départs datés depuis le **journal d'audit** (`→ INACTIF`), jamais depuis `updatedAt` qui bouge à chaque retouche de fiche ; motifs, durée de vie moyenne, taux mensuel. Les départs sans trace d'audit sont marqués `dateEstimee` |
 | `GET /api/dashboard/conversion-funnel?jours` | ADMIN | entonnoir prospects → membres ; délai de conversion mesuré sur `ficheRecueAt` quand il existe |
-| `GET /api/dashboard/kpis` | ADMIN | MRR (contrats en cours seulement), recouvrement, rétention, **prévision 3 mois** (échéancier hors INACTIF + renouvellements attendus par mois) |
+| `GET /api/dashboard/kpis` | ADMIN | MRR (contrats en cours seulement), recouvrement (**hors INACTIF**, comme partout : les dettes des départs ne plombent pas le %), rétention, **prévision 3 mois** (échéancier hors INACTIF + renouvellements attendus par mois) — tout calé sur le mois civil de Montréal |
 | `GET /api/rapports/financier?mois&annee&cumul=` | ADMIN | mode période/cumul réel ; ou `?from&to` : rapport détaillé (encaissé = payé dans la période, retards+**renouvellementsEchus** pour la relance, présences honnêtes, masse salariale mois écoulés) |
 | `GET /api/rapports/export-csv` | ADMIN | export CSV |
 | `GET /api/presences/*`, `/api/cours`, `/api/grades`, `/api/sections` | connecté | pointage `POST /api/presences/pointer` |
 | `GET/POST/PUT/DELETE /api/coachs` | ADMIN (liste : connecté) | **comptes staff, y compris ADMIN** ; mot de passe temporaire renvoyé une fois ; garde-fou : impossible de rétrograder/désactiver le **dernier admin actif** ; tout audité |
 | `POST /api/import` | ADMIN | CSV membres + versements (§9.3) |
-| `POST /api/inscription` (public, rate-limité), `GET /api/inscription/sections`, `POST /api/inscription/inviter` (ADMIN/SM) | | fiche en ligne (§2) ; inviter = envoi du lien par courriel |
-| `POST /api/leads` (public), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) ; renseigne `membreId`. **Filet anti-perte** : si l'écriture en base échoue, le lead part par courriel à INSCRIPTION_NOTIF_EMAIL et le site reçoit un succès |
+| `POST /api/inscription` (public, rate-limité), `GET /api/inscription/sections`, `POST /api/inscription/inviter` (ADMIN/SM) | | fiche en ligne (§2) ; inviter = envoi du lien par courriel. **Anti-écrasement** : la fiche ne complète un dossier EN_ATTENTE homonyme QUE si un courriel/téléphone concorde (ou si le dossier n'a aucune coordonnée) — sinon 409 « contactez-nous » : le nom seul ne suffit pas à remplacer le courriel du parent ni les données santé/urgence d'un enfant en attente |
+| `POST /api/leads` (public, rate-limité 10/h/IP), CRUD + `POST /:id/convert` (ADMIN) | | conversion : fusion **seulement si courriel/téléphone concordent** (homonyme = nouveau dossier + note) ; renseigne `membreId`. **Filet anti-perte** : si l'écriture en base échoue, le lead part par courriel à INSCRIPTION_NOTIF_EMAIL et le site reçoit un succès. Suppressions (prospect, note) et changements de statut audités |
 | `GET/POST /api/leads/:id/notes`, `DELETE /api/leads/notes/:noteId` | ADMIN | fil de suivi d'un prospect, **en ajout seulement** (deux administrateurs se partagent les relances : l'historique ne doit jamais être écrasé). La liste des prospects renvoie `nbNotes` pour le compteur du bouton |
 | `POST /api/communications` / `test` / `config` | ADMIN | envoi groupé multi-sections via `sendEmailsEnMasse` (batch Resend 100/requête — l'envoi parallèle individuel plafonnait à ~10 : limite 2 req/s) ; test vers adresse au choix ; diagnostic transport |
 | `POST /api/backup` | ADMIN | sauvegarde Excel immédiate |
@@ -388,6 +407,9 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET/POST /api/inventaire/ventes`, `DELETE /ventes/:id` | ADMIN | vente (décrémente stock, prix copié, membre optionnel), annulation (réincrémente) ; `?membreId=` → achats d'un dossier |
 | `GET/POST/PUT/DELETE /api/affiliations` | ADMIN | par membre/discipline/saison (doublon → 400) ; GET renvoie aussi `saisonCourante` |
 | `GET/POST/PUT/DELETE /api/evenements` + `/:id/inscriptions` | ADMIN | détail = participants avec `admissibilite` calculée (affiliation de la saison de l'événement + `solde` dû au club) ; PATCH inscription `{fraisPaye}` ; DELETE événement = archivage si inscriptions |
+| `GET /api/depenses-admin` (+ `/:id/photo`) | ADMIN | dépenses de poche de TOUS les admins (« qui a payé quoi ») + totaux par payeur ; la liste ne renvoie JAMAIS les photos (lourdes) — `aUnePhoto` + `GET /:id/photo` à la demande |
+| `POST/PUT /api/depenses-admin` | ADMIN | saisie (payeur = la session qui ajoute) / correction des champs (l'OCR se trompe : tout est corrigeable) ; photo compressée côté client, plafond ~1,8 Mo |
+| `PATCH /api/depenses-admin/:id/rembourser` | ADMIN | `{via?, dateRemboursement?, ajouterAuxCharges=true}` → REMBOURSE + crée la charge `Depense` ponctuelle du mois du remboursement (liée par `depenseId`, taxable si TPS/TVQ sur la facture) ; `annuler-remboursement` retire aussi la charge liée ; DELETE refusé tant que la charge liée existe (annuler d'abord). Tout audité |
 | `GET /api/audit` | ADMIN | journal (cherchez `ERREUR / Courriel` pour les envois ratés) |
 | `GET /api/health` | public | ping UptimeRobot (léger EXPRÈS : ne touche pas la base, Neon doit dormir) |
 | `GET /api/health/complet` | public | bilan profond : base + latence, migrations, transport courriel, canal admin ; 503 si un maillon casse. Réveille Neon → quelques appels/jour max (voir `docs/surveillance.md`) |
@@ -490,7 +512,13 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   « Reçu ce mois / À venir / En retard (total) », marquer payé.
 - **Pointage** (coachs) : liste des ACTIFS de la section du jour + **badge de
   rappel** (retard rouge / échéance ≤ 7 j ambre / renouvellement / solde) pour
-  que le coach fasse le rappel en personne.
+  que le coach fasse le rappel en personne. Champ **« Jour du cours »**
+  (plafonné à aujourd'hui) : choisir une date passée = **pointage rétroactif**
+  (« j'ai oublié de pointer hier ») — bandeau ambre explicite, cours proposés
+  = ceux du jour de la semaine de cette date, membres déjà pointés à cette
+  date marqués « Déjà pointé ✓ » (non recliquables), doublons ignorés côté
+  serveur, traçabilité pointeAt/pointePar intacte (le calendrier signalera
+  « saisi après la date du cours » — c'est voulu, c'est la réalité).
 - **Pilotage** (`/admin/pilotage`, ADMIN) : arrivées et départs mois par mois
   (même unité, un seul axe), motifs de départ, provenance des inscriptions,
   entonnoir des prospects, et la liste des départs (qui sert aussi de vue
@@ -530,7 +558,22 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   éditable par mois (total = mois écoulés), **liste de relance** (retards +
   renouvellements échus) exportable PDF/CSV.
 - **Finances** : module financier (mois/année, cumul vs période, charges —
-  attention au sens de « récurrente = chaque mois »), taxes.
+  attention au sens de « récurrente = chaque mois »), taxes. Le formulaire de
+  charge a une case **« Charge taxable »** (décochée = exonérée : assurances,
+  salaires — aucun crédit de TPS/TVQ en base « net » ; badge « Exonérée de
+  taxes » dans la liste). Lien direct vers la page Remboursements.
+- **Remboursements** (`/admin/remboursements`, ADMIN, groupe Argent) : les
+  dépenses payées de leur poche par les admins. « Ajouter une facture » →
+  photo (appareil photo ou fichier, compressée client), bouton **« Lire la
+  facture (OCR) »** (tesseract.js chargé à la demande, progression affichée) →
+  fournisseur/date/sous-total/TPS/TVQ/total pré-remplis avec verdict de
+  cohérence (sous-total+TPS+TVQ ≈ total) — **tous les champs restent
+  corrigeables** (l'OCR est une aide, jamais une vérité), aide « Calculer
+  depuis le total » (÷ 1,14975). Tableau « qui a payé quoi » (filtres payeur/
+  statut, totaux à rembourser par admin), actions : voir la photo, Rembourser
+  (date, méthode, case « ajouter aux charges du mois » cochée par défaut),
+  annuler le remboursement (retire la charge liée), modifier, supprimer
+  (bloqué tant que la charge liée existe).
 - **Coachs** : comptes staff **et administrateurs** (garde-fou dernier admin),
   mot de passe temporaire affiché une seule fois.
 - **Inventaire** (ADMIN) : stock filtrable (discipline/catégorie), coût interne
@@ -649,6 +692,23 @@ similaire réapparaît, vérifier qu'une régression n'a pas réintroduit la cau
 19. **Course au déploiement** : première tournée avant la fin des migrations
     (« column does not exist », one-shot). → gate `basePrete`.
 20. **Adresses multiples « a; b »** : gérées partout via `parseDestinataires`.
+21. **Revue croisée d'août 2026** (audit complet des PR #6-23) — corrigés :
+    tri « Statut paiement » de la liste Membres qui plantait la page
+    (fonction déclarée APRÈS le useMemo qui l'appelait — zone morte
+    temporelle) ; KPI recouvrement qui comptait les dettes des INACTIF ;
+    PATCH/DELETE d'une inscription d'événement jamais rattachée à l'événement
+    de l'URL (mutation croisée hors discipline possible) ; formulaire public
+    d'inscription qui ÉCRASAIT un dossier EN_ATTENTE homonyme (nom seul →
+    maintenant coordonnée concordante exigée) ; ponctuelles restées taxes
+    incluses dans la rentabilité en base « net » ; assurances du seed créées
+    taxables (crédits d'intrants fantômes ~50 $/mois) + champ `taxable`
+    inexposé dans l'API/l'UI ; injection HTML possible dans les courriels
+    admin depuis les formulaires publics (échappement partout) ; « aujourd'hui »
+    en UTC dans la vue mois (badge « saisi après la date du cours » à tort
+    pour tout pointage du soir) ; /api/calendrier et le marquage d'appel de
+    rétention sans portée ; POST /api/leads sans limiteur de débit ; mois
+    courant du dashboard au fuseau serveur (revenus à 0 $ chaque fin de mois
+    en soirée).
 
 ## 11. Dette technique restante (assumée, non corrigée)
 
@@ -711,6 +771,13 @@ prisma/migrations/20260810190000_provenance/            + provenance et referePa
 prisma/migrations/20260811150000_membre_depuis_backfill/  Rattrapage : signupDate ← dateInscription (ancienneté, voir §2).
 prisma/migrations/20260812010000_frais_retard_factures/   + fraisRetardFactures (frais chargés au choix de l'admin).
 prisma/migrations/20260813100000_inventaire_evenements/    + ArticleInventaire, VenteEquipement, Affiliation, Evenement, EvenementInscription (modules inventaire & événements).
+prisma/migrations/20260822*_lead_fiche/                     + Lead.ficheRecueAt/membreId (lien prospect ↔ fiche reçue).
+prisma/migrations/20260824120000_calendrier_saison/         + Evenement.statut/dateFin/horaire/source/sourceUid, CalendrierSource (abonnements .ics fédérations).
+prisma/migrations/20260824180000_pointage_tracabilite/      + Attendance.pointeAt/pointeParId/pointeParNom (nullables SANS défaut : l'historique n'est pas antidaté).
+prisma/migrations/20260825120000_raison_depart/             + Member.raisonDepart (motif de départ, lu par /dashboard/churn).
+prisma/migrations/20260825200000_lead_notes/                + LeadNote (fil de suivi des prospects, ajout seulement).
+prisma/migrations/20260826100000_charges_taxables/          + Depense.taxable / DepenseConfig.taxable (crédits d'intrants) + backfill assurances existantes → false (le seed crée aussi les assurances non taxables : voir seedData).
+prisma/migrations/20260828120000_depenses_admin/            + DepenseAdmin (dépenses de poche des admins, photo + OCR + suivi de remboursement).
 prisma/migrations/migration_lock.toml     Verrou Prisma (provider postgresql).
 prisma/seed.ts                            Seed officiel : appelle seedInitialData (admin, sections, cours, charges).
 prisma/seed-test.ts                       Jeu de données de test local (membres/versements factices).
@@ -729,11 +796,11 @@ src/routes/auth.ts                        POST /login (JWT 7 j), GET /me.
 src/routes/members.ts                     CRUD membres (préservation des versements §3.5, parentEmail, membreDepuis), statut, suppression définitive protégée, POST /factures (factures annuelles par famille).
 src/routes/versements.ts                  PUT /:id/payer (activation + reçu), PATCH /:id/frais-retard (exonérer / charger un montant).
 src/routes/payments.ts                    GET /api/paiements (vue mensuelle de travail §6) + chemins de paiement historiques + /retards.
-src/routes/attendances.ts                 POST /pointer (présences en masse), stats de présence par section.
+src/routes/attendances.ts                 POST /pointer (présences en masse, date libre = pointage rétroactif, doublons ignorés, traçabilité pointeAt/pointePar, un audit par séance), GET par séance, stats par section.
 src/routes/courses.ts                     CRUD des cours récurrents (jours de semaine).
 src/routes/grades.ts                      Passages de grade (+ mise à jour de la ceinture dans MemberSection).
 src/routes/sections.ts                    Catalogue des groupes (codes/labels), consommé par useSections.
-src/routes/dashboard.ts                   Agrégats du tableau de bord : résumé (retards, renouvellements échus, présences semaine, masse salariale), revenus, KPIs + prévision 3 mois.
+src/routes/dashboard.ts                   Agrégats du tableau de bord : résumé (retards, renouvellements échus, présences semaine, masse salariale), revenus, KPIs + prévision 3 mois (tout au mois civil de Montréal, INACTIF exclus du recouvrement), analytics Pilotage (/inscriptions, /churn depuis l'audit, /conversion-funnel).
 src/routes/rapports.ts                    /financier (mois+cumul OU plage from/to : revenus, relance retards+renouvellements, présences, masse salariale) et /export-csv.
 src/routes/coachs.ts                      Comptes du personnel Y COMPRIS administrateurs (mot de passe temporaire une fois, garde-fou dernier admin, audit).
 src/routes/masseSalariale.ts              Saisie de la masse salariale par mois (override).
@@ -749,6 +816,9 @@ src/routes/audit.ts                       Lecture du journal d'audit.
 src/routes/inventaire.ts                  Inventaire : CRUD articles (coût interne vs prix de vente), ± stock, seed catalogue karaté idempotent, ventes (décrément/réincrément du stock, membre optionnel).
 src/routes/evenements.ts                  Événements + inscriptions avec admissibilité calculée (affiliation de la saison de l'événement + solde dû au club — bilanSoldeGym) ; archivage si inscriptions.
 src/routes/affiliations.ts                Affiliations fédération par membre/discipline/saison (unicité, montants = fédé, pas revenus club).
+src/routes/retention.ts                   Liste d'appels anti-décrochage (séances TENUES seulement, épisodes par dernière présence, portée par discipline sur GET et sur le marquage d'appel).
+src/routes/calendrier.ts                  Vue mois (GET fenêtre, portée par discipline) + sources .ics des fédérations (CRUD ADMIN audité, synchro qui n'écrase que les champs de la fédération).
+src/routes/depensesAdmin.ts               Dépenses de poche des admins : CRUD (photos servies à part), rembourser → charge Depense liée du mois (annulable), garde de suppression. Tout ADMIN + audité.
 
 src/lib/prisma.ts                         Client Prisma singleton.
 src/lib/api-response.ts                   sendSuccess/sendError (format uniforme des réponses).
@@ -767,7 +837,10 @@ src/lib/bienvenue.ts                      Contenu du courriel de bienvenue (+ ka
 src/lib/katas.ts                          Programme de katas Heian par grade + liens vidéo + estKarate.
 src/lib/reglement.ts                      Règlement intérieur versionné (16 articles) — incrémenter REGLEMENT_VERSION à tout changement.
 src/lib/saison.ts                         Saison fédération (1er sept. → 31 août) : saisonPourDate/saisonCourante/saisonsChoix — PARTAGÉ front/back.
-src/lib/portee.ts                         Portée par discipline du personnel : porteeStaff (ADMIN = tout ; coach/SM = tous les groupes de SON sport) + disciplineDansPortee.
+src/lib/portee.ts                         Portée par discipline du personnel : porteeStaff (ADMIN = tout ; coach/SM = tous les groupes de SON sport) + membreDansPortee + disciplineDansPortee.
+src/lib/periodes.ts                       Clés de regroupement (mois / trimestre / semaine ISO) ancrées sur le jour civil de MONTRÉAL (sert aux analytics Pilotage).
+src/lib/ical.ts                           Lecteur iCal maison (RFC 5545) pour les .ics des fédérations — jours ancrés midi UTC, DTEND exclusif géré. PAS de tests automatisés : vérifier à la main après retouche.
+src/lib/ocrFacture.ts                     Lecture de factures CÔTÉ CLIENT : compresserImage (canvas → JPEG ≤ 1400 px), lireFacture (tesseract.js chargé à la demande, fra+eng), analyserTexteFacture (extraction fournisseur/date/sous-total/TPS/TVQ/total d'un reçu québécois + verdict de cohérence — les numéros d'enregistrement de taxes sans décimales sont ignorés).
 src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
 src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
 src/lib/seedData.ts                       seedInitialData + bootstrapIfEmpty (amorçage automatique si base vide).
@@ -782,7 +855,8 @@ src/pages/Dashboard.tsx                   Tableau de bord (cartes cliquables : r
 src/pages/Membres.tsx                     Liste des membres : badges etatPaiement, filtres (?suivi=renouvellement), mode Factures (cases + année + génération).
 src/pages/MembreDetail.tsx                Fiche membre : Édition rapide / Profil complet, échéancier (encaisser, frais de retard), grades, présences, famille, suppression protégée.
 src/pages/Paiements.tsx                   Vue mensuelle de travail des versements (?statut=EN_RETARD), marquer payé.
-src/pages/Pointer.tsx                     Pointage coach : présences + badge de rappel de paiement/renouvellement par athlète.
+src/pages/Pointer.tsx                     Pointage coach : présences + badge de rappel de paiement/renouvellement par athlète ; champ « Jour du cours » (max aujourd'hui) pour le pointage RÉTROACTIF (bandeau ambre, cours du jour choisi, déjà-pointés verrouillés).
+src/pages/Retention.tsx                   Liste d'appels anti-décrochage (tous les rôles) : priorités, tel:/sms: pré-rédigés, marquage optimiste.
 src/pages/Planning.tsx                    Horaire hebdomadaire des cours.
 src/pages/Sections.tsx                    Gestion du catalogue des groupes.
 src/pages/Coachs.tsx                      Gestion des comptes staff/admin (bandeau du mot de passe temporaire).
@@ -794,7 +868,9 @@ src/pages/admin/Communications.tsx        Courriels : diagnostic transport, test
 src/pages/admin/Import.tsx                Import CSV (zones membres + versements, rapport d'erreurs par ligne).
 src/pages/admin/Audit.tsx                 Journal d'audit (y compris les erreurs de courriels).
 src/pages/admin/Inventaire.tsx            Inventaire : stock filtrable (coût interne / prix de vente, ± stock, Dupliquer par taille), modal Vendre avec recherche de membre, onglet Ventes (annulation), bouton Catalogue karaté.
-src/pages/admin/Evenements.tsx            Événements (détail : participants + badges affiliation/solde/renouvellement, frais remis) et Affiliations (par saison/discipline, ajout par recherche d'athlète).
+src/pages/admin/Evenements.tsx            Événements (détail : participants + badges affiliation/solde/renouvellement, frais remis) et Affiliations (par saison/discipline, ajout par recherche d'athlète) ; sources de calendrier (admin).
+src/pages/admin/Pilotage.tsx              Analytics marketing (arrivées/départs, motifs, provenances, entonnoir prospects) — bleu = arrivées, rouge = départs.
+src/pages/admin/DepensesAdmin.tsx         Page Remboursements : facture photographiée + OCR corrigeable, « qui a payé quoi », remboursement → charge du mois (optionnelle, cochée par défaut).
 
 src/components/layout/AppLayout.tsx       Gabarit connecté (sidebar + contenu + nav mobile).
 src/components/layout/Sidebar.tsx         Menu latéral (entrées selon le rôle).
@@ -805,5 +881,7 @@ src/components/forms/CourseForm.tsx       Formulaire de cours (section, jours, h
 src/components/forms/GradeForm.tsx        Formulaire de passage de grade.
 src/components/forms/PaiementForm.tsx     Formulaire de paiement (chemins historiques).
 src/components/rapports/SectionPieChart.tsx  Camembert de répartition des revenus par groupe.
+src/components/calendrier/CalendrierMois.tsx  Vue mois : cours récurrents projetés + événements datés, panneau séance (présences + traçabilité du pointage), bascule CALENDRIER/RETENU.
+src/components/calendrier/SourcesCalendrier.tsx  Gestion des abonnements .ics (ADMIN) : ajout, synchro, suppression (les dates importées survivent).
 src/components/ui/                        Primitifs partagés : Button, Input (label+erreur), Card, Badge, Modal, Spinner.
 ```

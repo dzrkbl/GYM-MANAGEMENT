@@ -320,6 +320,11 @@ router.post('/:id/inscriptions', authenticate, async (req: Request, res: Respons
     const { membreId, note } = z.object({ membreId: z.string().min(1), note: z.string().optional().nullable() }).parse(req.body);
     const evenement = await prisma.evenement.findUnique({ where: { id: req.params.id } });
     if (!evenement) return sendError(res, 'Événement introuvable', 404);
+    // Une date de fédération non retenue (statut CALENDRIER) n'accepte aucune
+    // inscription — même règle que l'interface, appliquée aussi à l'API.
+    if (evenement.statut === 'CALENDRIER') {
+      return sendError(res, "Cet événement n'est pas encore retenu par le club — retenez-le d'abord", 400);
+    }
     const porteeIns = await porteeStaff(req.user!);
     if (!porteeIns.admin && (!evenement.discipline || !porteeIns.sports.includes(evenement.discipline))) {
       return sendError(res, "Inscriptions réservées à l'admin pour cet événement", 403);
@@ -350,13 +355,21 @@ router.post('/:id/inscriptions', authenticate, async (req: Request, res: Respons
 router.patch('/:id/inscriptions/:inscriptionId', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const data = z.object({ fraisPaye: z.boolean().optional(), note: z.string().optional().nullable() }).parse(req.body);
+    // La portée se vérifie sur l'événement RÉEL de l'inscription — pas sur
+    // celui de l'URL, sinon un id d'inscription étranger (glané sur un
+    // événement « TOUS ») permettrait de modifier hors de sa discipline.
+    const existante = await prisma.evenementInscription.findUnique({
+      where: { id: req.params.inscriptionId },
+      select: { id: true, evenementId: true, evenement: { select: { discipline: true } } },
+    });
+    if (!existante || existante.evenementId !== req.params.id) return sendError(res, 'Inscription introuvable', 404);
     const porteePatch = await porteeStaff(req.user!);
     if (!porteePatch.admin) {
-      const evt = await prisma.evenement.findUnique({ where: { id: req.params.id }, select: { discipline: true } });
-      if (!evt || !evt.discipline || !porteePatch.sports.includes(evt.discipline)) return sendError(res, 'Événement hors de votre discipline', 403);
+      const disc = existante.evenement.discipline;
+      if (!disc || !porteePatch.sports.includes(disc)) return sendError(res, 'Événement hors de votre discipline', 403);
     }
     const inscription = await prisma.evenementInscription.update({
-      where: { id: req.params.inscriptionId },
+      where: { id: existante.id },
       data,
       include: { member: { select: { firstName: true, lastName: true } }, evenement: { select: { titre: true } } },
     });
@@ -379,13 +392,20 @@ router.patch('/:id/inscriptions/:inscriptionId', authenticate, async (req: Reque
 // DELETE /api/evenements/:id/inscriptions/:inscriptionId
 router.delete('/:id/inscriptions/:inscriptionId', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
+    // Même garde que le PATCH : l'inscription doit appartenir à l'événement
+    // de l'URL, et la portée se juge sur SA discipline.
+    const aRetirer = await prisma.evenementInscription.findUnique({
+      where: { id: req.params.inscriptionId },
+      select: { id: true, evenementId: true, evenement: { select: { discipline: true } } },
+    });
+    if (!aRetirer || aRetirer.evenementId !== req.params.id) return sendError(res, 'Inscription introuvable', 404);
     const porteeDel = await porteeStaff(req.user!);
     if (!porteeDel.admin) {
-      const evt = await prisma.evenement.findUnique({ where: { id: req.params.id }, select: { discipline: true } });
-      if (!evt || !evt.discipline || !porteeDel.sports.includes(evt.discipline)) return sendError(res, 'Événement hors de votre discipline', 403);
+      const disc = aRetirer.evenement.discipline;
+      if (!disc || !porteeDel.sports.includes(disc)) return sendError(res, 'Événement hors de votre discipline', 403);
     }
     const inscription = await prisma.evenementInscription.delete({
-      where: { id: req.params.inscriptionId },
+      where: { id: aRetirer.id },
       include: { member: { select: { firstName: true, lastName: true } }, evenement: { select: { titre: true } } },
     });
     logAudit(req, {

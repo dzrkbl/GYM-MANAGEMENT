@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { masseSalarialePourMois } from '../lib/finances';
-import { clePeriode, debutFenetre, jourMontreal, type Granularite } from '../lib/periodes';
+import { clePeriode, cleMois, debutFenetre, jourMontreal, type Granularite } from '../lib/periodes';
 
 const router = Router();
 
@@ -46,17 +46,23 @@ async function renouvellementsEchus() {
   };
 }
 
-// Help function for revenues using paymentVersement
+// Revenus d'un mois CIVIL de Montréal (month : indice 0-11). `datePaiement`
+// peut être un vrai horodatage (encaissement saisi « maintenant ») : un
+// paiement du 31 à 20 h 30 heure de Montréal est déjà le 1er en UTC — la
+// fenêtre SQL est donc élargie d'un jour de chaque côté, puis chaque
+// versement est rattaché à son mois par le jour civil de Montréal.
 const getRevenusForMonth = async (year: number, month: number) => {
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0, 23, 59, 59);
+  const moisCible = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const startDate = new Date(Date.UTC(year, month, 1) - 36 * 3_600_000);
+  const endDate = new Date(Date.UTC(year, month + 1, 1) + 36 * 3_600_000);
 
-  const versements = await prisma.paymentVersement.findMany({
+  const bruts = await prisma.paymentVersement.findMany({
     where: {
       datePaiement: { gte: startDate, lte: endDate }
     },
     select: {
       montant: true,
+      datePaiement: true,
       member: {
         select: {
           sections: { select: { section: true } }
@@ -64,6 +70,7 @@ const getRevenusForMonth = async (year: number, month: number) => {
       }
     }
   });
+  const versements = bruts.filter((v) => v.datePaiement && cleMois(v.datePaiement) === moisCible);
 
   const total = versements.reduce((sum, v) => sum + v.montant, 0);
 
@@ -159,12 +166,13 @@ router.get('/membres', authenticate, requireRole(['ADMIN']), async (req: Request
 // GET /api/dashboard/resume
 router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
-    const now = new Date();
-    
-    // Revenus
-    const moisActuel = await getRevenusForMonth(now.getFullYear(), now.getMonth());
-    let prevYear = now.getFullYear();
-    let prevMonthIndex = now.getMonth() - 1;
+    // Mois courant = mois CIVIL de Montréal (le soir du dernier jour du mois,
+    // « new Date().getMonth() » sur le serveur UTC est déjà le mois suivant —
+    // revenus à 0 $ et variation absurde à l'écran chaque fin de mois).
+    const [anneeMtl, moisMtl] = aujourdhuiMontreal().split('-').map(Number);
+    const moisActuel = await getRevenusForMonth(anneeMtl, moisMtl - 1);
+    let prevYear = anneeMtl;
+    let prevMonthIndex = moisMtl - 2;
     if (prevMonthIndex < 0) { prevMonthIndex = 11; prevYear -= 1; }
     const moisPrecedent = await getRevenusForMonth(prevYear, prevMonthIndex);
     
@@ -237,7 +245,7 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
 
     // Masse salariale : MÊME source que le Module financier (override du mois
     // sinon « Gérer les coachs ») — le Dashboard affichait un 3e chiffre.
-    const masseSalariale = await masseSalarialePourMois(now.getMonth() + 1, now.getFullYear());
+    const masseSalariale = await masseSalarialePourMois(moisMtl, anneeMtl);
 
     return sendSuccess(res, {
       revenus: {
@@ -269,8 +277,9 @@ router.get('/resume', authenticate, requireRole(['ADMIN']), async (req: Request,
 // GET /api/dashboard/kpis — indicateurs de pilotage
 router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
   try {
-    const now = new Date();
-    const finJour = (d: Date) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+    // Tout est calé sur le jour/mois CIVIL de Montréal (le serveur tourne en
+    // UTC : le soir, « new Date() » est déjà demain — voire le mois suivant).
+    const [anneeMtl, moisMtl] = aujourdhuiMontreal().split('-').map(Number);
 
     // MRR : équivalent mensuel des cotisations des membres actifs dont le
     // contrat COURT ENCORE (un contrat expiré ne rapporte plus : il est dans
@@ -298,9 +307,15 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
       ? Math.round((nbActifs / (nbActifs + nbInactifs)) * 1000) / 10
       : 0;
 
-    // Recouvrement : parmi les versements échus, part déjà encaissée (en montant).
+    // Recouvrement : parmi les versements échus, part déjà encaissée (en
+    // montant). Les membres INACTIF sont EXCLUS, comme partout ailleurs :
+    // leurs impayés ne rentreront jamais et plombaient le pourcentage à
+    // chaque départ (mêmes règles que `whereRetards` et que les prévisions).
     const echus = await prisma.paymentVersement.findMany({
-      where: { datePrevue: { lte: finJour(now) } },
+      where: {
+        datePrevue: { lte: new Date(aujourdhuiMontreal() + 'T23:59:59Z') },
+        member: { status: { not: 'INACTIF' } },
+      },
       select: { montant: true, datePaiement: true },
     });
     let totalEchu = 0, encaisseEchu = 0;
@@ -311,8 +326,10 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
     const moisLabels = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
     const previsions = [];
     for (let i = 0; i < 3; i++) {
-      const debut = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const fin = new Date(now.getFullYear(), now.getMonth() + i + 1, 0, 23, 59, 59);
+      // Bornes UTC du mois (les échéances sont ancrées à midi UTC) ; le mois
+      // de départ est le mois civil de Montréal, pas celui du serveur.
+      const debut = new Date(Date.UTC(anneeMtl, moisMtl - 1 + i, 1));
+      const fin = new Date(Date.UTC(anneeMtl, moisMtl + i, 0, 23, 59, 59));
       // Versements planifiés du mois (les membres INACTIF n'apportent plus rien).
       const vers = await prisma.paymentVersement.findMany({
         where: { datePrevue: { gte: debut, lte: fin }, member: { status: { not: 'INACTIF' } } },
@@ -328,7 +345,7 @@ router.get('/kpis', authenticate, requireRole(['ADMIN']), async (_req: Request, 
       });
       const renouvellementsAttendus = finissants.reduce((n, m) => n + (m.montantFinal || 0), 0);
       previsions.push({
-        label: `${moisLabels[debut.getMonth()]} ${debut.getFullYear()}`,
+        label: `${moisLabels[debut.getUTCMonth()]} ${debut.getUTCFullYear()}`,
         total: Math.round(total * 100) / 100,
         encaisse: Math.round(encaisse * 100) / 100,
         aVenir: Math.round((total - encaisse) * 100) / 100,

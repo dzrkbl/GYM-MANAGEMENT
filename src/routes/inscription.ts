@@ -8,8 +8,15 @@ import { logAudit } from '../lib/audit';
 import { REGLEMENT_VERSION } from '../lib/reglement';
 import { contenuBienvenue } from '../lib/bienvenue';
 import { estKarate } from '../lib/katas';
+import { dateAMidi } from '../lib/tarifs';
 
 const router = Router();
+
+// Les champs du formulaire PUBLIC partent tels quels dans des courriels HTML :
+// on échappe pour qu'un tiers (ou un robot) ne puisse pas injecter de balises
+// dans la boîte de l'administration. Même garde que dans leads.ts.
+const echapper = (v?: string | null) =>
+  (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // POST /api/inscription/inviter — envoie le lien d'inscription en ligne par
 // courriel (ADMIN / gestionnaire). Sert aussi de test de délivrabilité : si la
@@ -157,7 +164,13 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
 
     // Anti-doublon : si le même nom existe déjà…
     // - EN_ATTENTE (ex. prospect converti manuellement) → on COMPLÈTE ce dossier
-    //   avec la fiche au lieu d'en créer un deuxième ;
+    //   avec la fiche, mais SEULEMENT si une coordonnée concorde (courriel ou
+    //   téléphone) ou si le dossier n'a encore aucune coordonnée : le nom seul
+    //   ne suffit pas — deux enfants homonymes sont deux dossiers, et le
+    //   formulaire est PUBLIC : sans cette garde, connaître le prénom+nom d'un
+    //   enfant en attente suffirait à remplacer le courriel du parent (donc
+    //   les rappels de paiement et reçus) et ses données santé/urgence.
+    //   Même principe que la conversion anti-homonyme de leads.ts.
     // - ACTIF/INACTIF → on refuse poliment (dossier déjà existant).
     const existant = await prisma.member.findFirst({
       where: {
@@ -174,9 +187,30 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         409
       );
     }
+    if (existant) {
+      const minuscules = (t?: string | null) => (t || '').toLowerCase().trim();
+      const chiffresTel = (t?: string | null) => (t || '').replace(/\D/g, '');
+      const courrielsDossier = [existant.email, existant.parentEmail].map(minuscules).filter(Boolean);
+      const telsDossier = [existant.phone, existant.parentPhone].map(chiffresTel).filter((t) => t.length >= 7);
+      const courrielsFiche = [data.email, data.parentEmail].map(minuscules).filter(Boolean);
+      const telsFiche = [data.phone, data.parentPhone].map(chiffresTel).filter((t) => t.length >= 7);
+      const dossierSansCoordonnees = courrielsDossier.length === 0 && telsDossier.length === 0;
+      const concorde =
+        courrielsFiche.some((e) => courrielsDossier.includes(e)) ||
+        telsFiche.some((t) => telsDossier.includes(t));
+      if (!dossierSansCoordonnees && !concorde) {
+        return sendError(
+          res,
+          `Un dossier en attente existe déjà au nom de ${data.firstName} ${data.lastName}, ` +
+          'mais les coordonnées ne correspondent pas. Contactez-nous à l\'accueil ou par ' +
+          'courriel pour compléter l\'inscription.',
+          409
+        );
+      }
+    }
 
     const donneesFiche = {
-        dateOfBirth: data.dob ? new Date(data.dob + 'T12:00:00') : null,
+        dateOfBirth: data.dob ? dateAMidi(data.dob) : null,
         gender: data.gender || null,
         phone: data.phone || null,
         email: data.email || null,
@@ -276,10 +310,10 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
         html: `
           <p>Nouvelle inscription en ligne (statut EN ATTENTE) :</p>
           <ul>
-            <li>Athlète : ${nomComplet}</li>
-            <li>Section : ${data.section || '—'}</li>
-            <li>Parent : ${data.parentName || '—'} (${data.parentEmail || data.email || '—'}, ${data.parentPhone || data.phone || '—'})</li>
-            <li>Provenance : ${data.provenance || '—'}${data.refereParNom ? ' · Référé par : ' + data.refereParNom : ''}</li>
+            <li>Athlète : ${echapper(nomComplet)}</li>
+            <li>Section : ${echapper(data.section) || '—'}</li>
+            <li>Parent : ${echapper(data.parentName) || '—'} (${echapper(data.parentEmail || data.email) || '—'}, ${echapper(data.parentPhone || data.phone) || '—'})</li>
+            <li>Provenance : ${echapper(data.provenance) || '—'}${data.refereParNom ? ' · Référé par : ' + echapper(data.refereParNom) : ''}</li>
           </ul>
           <p>À valider dans la section Membres.</p>
         `,

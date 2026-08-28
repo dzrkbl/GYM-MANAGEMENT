@@ -29,6 +29,7 @@ import backupRouter from './src/routes/backup';
 import inventaireRouter from './src/routes/inventaire';
 import evenementsRouter from './src/routes/evenements';
 import affiliationsRouter from './src/routes/affiliations';
+import depensesAdminRouter from './src/routes/depensesAdmin';
 import retentionRouter from './src/routes/retention';
 import calendrierRouter from './src/routes/calendrier';
 
@@ -99,7 +100,7 @@ app.use((_req, _res, next) => {
   next();
 });
 
-// Anti-abus sur les deux endpoints publics sensibles.
+// Anti-abus sur les TROIS endpoints publics sensibles.
 app.post('/api/auth/login', rateLimit({
   fenetreMs: 15 * 60_000, max: 10,
   message: 'Trop de tentatives de connexion. Réessayez dans quelques minutes.',
@@ -107,6 +108,13 @@ app.post('/api/auth/login', rateLimit({
 app.post('/api/inscription', rateLimit({
   fenetreMs: 60 * 60_000, max: 5,
   message: "Trop de demandes d'inscription. Réessayez plus tard.",
+}));
+// Formulaire prospect du site : sans limite, un robot passant le honeypot
+// remplirait la table Lead sans borne (et, pendant une panne de base, chaque
+// POST déclenche immédiatement un courriel de secours à l'admin).
+app.post('/api/leads', rateLimit({
+  fenetreMs: 60 * 60_000, max: 10,
+  message: 'Trop de demandes. Réessayez plus tard.',
 }));
 
 // Main API Endpoints
@@ -134,6 +142,7 @@ app.use('/api/backup', backupRouter);
 app.use('/api/inventaire', inventaireRouter);
 app.use('/api/evenements', evenementsRouter);
 app.use('/api/affiliations', affiliationsRouter);
+app.use('/api/depenses-admin', depensesAdminRouter);
 app.use('/api/retention', retentionRouter);
 app.use('/api/calendrier', calendrierRouter);
 
