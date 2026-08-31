@@ -5,6 +5,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { useSections } from '../hooks/useSections';
 import { formatDateLocal } from '../lib/format';
 import { etatPaiement } from '../lib/echeances';
+import { HAUTEUR_ECRAN } from '../lib/layout';
 
 interface Course {
   id: string;
@@ -218,9 +219,9 @@ export function Pointer() {
 
       setSuccessMessage(`${res.pointed} membre(s) pointé(s) pour le ${dateCours} !${res.skipped > 0 ? ` (${res.skipped} déjà pointés)` : ''}`);
       setPointedMemberIds(new Set()); // Reset after success
-      // La confirmation s'affiche en haut : on y ramène l'écran (c'est le
-      // <main> qui défile, pas la fenêtre).
-      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+      // La confirmation vit dans l'en-tête FIXE : elle est visible sans avoir
+      // à remonter quoi que ce soit (avant, il fallait faire défiler le
+      // <main> et l'écran semblait planter au téléphone).
     } catch (err: any) {
       setError(err.message || 'Erreur lors du pointage');
     } finally {
@@ -233,177 +234,205 @@ export function Pointer() {
     return s?.belt || 'BLANCHE';
   };
 
+  const coursDuGroupe = courses.filter((c) => c.section === selectedSection);
+  const aucunCours = !isLoadingCourses && coursDuGroupe.length === 0;
+  // « Tout cocher » ne porte que sur les membres RESTANTS : le libellé doit se
+  // comparer à eux, sinon il affichait encore « Tout cocher » alors que tout ce
+  // qui pouvait l'être l'était déjà (dès qu'un membre était déjà pointé).
+  const nbRestants = members.filter((m) => !dejaPointes.has(m.id)).length;
+  const toutCoche = nbRestants > 0 && pointedMemberIds.size === nbRestants;
+
+  /**
+   * ÉCRAN FIXE, LISTE SEULE QUI DÉFILE.
+   *
+   * Avant, toute la page défilait dans le <main> : les onglets de groupe
+   * partaient vers le haut, et le bouton « Soumettre », simplement collant,
+   * disparaissait dès que la barre d'adresse du téléphone se repliait
+   * (100vh > hauteur visible). Maintenant la page fait EXACTEMENT la hauteur
+   * visible (HAUTEUR_ECRAN, en 100dvh) et se découpe en trois : en-tête figé,
+   * liste défilante, pied figé. Rien ne flotte, rien ne peut se cacher.
+   */
   return (
-    <div className="space-y-6 max-w-md mx-auto pb-6">
-      <h1 className="text-2xl font-bold text-cshp-black">Pointage Rapide</h1>
+    <div className={`${HAUTEUR_ECRAN} flex flex-col w-full max-w-md mx-auto gap-3`}>
+      {/* ---------- EN-TÊTE FIGÉ ---------- */}
+      <div className="shrink-0 space-y-2.5">
+        <h1 className="text-xl md:text-2xl font-bold text-cshp-black">Pointage rapide</h1>
 
-      {/* La confirmation N'EFFACE PLUS l'écran : avant, tout le formulaire
-          disparaissait après « Soumettre » (l'écran semblait planter au
-          téléphone) et il fallait un clic de plus pour continuer. La liste
-          reste là, les pointés passent en vert « Déjà pointé ✓ ». */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-start justify-between gap-2">
-          <span className="font-semibold">✅ {successMessage}</span>
-          <button
-            onClick={() => setSuccessMessage('')}
-            aria-label="Fermer la confirmation"
-            className="shrink-0 -mr-1 p-1.5 rounded-full text-green-700 hover:bg-green-100"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      <>
-          {/* Section Selector */}
-          <div className="flex flex-nowrap gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto whitespace-nowrap scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {sections.map(section => (
-              <button
-                key={section}
-                onClick={() => setSelectedSection(section)}
-                className={`flex-shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] shrink-0 ${
-                  selectedSection === section 
-                    ? 'bg-white text-cshp-black shadow-sm font-semibold' 
-                    : 'text-cshp-gray hover:text-cshp-black'
-                }`}
-              >
-                {getLabel(section)}
-              </button>
-            ))}
+        {/* La confirmation N'EFFACE PLUS l'écran : la liste reste là, les
+            pointés passent en vert « Déjà pointé ✓ ». */}
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-lg flex items-start justify-between gap-2 text-sm">
+            <span className="font-semibold">✅ {successMessage}</span>
+            <button
+              onClick={() => setSuccessMessage('')}
+              aria-label="Fermer la confirmation"
+              className="shrink-0 -mr-1 p-1.5 rounded-full text-green-700 hover:bg-green-100"
+            >
+              ✕
+            </button>
           </div>
+        )}
 
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Groupes : rangée FIGÉE, qu'on fait rouler horizontalement au pouce
+            jusqu'au groupe voulu (elle ne part jamais vers le haut). */}
+        <div className="flex flex-nowrap gap-2 bg-gray-100 p-1 rounded-lg overflow-x-auto overscroll-x-contain whitespace-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {sections.map(section => (
+            <button
+              key={section}
+              onClick={() => setSelectedSection(section)}
+              className={`shrink-0 px-4 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] ${
+                selectedSection === section
+                  ? 'bg-white text-cshp-black shadow-sm font-semibold'
+                  : 'text-cshp-gray hover:text-cshp-black'
+              }`}
+            >
+              {getLabel(section)}
+            </button>
+          ))}
+        </div>
+
+        {/* Jour et cours côte à côte : deux champs sur une seule rangée, pour
+            laisser le maximum de hauteur à la liste au téléphone. */}
+        <div className="grid grid-cols-2 gap-2">
           {/* Jour du cours : aujourd'hui par défaut, passé permis (pointage oublié). */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-cshp-gray">Jour du cours</label>
+          <div className="space-y-1 min-w-0">
+            <label className="block text-[11px] font-medium text-cshp-gray">Jour du cours</label>
             <input
               type="date"
               value={dateCours}
               max={dateLocaleISO()}
               onChange={(e) => setDateCours(e.target.value)}
-              className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:ring-2 focus:ring-cshp-red outline-none"
+              className="w-full min-h-[44px] border border-gray-300 rounded-lg px-2 bg-white text-sm focus:ring-2 focus:ring-cshp-red outline-none"
             />
-            {dateCours !== dateLocaleISO() && (
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-semibold">
-                ⏪ Pointage rétroactif : vous enregistrez les présences du cours du {dateCours}.
-              </div>
-            )}
           </div>
 
-          {/* Course Selector */}
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-cshp-gray">{dateCours === dateLocaleISO() ? "Cours prévu aujourd'hui" : `Cours prévu le ${dateCours}`}</label>
+          <div className="space-y-1 min-w-0">
+            <label className="block text-[11px] font-medium text-cshp-gray">Cours</label>
             {isLoadingCourses ? (
-              <div className="h-11 bg-gray-100 animate-pulse rounded-lg flex items-center px-4">
-                <span className="text-sm text-cshp-gray">Chargement...</span>
+              <div className="min-h-[44px] bg-gray-100 animate-pulse rounded-lg flex items-center px-3">
+                <span className="text-sm text-cshp-gray">Chargement…</span>
               </div>
-            ) : courses.filter(c => c.section === selectedSection).length === 0 ? (
-              <div className="h-11 bg-gray-50 border border-gray-200 rounded-lg flex items-center px-4">
-                <span className="text-sm text-red-500">Aucun cours prévu {dateCours === dateLocaleISO() ? "aujourd'hui" : `le ${dateCours}`} pour {getLabel(selectedSection)}</span>
+            ) : aucunCours ? (
+              <div className="min-h-[44px] bg-gray-50 border border-gray-200 rounded-lg flex items-center px-3">
+                <span className="text-sm text-red-500 font-medium">Aucun</span>
               </div>
             ) : (
               <select
-                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-3 bg-white focus:ring-2 focus:ring-cshp-red outline-none"
+                className="w-full min-h-[44px] border border-gray-300 rounded-lg px-2 bg-white text-sm focus:ring-2 focus:ring-cshp-red outline-none"
                 value={selectedCourseId}
                 onChange={(e) => setSelectedCourseId(e.target.value)}
               >
-                {courses.filter(c => c.section === selectedSection).map(c => (
+                {coursDuGroupe.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.startTime} - {c.endTime} · {c.coach ? `Coach ${c.coach.firstName}` : 'Sans coach'}
+                    {c.startTime}–{c.endTime} · {c.coach ? `Coach ${c.coach.firstName}` : 'Sans coach'}
                   </option>
                 ))}
               </select>
             )}
           </div>
+        </div>
 
-          {/* Member List */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <span className="font-medium text-cshp-black">
-                Membres actifs ({members.length}){dejaPointes.size > 0 && <span className="text-xs text-emerald-700 font-semibold"> · {dejaPointes.size} déjà pointé(s)</span>}
-              </span>
-              <button 
-                onClick={handleSelectAll}
-                className="text-cshp-red text-sm font-medium p-2 -mr-2 min-h-[44px] flex items-center"
-              >
-                {pointedMemberIds.size === members.length && members.length > 0 ? 'Désélectionner tout' : 'Sélectionner tout'}
-              </button>
-            </div>
-            
-            {isLoadingMembers ? (
-              <Spinner />
-            ) : members.length === 0 ? (
-              <div className="p-8 text-center text-cshp-gray text-sm">
-                Aucun membre actif trouvé dans {getLabel(selectedSection)}.
-              </div>
-            ) : (
-              // Au téléphone la liste défile AVEC la page (un défilement
-              // imbriqué à hauteur bloquée était pénible au pouce) ; sur
-              // ordinateur elle garde sa hauteur bornée.
-              <ul className="divide-y divide-gray-100 md:max-h-[50vh] md:overflow-y-auto">
-                {members.map(member => {
-                  const rappel = rappelPaiement(member);
-                  const estDejaPointe = dejaPointes.has(member.id);
-                  return (
-                  <li
-                    key={member.id}
-                    className={`flex justify-between items-center p-4 transition-colors ${estDejaPointe ? 'bg-emerald-50/50' : 'hover:bg-gray-50 cursor-pointer'}`}
-                    onClick={() => { if (!estDejaPointe) handleToggleMember(member.id); }}
-                  >
-                    <div>
-                      <span className="font-medium text-cshp-black block">{(member.lastName ?? '').toUpperCase()} {member.firstName ?? ''}</span>
-                      <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-cshp-gray">
-                        {getBeltColor(member, selectedSection)}
-                      </span>
-                      {rappel && (
-                        <span
-                          className={`inline-block mt-1 ml-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            rappel.enRetard ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          {rappel.texte}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {estDejaPointe ? (
-                        <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-full">Déjà pointé ✓</span>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          checked={pointedMemberIds.has(member.id)}
-                          onChange={() => {}} // handled by li onClick
-                          className="w-6 h-6 rounded border-gray-300 text-cshp-red focus:ring-cshp-red pointer-events-none"
-                        />
-                      )}
-                    </div>
-                  </li>
-                  );
-                })}
-              </ul>
+        {aucunCours && (
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-semibold">
+            Aucun cours prévu {dateCours === dateLocaleISO() ? "aujourd'hui" : `le ${dateCours}`} pour {getLabel(selectedSection)}.
+          </div>
+        )}
+
+        {dateCours !== dateLocaleISO() && (
+          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-semibold">
+            ⏪ Pointage rétroactif : vous enregistrez les présences du cours du {dateCours}.
+          </div>
+        )}
+      </div>
+
+      {/* ---------- LISTE : LA SEULE ZONE QUI DÉFILE ---------- */}
+      <div className="flex-1 min-h-0 flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="shrink-0 px-3 py-2 border-b border-gray-100 flex justify-between items-center gap-2 bg-gray-50">
+          <span className="text-sm font-medium text-cshp-black min-w-0">
+            Membres actifs ({members.length})
+            {dejaPointes.size > 0 && (
+              <span className="block text-xs text-emerald-700 font-semibold">{dejaPointes.size} déjà pointé(s)</span>
             )}
-          </div>
+          </span>
+          <button
+            onClick={handleSelectAll}
+            className="shrink-0 text-cshp-red text-sm font-medium px-2 -mr-1 min-h-[44px] flex items-center"
+          >
+            {toutCoche ? 'Tout décocher' : 'Tout cocher'}
+          </button>
+        </div>
 
-          {/* Bouton COLLANT : toujours visible au-dessus de la barre d'onglets,
-              même au milieu d'une longue liste — plus besoin de défiler pour
-              soumettre (au téléphone il était en plus caché SOUS la barre). */}
-          <div className="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] md:bottom-4 -mx-1 px-1 pt-3 pb-1 bg-gradient-to-t from-gray-50 via-gray-50/95 to-transparent">
-            <Button
-              fullWidth
-              onClick={handleSubmit}
-              isLoading={isSubmitting}
-              disabled={pointedMemberIds.size === 0 || !selectedCourseId}
-              className="min-h-[52px] shadow-lg"
-            >
-              {pointedMemberIds.size > 0 ? `Pointer ${pointedMemberIds.size} présence(s)` : 'Soumettre'}
-            </Button>
+        {isLoadingMembers ? (
+          <div className="flex-1 flex items-center justify-center"><Spinner /></div>
+        ) : members.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center p-8 text-center text-cshp-gray text-sm">
+            Aucun membre actif trouvé dans {getLabel(selectedSection)}.
           </div>
-      </>
+        ) : (
+          // `overscroll-contain` : arrivé en bas de la liste, le geste ne
+          // « déborde » pas sur la page derrière (rien ne bouge autour).
+          <ul className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-gray-100">
+            {members.map(member => {
+              const rappel = rappelPaiement(member);
+              const estDejaPointe = dejaPointes.has(member.id);
+              return (
+              <li
+                key={member.id}
+                className={`flex justify-between items-center gap-2 px-3 py-3 transition-colors ${estDejaPointe ? 'bg-emerald-50/50' : 'hover:bg-gray-50 cursor-pointer'}`}
+                onClick={() => { if (!estDejaPointe) handleToggleMember(member.id); }}
+              >
+                <div className="min-w-0">
+                  <span className="font-medium text-cshp-black block">{(member.lastName ?? '').toUpperCase()} {member.firstName ?? ''}</span>
+                  <span className="inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-cshp-gray">
+                    {getBeltColor(member, selectedSection)}
+                  </span>
+                  {rappel && (
+                    <span
+                      className={`inline-block mt-1 ml-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        rappel.enRetard ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {rappel.texte}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {estDejaPointe ? (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-full">Déjà pointé ✓</span>
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={pointedMemberIds.has(member.id)}
+                      onChange={() => {}} // handled by li onClick
+                      className="w-6 h-6 rounded border-gray-300 text-cshp-red focus:ring-cshp-red pointer-events-none"
+                    />
+                  )}
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* ---------- PIED FIGÉ : le bouton ne peut plus se cacher ---------- */}
+      <div className="shrink-0">
+        <Button
+          fullWidth
+          onClick={handleSubmit}
+          isLoading={isSubmitting}
+          disabled={pointedMemberIds.size === 0 || !selectedCourseId}
+          className="min-h-[52px] shadow-lg"
+        >
+          {pointedMemberIds.size > 0 ? `Pointer ${pointedMemberIds.size} présence(s)` : 'Soumettre'}
+        </Button>
+      </div>
     </div>
   );
 }
