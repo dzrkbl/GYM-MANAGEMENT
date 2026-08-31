@@ -511,3 +511,103 @@ model DepenseAdmin {
   @@index([payeurId])
   @@index([statut])
 }
+
+// ==================== MODULE « POINTS & PARTAGE » ====================
+// Système de redevabilité de l'entente entre les deux associées : chaque
+// tâche a une assignée et une date limite ; les points suivent qui l'a
+// RÉELLEMENT faite ; 100 % du bénéfice du trimestre se partage au prorata
+// des points. Tout ce que l'app trace déjà (pointages, encaissements,
+// prospects, rétention, ventes…) se compte automatiquement — voir
+// src/lib/pointsAuto.ts. Toute modification ici est journalisée (AuditLog,
+// entités Bareme/PlanTache/TacheRecurrente → section « Gestion du temps »).
+
+// Le BARÈME (catalogue des tâches et leur valeur en points).
+// `code` : lignes calculées automatiquement depuis les traces de l'app —
+// ne pas renommer (pointsAuto s'y réfère). Les valeurs restent modifiables ;
+// les points des tâches du plan sont FIGÉS au moment du « fait »
+// (non-rétroactivité) ; les lignes automatiques utilisent la valeur courante.
+model TachePoints {
+  id         String   @id @default(uuid())
+  code       String?  @unique // POINTAGE_SOIR, COURS_DONNE… (lignes automatiques)
+  famille    String // ENSEIGNEMENT, COMPETITION, MEMBRES, ARGENT, DEVELOPPEMENT, LOCAL, RELATIONS_EXT, GOUVERNANCE, HORS_LISTE
+  nom        String   @unique
+  mode       String // FIXE | DUREE (points = valeur×durée)
+  valeur     Float // points fixes OU coefficient appliqué à la durée
+  supplement Float    @default(0) // ajouté par unité (ex. le +0,25 du cours donné)
+  preuve     String // APP | DECL
+  note       String?
+  actif      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  plans       PlanTache[]
+  recurrentes TacheRecurrente[]
+}
+
+// Une INSTANCE du plan : qui, quoi, pour quand. Créée à la réunion mensuelle,
+// générée d'une récurrente, ou ajoutée à la volée (tout est journalisé).
+model PlanTache {
+  id           String    @id @default(uuid())
+  tacheId      String
+  dateLimite   DateTime // midi UTC (date-jour)
+  assigneeId   String
+  assigneeNom  String // figé : lisible même si le compte change
+  quantite     Float     @default(1)
+  duree        Float? // heures (tâches en mode DUREE)
+  statut       String    @default("A_FAIRE") // A_FAIRE | FAIT | REPRIS | ANNULE
+  faitParId    String?
+  faitParNom   String?
+  faitLe       DateTime? // midi UTC — c'est LUI qui rattache les points au mois/trimestre
+  points       Float? // FIGÉS au moment du « fait » (le barème peut changer ensuite)
+  note         String?
+  recurrenteId String? // instance générée d'une récurrente (dédup à la génération)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tache      TachePoints      @relation(fields: [tacheId], references: [id])
+  recurrente TacheRecurrente? @relation(fields: [recurrenteId], references: [id], onDelete: SetNull)
+
+  @@unique([recurrenteId, dateLimite])
+  @@index([statut, dateLimite])
+  @@index([faitLe])
+}
+
+// Une tâche RÉCURRENTE (gabarit) : « Générer le mois » crée les instances
+// datées, sans doublon. L'alternance fait tourner l'assignation entre les
+// deux associées, occurrence par occurrence, ancrée sur `ancrage`.
+model TacheRecurrente {
+  id            String    @id @default(uuid())
+  tacheId       String
+  frequence     String // HEBDO | MENSUEL | TRIMESTRIEL
+  jourSemaine   Int? // 0=dimanche … 6=samedi (HEBDO)
+  jourMois      Int? // 1..28 (MENSUEL / TRIMESTRIEL)
+  assigneeId    String? // assignation fixe (si pas d'alternance)
+  assigneeNom   String?
+  alternance    Boolean   @default(false)
+  premierId     String? // qui prend la 1re occurrence de l'alternance
+  premierNom    String?
+  secondId      String?
+  secondNom     String?
+  ancrage       DateTime? // référence de parité de l'alternance (midi UTC)
+  actif         Boolean   @default(true)
+  note          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tache TachePoints @relation(fields: [tacheId], references: [id])
+  plans PlanTache[]
+}
+
+// Acompte versé à une associée en cours de trimestre (l'entente, art. 9.4) :
+// déduit de sa part au règlement trimestriel ; jamais repris si déficit.
+model AcompteAssocie {
+  id        String   @id @default(uuid())
+  userId    String
+  nom       String // figé
+  montant   Float
+  date      DateTime // midi UTC
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}

@@ -531,6 +531,71 @@ export async function sendRetardRepeteAlerts(now = new Date()): Promise<Stat> {
   return s;
 }
 
+// ---------- Rappels du plan de tâches (module Points & partage) ----------
+// J-2 : rappel à l'assignée avant l'échéance. J+3 : la tâche en défaut devient
+// reprenable — L'AUTRE associée est prévenue (l'entente, art. 5.1-5.2 : la
+// relance avant bascule supprime l'incitation à laisser l'autre échouer en
+// silence). Dédup ReminderLog : un seul courriel par tâche et par étape.
+export async function sendRappelsTaches(now = new Date()): Promise<Stat> {
+  const s = stat();
+  const echap = (v?: string | null) =>
+    (v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const aujourd = jourDebut(now);
+  const dansDeuxJours = addDays(aujourd, 2);
+  const ilYATroisJours = addDays(aujourd, -3);
+
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN', actif: true },
+    select: { id: true, email: true, firstName: true },
+  });
+  const parId = new Map(admins.map((a) => [a.id, a]));
+
+  // J-2 : échéance aujourd'hui, demain ou après-demain.
+  const j2 = await prisma.planTache.findMany({
+    where: { statut: 'A_FAIRE', dateLimite: { gte: aujourd, lte: jourFin(dansDeuxJours) } },
+    include: { tache: { select: { nom: true } } },
+  });
+  for (const t of j2) {
+    const dest = parId.get(t.assigneeId)?.email;
+    if (!dest) continue;
+    const resultat = await envoyerAvecLog({
+      type: 'TACHE_J2', memberId: t.id, refKey: t.id,
+      to: dest,
+      subject: `À faire d'ici le ${formatDate(t.dateLimite)} — ${t.tache.nom}`,
+      html: htmlCourriel(`
+        <p>La tâche <strong>${echap(t.tache.nom)}</strong> t'est assignée pour le
+        <strong>${formatDate(t.dateLimite)}</strong>.</p>
+        ${t.note ? `<p>Note : ${echap(t.note)}</p>` : ''}
+        <p>Faite à temps, les points sont à toi. À partir de J+3, l'autre associée
+        peut la reprendre — et les points basculent en entier.</p>`, { salutation: null }),
+    });
+    compter(s, resultat);
+  }
+
+  // J+3 : en défaut depuis au moins 3 jours → reprenable, l'autre est prévenue.
+  const enDefaut = await prisma.planTache.findMany({
+    where: { statut: 'A_FAIRE', dateLimite: { lte: jourFin(ilYATroisJours) } },
+    include: { tache: { select: { nom: true } } },
+  });
+  for (const t of enDefaut) {
+    for (const autre of admins.filter((a) => a.id !== t.assigneeId)) {
+      if (!autre.email) continue;
+      const resultat = await envoyerAvecLog({
+        type: 'TACHE_REPRISE', memberId: t.id, refKey: `${t.id}:${autre.id}`,
+        to: autre.email,
+        subject: `Tâche reprenable — ${t.tache.nom}`,
+        html: htmlCourriel(`
+          <p><strong>${echap(t.tache.nom)}</strong> (assignée à ${echap(t.assigneeNom)},
+          échéance ${formatDate(t.dateLimite)}) est en défaut depuis au moins 3 jours.</p>
+          <p>Tu peux la reprendre dans la page <strong>Points &amp; partage</strong> :
+          100 % des points reviennent à celle qui la fait (l'entente, art. 5.2-5.3).</p>`, { salutation: null }),
+      });
+      compter(s, resultat);
+    }
+  }
+  return s;
+}
+
 // ---------- Exécution groupée (appelée par le cron ou le déclencheur intégré) ----------
 export async function runAllReminders(now = new Date()) {
   // Sans transport courriel, chaque envoi échouerait : on s'arrête tout de suite
@@ -549,6 +614,7 @@ export async function runAllReminders(now = new Date()) {
   const prospects = await sendLeadFollowups(now);
   const enAttente = await sendEnAttenteAlerts(now);
   const retardsRepetes = await sendRetardRepeteAlerts(now);
+  const taches = await sendRappelsTaches(now);
   // Sauvegarde quotidienne (classeur Excel + résumé du jour) — une fois par jour.
   const sauvegarde = await envoyerSauvegardeSiDue(now);
 
@@ -556,7 +622,7 @@ export async function runAllReminders(now = new Date()) {
   const totalErreurs =
     Object.values(paiements).reduce((n, s) => n + s.erreurs, 0) +
     renouvellements.erreurs + renouvellementsEchus.erreurs + absences.erreurs +
-    prospects.erreurs + enAttente.erreurs + retardsRepetes.erreurs;
+    prospects.erreurs + enAttente.erreurs + retardsRepetes.erreurs + taches.erreurs;
   if (totalErreurs > 0) {
     prisma.auditLog.create({
       data: {
@@ -567,5 +633,5 @@ export async function runAllReminders(now = new Date()) {
     }).catch((e) => console.error('Erreur audit rappels:', e));
   }
 
-  return { paiements, renouvellements, renouvellementsEchus, absences, prospects, enAttente, retardsRepetes, sauvegarde };
+  return { paiements, renouvellements, renouvellementsEchus, absences, prospects, enAttente, retardsRepetes, taches, sauvegarde };
 }

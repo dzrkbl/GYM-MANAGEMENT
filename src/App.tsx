@@ -22,6 +22,7 @@ import { Pilotage } from './pages/admin/Pilotage';
 import { Inventaire } from './pages/admin/Inventaire';
 import { Evenements } from './pages/admin/Evenements';
 import { DepensesAdmin } from './pages/admin/DepensesAdmin';
+import { GestionTemps } from './pages/admin/GestionTemps';
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/admin/inventaire" element={<Inventaire />} />
             <Route path="/admin/evenements" element={<Evenements />} />
             <Route path="/admin/remboursements" element={<DepensesAdmin />} />
+            <Route path="/admin/points" element={<GestionTemps />} />
             <Route path="/coachs" element={<Coachs />} />
             <Route path="/rapports" element={<Rapports />} />
             <Route path="/planning" element={<Planning />} />

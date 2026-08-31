@@ -42,10 +42,10 @@ const ENTITY_LABEL: Record<string, string> = {
   DepenseAdmin: 'Remboursement',
   User: 'Compte',
   // Système de points (module Gestion du temps) :
-  Tache: 'Tâche',
-  PlanTache: 'Plan mensuel',
   Bareme: 'Barème de points',
-  PointsTrimestre: 'Points du trimestre',
+  PlanTache: 'Tâche du plan',
+  TacheRecurrente: 'Tâche récurrente',
+  AcompteAssocie: 'Acompte associée',
 };
 
 // Filtres appliqués EN BASE (le journal complet est conservé — la page ne

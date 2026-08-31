@@ -16,7 +16,7 @@ const CATEGORIES: Record<string, any> = {
   MEMBRE: { entity: 'Member' },
   PAIEMENT: { entity: 'PaymentVersement' },
   ERREUR: { action: 'ERREUR' },
-  TEMPS: { entity: { in: ['Tache', 'PlanTache', 'Bareme', 'PointsTrimestre'] } },
+  TEMPS: { entity: { in: ['Bareme', 'PlanTache', 'TacheRecurrente', 'AcompteAssocie'] } },
 };
 
 // GET /api/audit?categorie=&avant=&limit= — journal des modifications (ADMIN).

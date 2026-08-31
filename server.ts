@@ -32,6 +32,8 @@ import affiliationsRouter from './src/routes/affiliations';
 import depensesAdminRouter from './src/routes/depensesAdmin';
 import retentionRouter from './src/routes/retention';
 import calendrierRouter from './src/routes/calendrier';
+import gestionTempsRouter from './src/routes/gestionTemps';
+import { seedBaremeSiVide } from './src/lib/seedBareme';
 
 import { runAllReminders } from './src/lib/reminders';
 import { prisma } from './src/lib/prisma';
@@ -145,6 +147,7 @@ app.use('/api/affiliations', affiliationsRouter);
 app.use('/api/depenses-admin', depensesAdminRouter);
 app.use('/api/retention', retentionRouter);
 app.use('/api/calendrier', calendrierRouter);
+app.use('/api/gestion-temps', gestionTempsRouter);
 
 // Basic health check
 // LÉGER exprès : pingé toutes les ~5 min par UptimeRobot pour garder Render
@@ -265,6 +268,15 @@ async function startServer() {
           if (seeded) console.log('✅ Base vide : amorçage initial effectué (admin + sections + cours).');
         } catch (e) {
           console.error('❌ Erreur d\'amorçage initial:', e);
+        }
+        // Barème du module Points & partage : semé UNE fois si la table est
+        // vide (base existante incluse) — jamais réécrit ensuite, les
+        // associées restent maîtresses de leurs valeurs.
+        try {
+          const seme = await seedBaremeSiVide(prisma);
+          if (seme) console.log('✅ Barème « Points & partage » semé (entente v1.1).');
+        } catch (e) {
+          console.error('❌ Erreur de semis du barème:', e);
         }
       });
     }

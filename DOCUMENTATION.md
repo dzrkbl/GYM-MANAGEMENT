@@ -335,6 +335,20 @@ Décision de comptabilité, pas de code : détail complet et impact chiffré dan
   `CALENDRIER` (date de fédération non retenue) n'accepte AUCUNE inscription ;
   PATCH/DELETE d'une inscription vérifient qu'elle appartient bien à
   l'événement de l'URL (sinon 404) et la portée sur SA discipline réelle.
+- **Module « Points & partage »** (entente de redevabilité entre les deux
+  associées — voir l'entente v1.1, document séparé) : **TachePoints** = le
+  barème (famille, nom unique, mode FIXE|DUREE, valeur, supplement, preuve
+  APP|DECL ; `code` unique = lignes calculées AUTOMATIQUEMENT depuis les
+  traces de l'app par `src/lib/pointsAuto.ts` — ne jamais renommer un code) ;
+  **PlanTache** = instance datée (assignée figée, dateLimite midi UTC,
+  quantite, duree, statut A_FAIRE|FAIT|REPRIS, faitPar/faitLe, **points FIGÉS
+  au moment du « fait »** — la non-rétroactivité du barème tient à ça) ;
+  **TacheRecurrente** = gabarit (HEBDO/MENSUEL/TRIMESTRIEL, alternance entre
+  les deux associées ancrée sur `ancrage`, génération idempotente via
+  l'unicité (recurrenteId, dateLimite)) ; **AcompteAssocie** = acompte versé
+  en cours de trimestre, déduit de la part au règlement, jamais repris.
+  Les COACHS salariés n'ont JAMAIS de points : seuls les comptes ADMIN actifs
+  comptent (leurs heures sont une charge du club).
 - Migrations : baseline unique + migrations additives datées. Nouvelle colonne
   → `prisma/migrations/<timestamp>_<nom>/migration.sql` écrit à la main +
   champ dans schema.prisma (le déploiement l'applique au démarrage).
@@ -407,6 +421,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET/POST /api/inventaire/ventes`, `DELETE /ventes/:id` | ADMIN | vente (décrémente stock, prix copié, membre optionnel), annulation (réincrémente) ; `?membreId=` → achats d'un dossier |
 | `GET/POST/PUT/DELETE /api/affiliations` | ADMIN | par membre/discipline/saison (doublon → 400) ; GET renvoie aussi `saisonCourante` |
 | `GET/POST/PUT/DELETE /api/evenements` + `/:id/inscriptions` | ADMIN | détail = participants avec `admissibilite` calculée (affiliation de la saison de l'événement + `solde` dû au club) ; PATCH inscription `{fraisPaye}` ; DELETE événement = archivage si inscriptions |
+| `/api/gestion-temps/*` | ADMIN | module **Points & partage** — TOUT est journalisé (entités Bareme/PlanTache/TacheRecurrente/AcompteAssocie → filtre « Gestion du temps » de l'Audit). `GET/POST/PUT/DELETE /bareme` (lignes `code` = auto : non supprimables, désactivables) ; `GET/POST/PUT/DELETE /plan` — le PUT porte la **garde anti-esquive** (repousser SA propre échéance en défaut ou le jour même ⇒ `accordAutre` obligatoire) ; `PATCH /plan/:id/fait` (points **figés** au barème du jour ; par l'autre = REPRISE 100 %/0, refusée avant J+3 sauf `accordAutre`) + `/annuler-fait` ; `GET/POST/PUT/DELETE /recurrentes` + `POST /recurrentes/generer {annee, mois}` (idempotent, alternance) ; `GET/POST/DELETE /acomptes` ; `GET /trimestre?saison&numero` (points auto+plan, ratios, hors-liste %, bénéfice net mensuel base « net », report chaîné ÉTEINT au 30 juin — T4 repart à 0 —, parts, acomptes, soldes plancher 0, drapeaux) ; `GET /auto?de&a` (détail transparent des points automatiques) ; `GET /associes` |
 | `GET /api/depenses-admin` (+ `/:id/photo`) | ADMIN | dépenses de poche de TOUS les admins (« qui a payé quoi ») + totaux par payeur ; la liste ne renvoie JAMAIS les photos (lourdes) — `aUnePhoto` + `GET /:id/photo` à la demande |
 | `POST/PUT /api/depenses-admin` | ADMIN | saisie (payeur = la session qui ajoute) / correction des champs (l'OCR se trompe : tout est corrigeable) ; photo compressée côté client, plafond ~1,8 Mo |
 | `PATCH /api/depenses-admin/:id/rembourser` | ADMIN | `{via?, dateRemboursement?, ajouterAuxCharges=true}` → REMBOURSE + crée la charge `Depense` ponctuelle du mois du remboursement (liée par `depenseId`, taxable si TPS/TVQ sur la facture) ; `annuler-remboursement` retire aussi la charge liée ; DELETE refusé tant que la charge liée existe (annuler d'abord). Tout audité |
@@ -569,6 +584,21 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   charge a une case **« Charge taxable »** (décochée = exonérée : assurances,
   salaires — aucun crédit de TPS/TVQ en base « net » ; badge « Exonérée de
   taxes » dans la liste). Lien direct vers la page Remboursements.
+- **Points & partage** (`/admin/points`, ADMIN, groupe Argent) : le module de
+  l'entente de redevabilité. Onglet **Plan** : tâches datées (En défaut / À
+  venir / Réglées), bouton « Fait » (ou « Reprendre (100 %) » quand on n'est
+  pas l'assignée), gabarits récurrents avec alternance + « Générer les
+  récurrentes du mois » (idempotent). Onglet **Trimestre** : points par
+  associée (automatique + plan), barre de ratio, l'argent mois par mois
+  (base « net »), report/distribuable, parts, acomptes, soldes, drapeaux
+  (hors-liste > 10 %, trimestre déficitaire, réunion de viabilité), et le
+  tableau transparent des points automatiques. Onglet **Barème** : catalogue
+  par famille, modifiable librement — chaque changement journalisé, jamais
+  rétroactif (les points déjà figés ne bougent pas) ; lignes AUTO protégées.
+  Le barème est SEMÉ automatiquement au démarrage si la table est vide
+  (src/lib/seedBareme.ts) — jamais réécrit ensuite. Rappels courriel de la
+  tournée : J-2 à l'assignée, J+3 à l'autre (« tâche reprenable »), dédup
+  ReminderLog (TACHE_J2 / TACHE_REPRISE).
 - **Remboursements** (`/admin/remboursements`, ADMIN, groupe Argent) : les
   dépenses payées de leur poche par les admins. « Ajouter une facture » →
   photo (appareil photo ou fichier, compressée client), bouton **« Lire la
@@ -802,6 +832,7 @@ prisma/migrations/20260825120000_raison_depart/             + Member.raisonDepar
 prisma/migrations/20260825200000_lead_notes/                + LeadNote (fil de suivi des prospects, ajout seulement).
 prisma/migrations/20260826100000_charges_taxables/          + Depense.taxable / DepenseConfig.taxable (crédits d'intrants) + backfill assurances existantes → false (le seed crée aussi les assurances non taxables : voir seedData).
 prisma/migrations/20260828120000_depenses_admin/            + DepenseAdmin (dépenses de poche des admins, photo + OCR + suivi de remboursement).
+prisma/migrations/20260831120000_points_partage/            + TachePoints, PlanTache, TacheRecurrente, AcompteAssocie (module Points & partage — entente de redevabilité).
 prisma/migrations/migration_lock.toml     Verrou Prisma (provider postgresql).
 prisma/seed.ts                            Seed officiel : appelle seedInitialData (admin, sections, cours, charges).
 prisma/seed-test.ts                       Jeu de données de test local (membres/versements factices).
@@ -843,6 +874,7 @@ src/routes/affiliations.ts                Affiliations fédération par membre/d
 src/routes/retention.ts                   Liste d'appels anti-décrochage (séances TENUES seulement, épisodes par dernière présence, portée par discipline sur GET et sur le marquage d'appel).
 src/routes/calendrier.ts                  Vue mois (GET fenêtre, portée par discipline) + sources .ics des fédérations (CRUD ADMIN audité, synchro qui n'écrase que les champs de la fédération).
 src/routes/depensesAdmin.ts               Dépenses de poche des admins : CRUD (photos servies à part), rembourser → charge Depense liée du mois (annulable), garde de suppression. Tout ADMIN + audité.
+src/routes/gestionTemps.ts                Module Points & partage : barème, plan (garde anti-esquive, fait/reprise J+3, points figés), récurrentes (génération idempotente, alternance), acomptes, règlement trimestriel, détail des points auto. Tout ADMIN + journalisé (section Gestion du temps).
 
 src/lib/prisma.ts                         Client Prisma singleton.
 src/lib/api-response.ts                   sendSuccess/sendError (format uniforme des réponses).
@@ -865,6 +897,9 @@ src/lib/portee.ts                         Portée par discipline du personnel : 
 src/lib/periodes.ts                       Clés de regroupement (mois / trimestre / semaine ISO) ancrées sur le jour civil de MONTRÉAL (sert aux analytics Pilotage).
 src/lib/ical.ts                           Lecteur iCal maison (RFC 5545) pour les .ics des fédérations — jours ancrés midi UTC, DTEND exclusif géré. PAS de tests automatisés : vérifier à la main après retouche.
 src/lib/ocrFacture.ts                     Lecture de factures CÔTÉ CLIENT : compresserImage (canvas → JPEG ≤ 1400 px), lireFacture (tesseract.js chargé à la demande, fra+eng), analyserTexteFacture (extraction fournisseur/date/sous-total/TPS/TVQ/total d'un reçu québécois + verdict de cohérence — les numéros d'enregistrement de taxes sans décimales sont ignorés).
+src/lib/pointsAuto.ts                     LE moteur des points automatiques : dérive les points des DEUX ASSOCIÉES (ADMIN actifs seulement) depuis Attendance (pointages soir même/rétro, cours donnés par le coach assigné sur séance TENUE, permanences d'accueil — annulées par un secondage déclaré le même jour), le journal d'audit (encaissement hebdo 0,75 au prorata des saisies PAY par semaine ISO, inscriptions, renouvellements, factures, rétention avec annulations soustraites, ventes, affiliations, inscriptions compétition max 3, remboursements, communications) et le fil des prospects (1er contact < 24 h, relances plafonnées 0,5/prospect/mois). Les valeurs viennent du barème par `code`.
+src/lib/pointsPartage.ts                  Règlement trimestriel : trimestres de saison (T1 sept-nov … T4 juin-août), bénéfice net encaissé par mois (encaissé HT − charges HT récupérables, base « net »), report de déficit chaîné avec EXTINCTION au 30 juin (T4 repart à 0), ratios de points, parts, acomptes, soldes plancher 0, drapeaux (hors-liste > 10 %, 2 trimestres déficitaires = réunion de viabilité).
+src/lib/seedBareme.ts                     Barème de l'entente v1.1 (58 lignes), semé au démarrage si la table est vide — jamais réécrit (les associées restent maîtresses des valeurs).
 src/lib/format.ts                         Helpers de dates côté client : formatDateLocal, todayLocalISO, joursAvantEcheance (§3.3).
 src/lib/api.ts                            apiFetch (Authorization, déballage {success,data}, déconnexion sur 401).
 src/lib/navigation.ts                     SOURCE UNIQUE de la navigation (groupes + onglets mobiles épinglés), consommée par Sidebar ET BottomNav — toute nouvelle page s'ajoute ici.
@@ -896,6 +931,7 @@ src/pages/admin/Inventaire.tsx            Inventaire : stock filtrable (coût in
 src/pages/admin/Evenements.tsx            Événements (détail : participants + badges affiliation/solde/renouvellement, frais remis) et Affiliations (par saison/discipline, ajout par recherche d'athlète) ; sources de calendrier (admin).
 src/pages/admin/Pilotage.tsx              Analytics marketing (arrivées/départs, motifs, provenances, entonnoir prospects) — bleu = arrivées, rouge = départs.
 src/pages/admin/DepensesAdmin.tsx         Page Remboursements : facture photographiée + OCR corrigeable, « qui a payé quoi », remboursement → charge du mois (optionnelle, cochée par défaut).
+src/pages/admin/GestionTemps.tsx          Page Points & partage : onglets Plan (fait/reprise, récurrentes, génération du mois), Trimestre (points auto+plan, ratios, argent, acomptes, drapeaux) et Barème (modifiable, journalisé, jamais rétroactif).
 
 src/components/layout/AppLayout.tsx       Gabarit connecté (sidebar + contenu + nav mobile).
 src/components/layout/Sidebar.tsx         Menu latéral ordinateur (groupes de navigation.ts, défilant).

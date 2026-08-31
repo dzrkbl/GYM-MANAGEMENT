@@ -1,7 +1,7 @@
 import {
   Home, Users, CheckSquare, CreditCard, UserCog, FileText, CalendarDays, Tag,
   Coins, UploadCloud, History, Send, Target, Package, Trophy, LifeBuoy,
-  LineChart, ReceiptText,
+  LineChart, ReceiptText, Timer,
 } from 'lucide-react';
 
 /**
@@ -45,6 +45,7 @@ export function groupesNavigation(admin: boolean): GroupeNavigation[] {
         { to: '/paiements', icon: CreditCard, label: 'Paiements' },
         { to: '/admin/finances', icon: Coins, label: 'Finances' },
         { to: '/admin/remboursements', icon: ReceiptText, label: 'Remboursements' },
+        { to: '/admin/points', icon: Timer, label: 'Points & partage' },
       ] : [],
     },
     {
