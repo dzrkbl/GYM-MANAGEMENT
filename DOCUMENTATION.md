@@ -410,7 +410,7 @@ section reconnue garde un filtre strict sur sa valeur de section.
 | `GET /api/depenses-admin` (+ `/:id/photo`) | ADMIN | dépenses de poche de TOUS les admins (« qui a payé quoi ») + totaux par payeur ; la liste ne renvoie JAMAIS les photos (lourdes) — `aUnePhoto` + `GET /:id/photo` à la demande |
 | `POST/PUT /api/depenses-admin` | ADMIN | saisie (payeur = la session qui ajoute) / correction des champs (l'OCR se trompe : tout est corrigeable) ; photo compressée côté client, plafond ~1,8 Mo |
 | `PATCH /api/depenses-admin/:id/rembourser` | ADMIN | `{via?, dateRemboursement?, ajouterAuxCharges=true}` → REMBOURSE + crée la charge `Depense` ponctuelle du mois du remboursement (liée par `depenseId`, taxable si TPS/TVQ sur la facture) ; `annuler-remboursement` retire aussi la charge liée ; DELETE refusé tant que la charge liée existe (annuler d'abord). Tout audité |
-| `GET /api/audit` | ADMIN | journal (cherchez `ERREUR / Courriel` pour les envois ratés) |
+| `GET /api/audit?categorie&avant&limit` | ADMIN | journal. **TOUT est conservé en base (jamais purgé)** — la route sert des tranches (200 par défaut, max 500) avec curseur `avant` (ISO) et filtre EN BASE par catégorie : POINTAGE / MEMBRE / PAIEMENT / ERREUR / **TEMPS** (entités du système de points : Tache, PlanTache, Bareme, PointsTrimestre — réservées pour le module Gestion du temps). Renvoie `{entrees, total}` (total réel du filtre). Cherchez `ERREUR / Courriel` pour les envois ratés |
 | `GET /api/health` | public | ping UptimeRobot (léger EXPRÈS : ne touche pas la base, Neon doit dormir) |
 | `GET /api/health/complet` | public | bilan profond : base + latence, migrations, transport courriel, canal admin ; 503 si un maillon casse. Réveille Neon → quelques appels/jour max (voir `docs/surveillance.md`) |
 | `GET /api/cron/reminders` | Bearer CRON_SECRET | tournée à la demande |
@@ -525,9 +525,13 @@ Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
   tableau accessible). Deux teintes seulement, validées daltonisme et
   contraste : le **bleu suit les arrivées, le rouge les départs** dans tous
   les graphiques.
-- **Audit** (`/admin/audit`) : filtres par nature (pointages, membres,
-  paiements, erreurs) — sans eux un pointage se noyait dans les 200 dernières
-  entrées.
+- **Audit** (`/admin/audit`) : filtres par nature (gestion du temps, pointages,
+  membres, paiements, erreurs) appliqués EN BASE + « Charger 200 entrées plus
+  anciennes » (curseur) + compteur « X affichées sur Y au total ». Avant, la
+  page chargeait les 200 dernières entrées et filtrait côté client : un filtre
+  pouvait sembler vide alors que le journal, lui, conserve TOUT (aucune purge
+  n'existe nulle part). La section « Gestion du temps » est réservée au futur
+  module de points : toute modification de tâche/plan/barème y sera signalée.
 - **Calendrier** (`/planning`), onglet Mois : un clic sur un cours ouvre la
   **séance** (qui était présent, lien vers chaque fiche, et « pointé par X le Y »
   avec un avertissement si la saisie est postérieure au jour du cours). Les
