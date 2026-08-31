@@ -466,10 +466,13 @@ sinon le compteur couru. Les erreurs d'envoi vont dans l'Audit
 
 ### 7.3 Sauvegarde quotidienne (`src/lib/sauvegarde.ts`)
 
-Feuilles : Résumé, une par groupe, Transactions (échéancier complet), et
+Feuilles : Résumé, une par groupe, Transactions (échéancier complet),
 **« Paiements reçus »** — uniquement l'argent encaissé (cotisations + ventes
 d'équipement, typées), trié du plus récent (haut) au plus ancien (bas), pour
-vérifier un paiement sans accès à la plateforme.
+vérifier un paiement sans accès à la plateforme — et **« Journal d'audit »** :
+copie du journal complet (qui a fait quoi, heure de Montréal, plus récent en
+haut, plafonnée aux 20 000 dernières entrées avec mention si tronquée), pour
+garder une photo de l'activité hors de l'application.
 Une fois par jour (via la tournée), envoie à `BACKUP_EMAIL` un classeur Excel
 **auto-suffisant** calqué sur le Google Sheet d'origine :
 - **Une feuille PAR GROUPE** : fiche complète par membre + 5 paires
@@ -852,7 +855,7 @@ src/lib/finances.ts                       Taxes (TPS/TVQ incluses), charges, mas
 src/lib/reminders.ts                      TOUTES les relances automatiques (cadences/refKeys §7.1) + jour civil de Montréal.
 src/lib/recus.ts                          Reçu PDF par versement payé (sauf CASH), numérotation, idempotence, chargerLogo.
 src/lib/factures.ts                       Factures annuelles par famille (union-find de regroupement, lignes de frais chargés, référence stable).
-src/lib/sauvegarde.ts                     Classeur Excel quotidien (une feuille par groupe, formules vivantes §7.3) + résumé courriel + dédup quotidienne.
+src/lib/sauvegarde.ts                     Classeur Excel quotidien (une feuille par groupe, formules vivantes §7.3, Paiements reçus, Journal d'audit) + résumé courriel + dédup quotidienne.
 src/lib/mailer.ts                         Double transport (Resend sinon SMTP), gabarit htmlCourriel (signature officielle), parseDestinataires (« a; b »), sendEmailBackground (échecs → audit).
 src/lib/bienvenue.ts                      Contenu du courriel de bienvenue (+ katas si Karaté).
 src/lib/katas.ts                          Programme de katas Heian par grade + liens vidéo + estKarate.

@@ -425,6 +425,38 @@ export async function genererSauvegarde(now = new Date()): Promise<DonneesSauveg
   lignesPay.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   for (const l of lignesPay) wsPay.addRow(l);
 
+  // ---------- Feuille : Journal d'audit (photo complète, hors app) ----------
+  // Le journal vit dans la base et n'est jamais purgé ; cette feuille en met
+  // une copie dans chaque sauvegarde pour pouvoir vérifier « qui a fait quoi »
+  // même sans accès à l'application. Du plus récent (en haut) au plus ancien.
+  const PLAFOND_AUDIT = 20_000; // garde-fou de taille : plusieurs années d'activité
+  const auditEntrees = await prisma.auditLog.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: PLAFOND_AUDIT,
+  });
+  const wsAudit = wb.addWorksheet("Journal d'audit");
+  wsAudit.columns = [
+    { header: 'Date et heure (Montréal)', key: 'quand', width: 20 },
+    { header: 'Utilisateur', key: 'qui', width: 22 },
+    { header: 'Action', key: 'action', width: 10 },
+    { header: 'Élément', key: 'entite', width: 18 },
+    { header: 'Détail', key: 'detail', width: 80 },
+  ];
+  wsAudit.getRow(1).font = { bold: true };
+  wsAudit.views = [{ state: 'frozen', ySplit: 1 }];
+  for (const e of auditEntrees) {
+    wsAudit.addRow({
+      quand: e.createdAt.toLocaleString('fr-CA', { timeZone: 'America/Toronto' }),
+      qui: e.userNom || '—',
+      action: e.action,
+      entite: e.entity,
+      detail: e.description || '',
+    });
+  }
+  if (auditEntrees.length === PLAFOND_AUDIT) {
+    wsAudit.addRow({ quand: '…', detail: `Feuille limitée aux ${PLAFOND_AUDIT} entrées les plus récentes — le journal complet demeure dans la base de données.` });
+  }
+
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
 
   // ---------- Résumé du jour (corps du courriel) ----------
