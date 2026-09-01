@@ -17,6 +17,10 @@ model User {
   role         String // ADMIN, SECTION_MANAGER, COACH
   section      String? // Renseigné si le rôle est SECTION_MANAGER, ou comma separated
   remuneration Float?   @default(0)
+  // Paie à l'heure ($/h, net de taxes — les salaires n'en portent pas).
+  // Renseigné : la paie du mois = séances tenues de ses cours × durée × taux.
+  // Nul : la rémunération forfaitaire ci-dessus s'applique telle quelle.
+  tauxHoraire  Float?
   actif        Boolean  @default(true)
   dateDebut    DateTime @default(now())
   note         String?
@@ -150,6 +154,13 @@ model Course {
   endTime   String // "18:30"
   coachId   String?
   jours     String[] // ["LUN", "MER", "VEN"]
+  // Rentabilité par cours (Rapports → Heures & cours). Capacités du local :
+  // 30 en karaté/judo ; U8 15 à un entraîneur, 25 à deux (capaciteDeuxCoachs —
+  // le dédoublement propose d'abord le 2e entraîneur). `strategique` sort le
+  // cours du verdict automatique : on le garde à perte en connaissance de cause.
+  capacite           Int?
+  capaciteDeuxCoachs Int?
+  strategique        Boolean @default(false)
   actif     Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -610,4 +621,69 @@ model AcompteAssocie {
   createdAt DateTime @default(now())
 
   @@index([date])
+}
+
+// ==================== MODULE « HEURES & COURS » ====================
+// Coût et rentabilité de chaque heure ouverte (Rapports → Heures & cours).
+// Trois coûts jamais confondus : MARGINAL (garder ouvert une heure de plus),
+// OPPORTUNITÉ (plancher d'un prix de location), COMPLET (santé d'un cours —
+// jamais pour tarifer une location). Toute modification de CreneauLoue et
+// ParametreRentabilite est journalisée (AuditLog).
+
+// Une plage horaire louée à un tiers (ex. club Wing Tsun). Occupe le local —
+// ses heures entrent dans les heures disponibles, ce qui BAISSE le coût
+// complet de tous les cours (réallocation du loyer, pas de l'argent neuf).
+// Ne porte aucun coach. Son revenu n'est JAMAIS une cotisation : ligne
+// « Locations » séparée dans Finances ; TPS/TVQ facturées EN SUS du tarif
+// net convenu, à remettre.
+model CreneauLoue {
+  id           String    @id @default(uuid())
+  locataire    String // « Wing Tsun — [nom] »
+  jours        String[] // ["SAM"] — même convention que Course
+  heureDebut   String // « 09:00 » — même convention que Course
+  heureFin     String
+  tarifHoraire Float // NET convenu ($/h) ; taxes en sus
+  dateDebut    DateTime // midi UTC (date-jour)
+  dateFin      DateTime? // null = en cours ; préavis de reprise au contrat
+  note         String? // assurance reçue, décharges, non-sollicitation…
+  actif        Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  revenus RevenuLocation[]
+}
+
+// Encaissement mensuel d'un créneau loué (saisie simple, v1). Montant TTC
+// tel que reçu ; la part de taxes se déduit (÷ 1,14975) et s'ajoute à la
+// provision « à remettre ». Un seul enregistrement par créneau et par mois.
+model RevenuLocation {
+  id         String   @id @default(uuid())
+  creneauId  String
+  mois       Int // 1-12
+  annee      Int
+  montantTTC Float
+  note       String?
+  createdAt  DateTime @default(now())
+
+  creneau CreneauLoue @relation(fields: [creneauId], references: [id], onDelete: Cascade)
+
+  @@unique([creneauId, annee, mois])
+}
+
+// Réglages du modèle de coût — UN SEUL enregistrement (id = 1), créé à la
+// migration. Les nulls signifient « calcule-le des données » :
+//  - heuresOuvertesSemaine null → Σ heures hebdo des cours actifs + créneaux
+//    loués actifs (le dénominateur SUIT l'horaire réel : ouvrir un créneau
+//    fait baisser le coût complet de tous les autres, automatiquement) ;
+//  - valeurHeureProprio null → bénéfice distribué ÷ points du dernier
+//    trimestre CLOS de Points & partage ; tant que rien n'est clos ni saisi,
+//    AUCUN classement de sections n'est affiché (classementBloque).
+model ParametreRentabilite {
+  id                        Int      @id @default(1)
+  heuresOuvertesSemaine     Float?
+  semainesSaison            Int      @default(48) // fermé 2 sem. hiver + 2 été
+  coutMarginalHeure         Float    @default(15) // hydro + usure + ouverture/ménage
+  valeurHeureProprio        Float?
+  semainesAvantDedoublement Int      @default(4) // pleines consécutives avant de proposer
+  updatedAt                 DateTime @default(now()) @updatedAt
 }

@@ -102,14 +102,21 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
     const annee = Number(isoAuj.slice(0, 4));
     const mois = Number(isoAuj.slice(5, 7));
 
-    const [sections, membres] = await Promise.all([
+    const [sections, membres, coursActifs] = await Promise.all([
       prisma.section.findMany(),
       prisma.member.findMany({
         where: { status: 'ACTIF' },
         select: { firstName: true, lastName: true, plan: true, montantFinal: true, sections: { select: { section: true } } },
       }),
+      prisma.course.findMany({ where: { actif: true }, select: { section: true, jours: true } }),
     ]);
     const sportDe = new Map(sections.map((s) => [s.code, (s.sport || 'AUTRE').toUpperCase()]));
+    // Séances hebdomadaires par section = Σ jours des cours actifs. Sert de
+    // poids au prorata ci-dessous.
+    const seancesHebdoDe = new Map<string, number>();
+    for (const c of coursActifs) {
+      seancesHebdoDe.set(c.section, (seancesHebdoDe.get(c.section) || 0) + c.jours.length);
+    }
 
     let revenuAnnuelBrut = 0;
     const parSport = new Map<string, { sport: string; membres: number; revenuAnnuelBrut: number }>();
@@ -122,13 +129,42 @@ router.get('/rentabilite', authenticate, requireRole(['ADMIN']), async (_req: Re
         continue;
       }
       revenuAnnuelBrut += annuel;
-      const sport = sportDe.get(m.sections[0]?.section || '') || 'AUTRE';
-      const e = parSport.get(sport) || { sport, membres: 0, revenuAnnuelBrut: 0 };
-      e.membres += 1;
-      e.revenuAnnuelBrut += annuel;
-      parSport.set(sport, e);
+      // Un membre multi-sections ne verse plus 100 % de sa cotisation au sport
+      // de sa PREMIÈRE section (ordre non garanti) : elle se répartit au
+      // prorata des séances hebdomadaires de chacune de ses sections — judo
+      // (2 séances) + kickboxing (2 séances) compte 50/50. Sections sans cours
+      // actif connu : parts égales, aucun revenu perdu. Le membre compte pour
+      // 1 dans chaque sport où il est inscrit ; la somme des revenus par sport
+      // retombe exactement sur le total.
+      const secs = m.sections.map((s) => s.section);
+      if (secs.length === 0) {
+        const e = parSport.get('AUTRE') || { sport: 'AUTRE', membres: 0, revenuAnnuelBrut: 0 };
+        e.membres += 1;
+        e.revenuAnnuelBrut += annuel;
+        parSport.set('AUTRE', e);
+        continue;
+      }
+      const poids = secs.map((sec) => seancesHebdoDe.get(sec) || 0);
+      const totalPoids = poids.reduce((a, b) => a + b, 0);
+      const parts = totalPoids > 0 ? poids.map((p) => p / totalPoids) : secs.map(() => 1 / secs.length);
+      const sportsComptes = new Set<string>();
+      for (let i = 0; i < secs.length; i++) {
+        const sport = sportDe.get(secs[i]) || 'AUTRE';
+        const e = parSport.get(sport) || { sport, membres: 0, revenuAnnuelBrut: 0 };
+        if (!sportsComptes.has(sport)) {
+          e.membres += 1;
+          sportsComptes.add(sport);
+        }
+        e.revenuAnnuelBrut += annuel * parts[i];
+        parSport.set(sport, e);
+      }
     }
     revenuAnnuelBrut = Math.round(revenuAnnuelBrut * 100) / 100;
+    // Le prorata introduit des décimales : arrondi à la SORTIE seulement,
+    // pour que la somme des sports reste collée au total.
+    for (const e of parSport.values()) {
+      e.revenuAnnuelBrut = Math.round(e.revenuAnnuelBrut * 100) / 100;
+    }
     const revenuAnnuelNet = sansTaxes(revenuAnnuelBrut);
     const base: BaseFinanciere = _req.query.base === 'brut' ? 'brut' : 'net';
 

@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { jourMontreal, cleSemaineIso } from './periodes';
+import { dureeCours } from './horaire';
 
 /**
  * POINTS AUTOMATIQUES — le cœur de l'exigence « tout ce qui peut être déduit
@@ -32,13 +33,6 @@ export interface PointsAuto {
 
 const arrondir = (n: number) => Math.round(n * 100) / 100;
 const isoJour = (d: Date) => d.toISOString().slice(0, 10);
-
-function dureeCours(startTime: string, endTime: string): number {
-  const [h1, m1] = startTime.split(':').map(Number);
-  const [h2, m2] = endTime.split(':').map(Number);
-  const minutes = h2 * 60 + m2 - (h1 * 60 + m1);
-  return minutes > 0 ? Math.round((minutes / 60) * 100) / 100 : 0;
-}
 
 export async function calculerPointsAuto(debut: Date, fin: Date): Promise<PointsAuto> {
   // Les associées = les comptes ADMIN actifs. Les heures des coachs salariés
