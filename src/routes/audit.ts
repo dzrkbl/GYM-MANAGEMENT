@@ -17,6 +17,9 @@ const CATEGORIES: Record<string, any> = {
   PAIEMENT: { entity: 'PaymentVersement' },
   ERREUR: { action: 'ERREUR' },
   TEMPS: { entity: { in: ['Bareme', 'PlanTache', 'TacheRecurrente', 'AcompteAssocie'] } },
+  // « COURS » : l'horaire, les capacités, les paramètres de rentabilité et les
+  // créneaux loués — tout ce qui pilote la page Heures & cours.
+  COURS: { entity: { in: ['Course', 'ParametreRentabilite', 'CreneauLoue', 'RevenuLocation'] } },
 };
 
 // GET /api/audit?categorie=&avant=&limit= — journal des modifications (ADMIN).

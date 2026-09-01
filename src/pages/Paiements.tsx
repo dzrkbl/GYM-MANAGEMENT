@@ -41,12 +41,16 @@ export function Paiements() {
     { value: 'ALL', label: 'Tout' }
   ];
 
-  // Filtre initial via l'URL (?statut=EN_RETARD depuis la carte « Retards » du tableau de bord).
+  // Filtres initiaux via l'URL : ?statut=EN_RETARD depuis la carte « Retards »
+  // du tableau de bord, ?section=CODE depuis une ligne de « Heures & cours ».
   const [searchParams] = useSearchParams();
   const statutInitial = searchParams.get('statut');
+  const sectionInitiale = searchParams.get('section');
 
   const [periodFilter, setPeriodFilter] = useState(currentMonthValue);
-  const [sectionFilter, setSectionFilter] = useState(user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : 'TOUS');
+  const [sectionFilter, setSectionFilter] = useState(
+    user?.role === 'SECTION_MANAGER' ? (user.section ?? 'TOUS') : (sectionInitiale || 'TOUS')
+  );
   const [statusFilter, setStatusFilter] = useState(
     statutInitial && ['PAYÉ', 'EN_RETARD', 'EN_ATTENTE'].includes(statutInitial) ? statutInitial : 'TOUS'
   );

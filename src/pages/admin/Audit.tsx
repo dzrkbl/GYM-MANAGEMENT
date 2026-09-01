@@ -54,6 +54,7 @@ const ENTITY_LABEL: Record<string, string> = {
 const FILTRES = [
   { valeur: 'TOUS', label: 'Tout' },
   { valeur: 'TEMPS', label: 'Gestion du temps' },
+  { valeur: 'COURS', label: 'Cours & heures' },
   { valeur: 'POINTAGE', label: 'Pointages' },
   { valeur: 'MEMBRE', label: 'Membres' },
   { valeur: 'PAIEMENT', label: 'Paiements' },

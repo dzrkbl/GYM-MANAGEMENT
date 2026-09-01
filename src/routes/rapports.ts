@@ -8,8 +8,98 @@ import {
   DIVISEUR_TAXES, getRevenusperiode, getChargesPeriode, masseSalarialePourMois,
   getLoyerPourAnnee, calculerResultat, sansTaxes, partTaxes, type BaseFinanciere,
 } from '../lib/finances';
+import { calculerRapportHeures, parametresRentabilite, heuresAutoSemaine } from '../lib/rapportHeures';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
+
+// GET /api/rapports/heures?base=net|brut — coût et rentabilité de chaque cours
+// (onglet « Heures & cours »). Tout est calculé des données existantes ; les
+// avertissements signalent ce qui manque au lieu d'afficher un chiffre faux.
+router.get('/heures', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const base: BaseFinanciere = req.query.base === 'brut' ? 'brut' : 'net';
+    return sendSuccess(res, await calculerRapportHeures(base));
+  } catch (error) {
+    console.error('Error in GET /api/rapports/heures:', error);
+    return sendError(res, 'Erreur du calcul des heures', 500);
+  }
+});
+
+// GET /api/rapports/heures/parametres — le singleton des réglages du modèle.
+router.get('/heures/parametres', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
+  try {
+    const param = await parametresRentabilite();
+    return sendSuccess(res, { ...param, heuresAutoSemaine: await heuresAutoSemaine() });
+  } catch (error) {
+    return sendError(res, 'Erreur de lecture des paramètres', 500);
+  }
+});
+
+// PUT /api/rapports/heures/parametres — modifiable, mais JAMAIS en silence :
+// chaque changement est journalisé avec l'avant → après.
+router.put('/heures/parametres', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const b = req.body || {};
+    const donnees: any = {};
+    const nombreOuNull = (v: any) => (v === null || v === '' ? null : Number(v));
+
+    if ('heuresOuvertesSemaine' in b) {
+      const v = nombreOuNull(b.heuresOuvertesSemaine);
+      if (v !== null && (!Number.isFinite(v) || v <= 0 || v > 168)) {
+        return sendError(res, 'Heures ouvertes par semaine : nombre entre 0 et 168, ou vide pour l\'automatique', 400);
+      }
+      donnees.heuresOuvertesSemaine = v;
+    }
+    if ('semainesSaison' in b) {
+      const v = Number(b.semainesSaison);
+      if (!Number.isInteger(v) || v < 1 || v > 52) return sendError(res, 'Semaines de saison : entier entre 1 et 52', 400);
+      donnees.semainesSaison = v;
+    }
+    if ('coutMarginalHeure' in b) {
+      const v = Number(b.coutMarginalHeure);
+      if (!Number.isFinite(v) || v < 0) return sendError(res, 'Coût marginal : nombre positif', 400);
+      donnees.coutMarginalHeure = v;
+    }
+    if ('valeurHeureProprio' in b) {
+      const v = nombreOuNull(b.valeurHeureProprio);
+      if (v !== null && (!Number.isFinite(v) || v < 0)) {
+        return sendError(res, 'Valeur de l\'heure de proprio : nombre positif, ou vide pour l\'automatique', 400);
+      }
+      donnees.valeurHeureProprio = v;
+    }
+    if ('semainesAvantDedoublement' in b) {
+      const v = Number(b.semainesAvantDedoublement);
+      if (!Number.isInteger(v) || v < 1 || v > 12) return sendError(res, 'Semaines avant dédoublement : entier entre 1 et 12', 400);
+      donnees.semainesAvantDedoublement = v;
+    }
+    if (Object.keys(donnees).length === 0) return sendError(res, 'Aucun champ à modifier', 400);
+
+    const avant = await parametresRentabilite();
+    const apres = await prisma.parametreRentabilite.update({ where: { id: 1 }, data: donnees });
+
+    const LIBELLES: Record<string, string> = {
+      heuresOuvertesSemaine: 'heures ouvertes/sem',
+      semainesSaison: 'semaines de saison',
+      coutMarginalHeure: 'coût marginal $/h',
+      valeurHeureProprio: 'heure de proprio $/h',
+      semainesAvantDedoublement: 'semaines avant dédoublement',
+    };
+    const changements = Object.keys(donnees)
+      .filter((k) => (avant as any)[k] !== (apres as any)[k])
+      .map((k) => `${LIBELLES[k] || k} : ${(avant as any)[k] ?? 'auto'} → ${(apres as any)[k] ?? 'auto'}`);
+    if (changements.length > 0) {
+      logAudit(req, {
+        action: 'UPDATE', entity: 'ParametreRentabilite', entityId: '1',
+        description: `Paramètres de rentabilité — ${changements.join(' ; ')}`,
+      });
+    }
+    return sendSuccess(res, { ...apres, heuresAutoSemaine: await heuresAutoSemaine() });
+  } catch (error) {
+    console.error('Error in PUT /api/rapports/heures/parametres:', error);
+    return sendError(res, 'Erreur de mise à jour des paramètres', 500);
+  }
+});
 
 // GET /api/rapports/export-csv
 router.get('/export-csv', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {

@@ -11,6 +11,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useSections } from '../hooks/useSections';
 import { SectionPieChart } from '../components/rapports/SectionPieChart';
+import { HeuresCours } from '../components/rapports/HeuresCours';
 
 const SectionCard = ({ s }: { s: any }) => (
   <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-3">
@@ -60,6 +61,9 @@ export function Rapports() {
   }
 
   const currentMonthValue = todayLocalISO().slice(0, 7); // AAAA-MM (heure de Montréal, pas UTC)
+  // Deux onglets : le rapport financier historique, et « Heures & cours »
+  // (coût et rentabilité de chaque heure ouverte — voir lib/rapportHeures).
+  const [onglet, setOnglet] = useState<'FINANCIER' | 'HEURES'>('FINANCIER');
   const [periodType, setPeriodType] = useState('MOIS'); // MOIS, TRIMESTRE, ANNEE, CUSTOM
   const [month, setMonth] = useState(currentMonthValue);
   const [customFrom, setCustomFrom] = useState('');
@@ -560,24 +564,44 @@ export function Rapports() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className={`space-y-6 mx-auto pb-12 ${onglet === 'HEURES' ? 'max-w-[1400px]' : 'max-w-5xl'}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h1 className="text-2xl md:text-3xl font-bold text-cshp-black flex items-center gap-2">
           <FileText className="text-cshp-red" />
           Rapports
         </h1>
-        <div className="flex gap-2 w-full md:w-auto">
-          <Button onClick={exportPDF} disabled={!data || isLoading} className="flex-1 md:flex-none">
-            <Download size={18} className="mr-2" /> PDF
-          </Button>
-          <Button onClick={() => exportCSV('PAIEMENTS')} variant="outline" disabled={!data || isLoading} className="flex-1 md:flex-none" title="Exporter Paiements">
-            <Download size={18} className="mr-2" /> CSV Paiements
-          </Button>
-          <Button onClick={() => exportCSV('PRESENCES')} variant="outline" disabled={!data || isLoading} className="flex-1 md:flex-none" title="Exporter Présences">
-            <Download size={18} className="mr-2" /> CSV Présences
-          </Button>
-        </div>
+        {onglet === 'FINANCIER' && (
+          <div className="flex gap-2 w-full md:w-auto">
+            <Button onClick={exportPDF} disabled={!data || isLoading} className="flex-1 md:flex-none">
+              <Download size={18} className="mr-2" /> PDF
+            </Button>
+            <Button onClick={() => exportCSV('PAIEMENTS')} variant="outline" disabled={!data || isLoading} className="flex-1 md:flex-none" title="Exporter Paiements">
+              <Download size={18} className="mr-2" /> CSV Paiements
+            </Button>
+            <Button onClick={() => exportCSV('PRESENCES')} variant="outline" disabled={!data || isLoading} className="flex-1 md:flex-none" title="Exporter Présences">
+              <Download size={18} className="mr-2" /> CSV Présences
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Onglets : Financier (l'existant) · Heures & cours (coût par cours) */}
+      <div className="flex bg-gray-100 rounded-lg p-1 w-fit">
+        {([['FINANCIER', 'Financier'], ['HEURES', 'Heures & cours']] as const).map(([code, label]) => (
+          <button
+            key={code}
+            onClick={() => setOnglet(code)}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              onglet === code ? 'bg-white shadow text-cshp-black' : 'text-cshp-gray'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {onglet === 'HEURES' ? <HeuresCours /> : (
+      <>
 
       {/* Barre de filtres */}
       <Card className="p-4 flex flex-col md:flex-row gap-4">
@@ -1171,6 +1195,9 @@ export function Rapports() {
         </div>
       </>
       ) : null}
+
+      </>
+      )}
 
     </div>
   );
