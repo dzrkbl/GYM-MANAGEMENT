@@ -25,6 +25,11 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
     dateDebut: initialData?.dateDebut ? initialData.dateDebut.split('T')[0] : new Date().toISOString().split('T')[0],
     note: initialData?.note || ''
   });
+  // Taux horaire gardé en TEXTE : un champ vidé doit redevenir null (retour au
+  // forfait), jamais 0 — 0 $/h et « pas de taux » sont deux choses différentes.
+  const [tauxHoraire, setTauxHoraire] = useState<string>(
+    initialData?.tauxHoraire !== null && initialData?.tauxHoraire !== undefined ? String(initialData.tauxHoraire) : ''
+  );
 
   const [selectedSections, setSelectedSections] = useState<string[]>(() => {
     if (!initialData?.section) return [];
@@ -58,7 +63,12 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
     e.preventDefault();
     // Un administrateur a accès à toutes les sections : on ne lui en attache aucune.
     const sectionVal = isAdmin ? null : (selectedSections.length > 0 ? selectedSections.join(',') : null);
-    const payload: any = { ...formData, section: sectionVal };
+    const tauxVal = tauxHoraire.trim() === '' ? null : parseFloat(tauxHoraire);
+    if (tauxVal !== null && (isNaN(tauxVal) || tauxVal < 0)) {
+      alert('Taux horaire invalide : nombre positif, ou vide pour rester au forfait.');
+      return;
+    }
+    const payload: any = { ...formData, section: sectionVal, tauxHoraire: tauxVal };
     // Mot de passe optionnel : si laissé vide, on ne l'envoie pas (création = mot de passe temporaire généré ; édition = inchangé).
     if (!payload.password) delete payload.password;
     await onSubmit(payload);
@@ -153,23 +163,41 @@ export function CoachForm({ initialData, onSubmit, onCancel, isLoading }: CoachF
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input 
-          label="Rémunération mensuelle ($) *" 
-          name="remuneration" 
-          type="number" 
+        <Input
+          label="Rémunération mensuelle ($) *"
+          name="remuneration"
+          type="number"
           step="0.01"
-          value={formData.remuneration} 
-          onChange={handleChange} 
-          required 
+          value={formData.remuneration}
+          onChange={handleChange}
+          required
         />
-        <Input 
-          label="Date de début *" 
-          name="dateDebut" 
-          type="date" 
-          value={formData.dateDebut} 
-          onChange={handleChange} 
-          required 
+        <Input
+          label="Date de début *"
+          name="dateDebut"
+          type="date"
+          value={formData.dateDebut}
+          onChange={handleChange}
+          required
         />
+      </div>
+
+      <div>
+        <Input
+          label="Taux horaire ($/h) — paie à l'heure"
+          name="tauxHoraire"
+          type="number"
+          step="0.01"
+          min="0"
+          value={tauxHoraire}
+          onChange={(e) => setTauxHoraire(e.target.value)}
+          placeholder="Vide = rémunération forfaitaire ci-dessus"
+        />
+        <p className="text-xs text-cshp-gray mt-1">
+          Renseigné, il <strong>prime</strong> : la paie du mois = séances réellement tenues de ses cours × durée × taux
+          (assignez-lui ses cours dans le Calendrier). La réconciliation s'affiche en bas de la page Coachs.
+          Si cette personne a aussi une ligne dans « Gérer les coachs » (Rapports), retirez-la — sinon elle compte deux fois.
+        </p>
       </div>
 
       <div className="flex items-center gap-2 mt-4">

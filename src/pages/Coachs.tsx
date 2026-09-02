@@ -31,9 +31,20 @@ export function Coachs() {
   // on l'affiche jusqu'à ce que l'admin ferme le bandeau.
   const [tempCred, setTempCred] = useState<{ email: string; password: string } | null>(null);
 
+  // Réconciliation paie du mois : heures tenues × taux vs forfait historique.
+  const moisCourant = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date()).slice(0, 7);
+  const [moisReconc, setMoisReconc] = useState(moisCourant);
+  const [reconc, setReconc] = useState<any>(null);
+
   useEffect(() => {
     fetchCoachs();
   }, []);
+
+  useEffect(() => {
+    const [a, m] = moisReconc.split('-').map(Number);
+    if (!a || !m) return;
+    apiFetch<any>(`/coachs/heures?mois=${m}&annee=${a}`).then(setReconc).catch(() => setReconc(null));
+  }, [moisReconc]);
 
   async function fetchCoachs() {
     setIsLoading(true);
@@ -144,10 +155,17 @@ export function Coachs() {
                 </div>
                 
                 <div className="mt-4 text-sm space-y-1">
-                  <p className="flex justify-between">
-                    <span className="text-cshp-gray">Rémunération :</span>
-                    <span className="font-bold text-cshp-black">{formatMontant(c.remuneration || 0)} /mois</span>
-                  </p>
+                  {c.tauxHoraire !== null && c.tauxHoraire !== undefined ? (
+                    <p className="flex justify-between" title="Paie à l'heure : séances tenues × durée × taux — prime sur le forfait">
+                      <span className="text-cshp-gray">Taux horaire :</span>
+                      <span className="font-bold text-cshp-black">{formatMontant(c.tauxHoraire)} /h <span className="text-[10px] font-normal text-emerald-600">à l'heure</span></span>
+                    </p>
+                  ) : (
+                    <p className="flex justify-between">
+                      <span className="text-cshp-gray">Rémunération :</span>
+                      <span className="font-bold text-cshp-black">{formatMontant(c.remuneration || 0)} /mois</span>
+                    </p>
+                  )}
                   <p className="flex justify-between">
                     <span className="text-cshp-gray">Courriel :</span>
                     <span className="text-cshp-black truncate w-40 text-right">{c.email}</span>
@@ -166,9 +184,82 @@ export function Coachs() {
         </div>
       )}
 
-      <Modal 
-        isOpen={isModalOpen} 
-        onClose={() => !isSubmitting && setIsModalOpen(false)} 
+      {/* Réconciliation mensuelle : on paie sur le relevé d'heures, plus sur
+          l'habitude. Les heures viennent des pointages (une séance tenue = une
+          date où quelqu'un a été pointé) — rien ne se ressaisit. */}
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-cshp-gray tracking-wider uppercase">Réconciliation paie du mois</h3>
+            <p className="text-xs text-cshp-gray mt-0.5">
+              Heures tenues = séances réellement pointées de ses cours × durée. Un coach à taux horaire est payé sur ce relevé ;
+              le forfait reste la référence de comparaison.
+            </p>
+          </div>
+          <input
+            type="month"
+            value={moisReconc}
+            onChange={(e) => setMoisReconc(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-cshp-red"
+          />
+        </div>
+        {!reconc ? (
+          <p className="text-sm text-cshp-gray italic">Chargement…</p>
+        ) : reconc.coachs.length === 0 ? (
+          <p className="text-sm text-cshp-gray italic">
+            Aucun coach à réconcilier : assignez les coachs à leurs cours (Calendrier) et saisissez leur taux horaire ici.
+          </p>
+        ) : (
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+              <thead>
+                <tr className="border-b border-gray-200 text-cshp-gray text-[10px] uppercase tracking-wider font-semibold">
+                  <th className="pb-2 pr-2">Coach</th>
+                  <th className="pb-2 px-2">Mode</th>
+                  <th className="pb-2 px-2 text-right" title="Séances réellement pointées / séances au calendrier du mois">Séances (tenues/prévues)</th>
+                  <th className="pb-2 px-2 text-right">Heures (tenues/prévues)</th>
+                  <th className="pb-2 px-2 text-right" title={reconc.moisEcoule ? 'Mois écoulé : heures TENUES × taux' : 'Mois en cours : heures PRÉVUES × taux (le réel se lit dans les colonnes tenues)'}>
+                    Paie du mois
+                  </th>
+                  <th className="pb-2 pl-2 text-right" title="Paie du mois − forfait historique">Écart vs forfait</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {reconc.coachs.map((c: any) => (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="py-2.5 pr-2">
+                      <div className="font-bold text-cshp-black">{c.nom}</div>
+                      <div className="text-[10px] text-cshp-gray">
+                        {c.cours.map((k: any) => `${k.section} (${k.seancesTenues}/${k.seancesPrevues})`).join(' · ') || '—'}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2">
+                      {c.mode === 'TAUX'
+                        ? <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold text-[10px]">{formatMontant(c.tauxHoraire)}/h</span>
+                        : <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-bold text-[10px]">forfait</span>}
+                    </td>
+                    <td className="py-2.5 px-2 text-right text-cshp-black">{c.seancesTenues} / {c.seancesPrevues}</td>
+                    <td className="py-2.5 px-2 text-right text-cshp-black">{c.heuresTenues} h / {c.heuresPrevues} h</td>
+                    <td className="py-2.5 px-2 text-right font-bold text-cshp-black">{formatMontant(c.paieRetenue)}</td>
+                    <td className={`py-2.5 pl-2 text-right font-bold ${c.ecartVsForfait === null ? 'text-cshp-gray' : c.ecartVsForfait > 0 ? 'text-cshp-red' : 'text-green-600'}`}>
+                      {c.ecartVsForfait === null ? '—' : `${c.ecartVsForfait > 0 ? '+' : ''}${formatMontant(c.ecartVsForfait)}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-cshp-gray mt-2">
+              {reconc.moisEcoule
+                ? 'Mois écoulé : la paie retenue = heures TENUES × taux — c\'est elle qui entre dans la masse salariale du Module financier (sauf override du mois).'
+                : 'Mois en cours : la paie retenue = heures PRÉVUES au calendrier × taux (charge attendue) ; le réel s\'accumule dans les colonnes « tenues ».'}
+            </p>
+          </div>
+        )}
+      </Card>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => !isSubmitting && setIsModalOpen(false)}
         title={editingCoach ? "Modifier le compte" : "Ajouter un compte"}
         width="lg"
       >

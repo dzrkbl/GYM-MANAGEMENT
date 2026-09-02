@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { heuresCoachsPourMois, estMoisEcoule } from './paieCoachs';
 
 export const TPS_RATE  = 0.05;
 export const TVQ_RATE  = 0.09975;
@@ -49,21 +50,41 @@ export async function getLoyerPourAnnee(annee: number): Promise<number> {
 
 // Masse salariale d'un mois : override MasseSalariale s'il existe, sinon la
 // somme de DEUX saisies complémentaires :
-//  - les rémunérations des COMPTES du personnel (page Coachs, User.remuneration,
-//    $/mois) — là où l'admin saisit naturellement les salaires ;
+//  - les COMPTES du personnel (page Coachs) : un compte avec un TAUX HORAIRE
+//    est payé à l'heure — séances tenues × durée × taux pour un mois écoulé,
+//    séances prévues au calendrier pour le mois courant et les suivants (la
+//    charge attendue, cohérente avec le loyer compté plein) ; un compte sans
+//    taux garde sa rémunération forfaitaire ($/mois) telle quelle ;
 //  - les lignes « Gérer les coachs » de Rapports (CoachSalaire) — pour les
 //    payes SANS compte dans l'app (aide ponctuelle, etc.).
 // Ne pas saisir la même personne aux deux endroits (le bloc de Rapports
-// affiche les salaires des comptes en lecture seule pour éviter le doublon).
+// affiche les salaires des comptes en lecture seule pour éviter le doublon) —
+// et à la création d'un compte à taux, RETIRER sa ligne forfaitaire.
 // SOURCE UNIQUE : Dashboard, Module financier et Rapports passent tous par ici.
 export async function masseSalarialePourMois(mois: number, annee: number): Promise<number> {
   const override = await prisma.masseSalariale.findFirst({ where: { mois, annee } });
   if (override) return override.montant;
   const [lignes, comptes] = await Promise.all([
     prisma.coachSalaire.aggregate({ _sum: { montant: true }, where: { actif: true } }),
-    prisma.user.aggregate({ _sum: { remuneration: true }, where: { actif: true } }),
+    prisma.user.findMany({ where: { actif: true }, select: { id: true, remuneration: true, tauxHoraire: true } }),
   ]);
-  return (lignes._sum.montant ?? 0) + (comptes._sum.remuneration ?? 0);
+  let totalComptes = 0;
+  if (comptes.some((c) => c.tauxHoraire !== null)) {
+    const heures = await heuresCoachsPourMois(mois, annee);
+    const ecoule = estMoisEcoule(mois, annee);
+    for (const c of comptes) {
+      if (c.tauxHoraire !== null) {
+        const h = heures.get(c.id);
+        totalComptes += (ecoule ? h?.heuresTenues ?? 0 : h?.heuresPrevues ?? 0) * c.tauxHoraire;
+      } else {
+        totalComptes += c.remuneration ?? 0;
+      }
+    }
+  } else {
+    // Aucun taux saisi : strictement l'ancien calcul, sans requête de plus.
+    totalComptes = comptes.reduce((a, c) => a + (c.remuneration ?? 0), 0);
+  }
+  return arrondir((lignes._sum.montant ?? 0) + totalComptes);
 }
 
 // Charges de la période (mois + annee)
