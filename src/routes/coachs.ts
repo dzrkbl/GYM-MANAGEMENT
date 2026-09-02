@@ -134,7 +134,10 @@ router.get('/heures', authenticate, requireRole(['ADMIN']), async (req: Request,
     const moisEcoule = estMoisEcoule(mois, annee);
 
     const coachs = users
-      .filter((u) => heures.has(u.id) || u.tauxHoraire !== null)
+      // Dans la réconciliation : quiconque a des cours assignés, un taux
+      // horaire, OU une paie forfaitaire — un coach payé SANS aucun cours
+      // assigné doit se voir (c'est un trou du relevé, pas un détail).
+      .filter((u) => heures.has(u.id) || u.tauxHoraire !== null || (u.remuneration ?? 0) > 0)
       .map((u) => {
         const h = heures.get(u.id) || { heuresTenues: 0, heuresPrevues: 0, cours: [] };
         const taux = u.tauxHoraire;

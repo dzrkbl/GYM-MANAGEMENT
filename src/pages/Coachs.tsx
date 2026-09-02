@@ -229,9 +229,15 @@ export function Coachs() {
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="py-2.5 pr-2">
                       <div className="font-bold text-cshp-black">{c.nom}</div>
-                      <div className="text-[10px] text-cshp-gray">
-                        {c.cours.map((k: any) => `${k.section} (${k.seancesTenues}/${k.seancesPrevues})`).join(' · ') || '—'}
-                      </div>
+                      {c.cours.length > 0 ? (
+                        <div className="text-[10px] text-cshp-gray">
+                          {c.cours.map((k: any) => `${k.section} (${k.seancesTenues}/${k.seancesPrevues})`).join(' · ')}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-amber-600 font-semibold">
+                          ⚠️ aucun cours assigné — assigner ses cours dans le Calendrier
+                        </div>
+                      )}
                     </td>
                     <td className="py-2.5 px-2">
                       {c.mode === 'TAUX'
