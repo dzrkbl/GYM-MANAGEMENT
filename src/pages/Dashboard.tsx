@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/api';
 import { formatMontant } from '../lib/format';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
-import { DollarSign, Users, AlertCircle, CalendarCheck, TrendingUp, Percent, Repeat, RefreshCw } from 'lucide-react';
+import { DollarSign, Users, AlertCircle, CalendarCheck, TrendingUp, Percent, Repeat, RefreshCw, Target } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
 export function Dashboard() {
@@ -12,6 +12,9 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [kpis, setKpis] = useState<any>(null);
+  // Prospects à contacter : nouveaux jamais traités + relances dont
+  // l'échéance est atteinte (la carte mène droit au bon onglet).
+  const [prospects, setProspects] = useState<{ nouveaux: number; relances: number; total: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -30,9 +33,10 @@ export function Dashboard() {
         setIsLoading(false);
       }
     }
-    
+
     if (user?.role === 'ADMIN') {
       fetchDashboard();
+      apiFetch<any>('/leads/alertes').then(setProspects).catch(() => {});
     }
   }, [user]);
 
@@ -149,6 +153,41 @@ export function Dashboard() {
                   + {formatMontant(data.renouvellements.resteAnciensContrats)} d'anciens contrats
                 </span>
               )}
+            </div>
+          </Card>
+        )}
+
+        {/* Prospects à contacter — cliquable : ouvre Prospects sur le bon onglet */}
+        {prospects && (
+          <Card
+            className={`p-6 cursor-pointer hover:shadow-md transition-all ${
+              prospects.relances > 0
+                ? 'border-l-4 border-l-cshp-red hover:bg-red-50/30'
+                : prospects.nouveaux > 0
+                  ? 'border-l-4 border-l-amber-500 hover:bg-amber-50/30'
+                  : 'hover:bg-gray-50'
+            }`}
+            onClick={() => navigate(prospects.relances > 0 ? '/admin/prospects?vue=RELANCE' : '/admin/prospects')}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-medium text-cshp-gray mb-1">Prospects à contacter</p>
+                <h3 className="text-2xl font-bold text-cshp-black">
+                  {prospects.total} <span className="text-sm font-normal text-cshp-gray">prospect(s)</span>
+                </h3>
+              </div>
+              <div className={`p-3 rounded-lg shrink-0 ${prospects.total > 0 ? 'bg-red-50 text-cshp-red' : 'bg-gray-50 text-gray-400'}`}>
+                <Target size={24} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-sm flex-wrap gap-x-2">
+              <span className={prospects.nouveaux > 0 ? 'text-amber-700 font-medium' : 'text-cshp-gray'}>
+                {prospects.nouveaux} nouveau(x)
+              </span>
+              <span className={prospects.relances > 0 ? 'text-cshp-red font-medium' : 'text-cshp-gray'}>
+                · {prospects.relances} relance(s) due(s)
+              </span>
+              <span className="text-cshp-gray">· cliquer pour y aller →</span>
             </div>
           </Card>
         )}

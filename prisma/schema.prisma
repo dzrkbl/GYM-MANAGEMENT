@@ -230,6 +230,14 @@ model Lead {
   ficheRecueAt DateTime?
   membreId     String?
 
+  // Prochaine action à poser sur ce prospect (« RDV essai jeudi 17 h »,
+  // « Rappeler ») et son échéance (date-jour, midi UTC) : la carte l'affiche
+  // avec une alerte quand l'échéance approche ou est passée, l'onglet
+  // « À relancer » regroupe les échéances atteintes, et le tableau de bord
+  // pointe dessus. L'heure exacte d'un rendez-vous vit dans le texte.
+  prochaineEtape    String?
+  prochaineEcheance DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { apiFetch } from '../../lib/api';
 import { Card } from '../../components/ui/Card';
@@ -26,6 +26,8 @@ interface Lead {
   createdAt: string;
   ficheRecueAt: string | null; // fiche d'inscription en ligne reçue
   membreId: string | null;     // dossier membre créé par la fiche ou la conversion
+  prochaineEtape: string | null;     // « RDV essai jeudi 17 h », « Rappeler »…
+  prochaineEcheance: string | null;  // date-jour de l'étape (alerte à l'approche)
   nbNotes: number;
   derniereNote: { texte: string; auteurNom: string | null; createdAt: string } | null;
 }
@@ -46,11 +48,45 @@ const STATUTS: { value: string; label: string; variant: any }[] = [
 const labelStatut = (s: string) => STATUTS.find((x) => x.value === s)?.label || s;
 const selectClass = 'min-h-[36px] border border-gray-300 rounded-lg px-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-cshp-red';
 
+// Jour civil de Montréal (jamais l'heure UTC du navigateur).
+const aujourdhuiMontreal = () =>
+  new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+
+// Une relance est due quand son échéance est atteinte et que le prospect est
+// encore en jeu (ni converti, ni perdu).
+const relanceDue = (l: Lead) =>
+  !!l.prochaineEcheance &&
+  (l.status === 'NEW' || l.status === 'CONTACTED') &&
+  l.prochaineEcheance.slice(0, 10) <= aujourdhuiMontreal();
+
+// L'alerte de la carte : rouge quand c'est le jour ou passé, ambre à 2 jours.
+function badgeEcheance(l: Lead): { texte: string; classe: string } | null {
+  if (!l.prochaineEcheance) return null;
+  const jour = l.prochaineEcheance.slice(0, 10);
+  const auj = aujourdhuiMontreal();
+  const joursDiff = Math.round((new Date(jour + 'T12:00:00Z').getTime() - new Date(auj + 'T12:00:00Z').getTime()) / 86_400_000);
+  const date = new Date(jour + 'T12:00:00Z').toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  if (joursDiff < 0) return { texte: `⏰ en retard de ${-joursDiff} j — ${date}`, classe: 'bg-red-50 text-red-600 border-red-200' };
+  if (joursDiff === 0) return { texte: `⏰ aujourd'hui`, classe: 'bg-red-50 text-red-600 border-red-200' };
+  if (joursDiff <= 2) return { texte: `🔔 ${joursDiff === 1 ? 'demain' : 'dans 2 jours'} — ${date}`, classe: 'bg-amber-50 text-amber-700 border-amber-300' };
+  return { texte: `📅 ${date}`, classe: 'bg-gray-50 text-gray-600 border-gray-200' };
+}
+
+// L'ordre des onglets : le travail du jour d'abord (Nouveau est la page
+// d'accueil, À relancer juste après), « Tous » relégué à la fin.
+const ONGLETS = ['NEW', 'RELANCE', 'CONTACTED', 'CONVERTED', 'LOST', 'TOUS'] as const;
+
 export function Prospects() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [filtre, setFiltre] = useState('TOUS');
+  // ?vue=RELANCE : la carte « Prospects à contacter » du tableau de bord
+  // atterrit directement sur le bon onglet.
+  const vueInitiale = searchParams.get('vue');
+  const [filtre, setFiltre] = useState(
+    vueInitiale && (ONGLETS as readonly string[]).includes(vueInitiale) ? vueInitiale : 'NEW'
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -63,14 +99,41 @@ export function Prospects() {
   const [nouvelleNote, setNouvelleNote] = useState('');
   const [envoiNote, setEnvoiNote] = useState(false);
 
+  // Prochaine étape (dans la modale de suivi) : texte + échéance.
+  const [etapeTexte, setEtapeTexte] = useState('');
+  const [etapeDate, setEtapeDate] = useState('');
+  const [envoiEtape, setEnvoiEtape] = useState(false);
+
   useEffect(() => {
     if (!suivi) { setNotes(null); setNouvelleNote(''); return; }
+    setEtapeTexte(suivi.prochaineEtape || '');
+    setEtapeDate(suivi.prochaineEcheance ? suivi.prochaineEcheance.slice(0, 10) : '');
     let annule = false;
     apiFetch<Note[]>(`/leads/${suivi.id}/notes`)
       .then((r) => { if (!annule) setNotes(r); })
       .catch(() => { if (!annule) setNotes([]); });
     return () => { annule = true; };
   }, [suivi]);
+
+  // Enregistre (ou efface) la prochaine étape du prospect ouvert.
+  const sauverEtape = async (effacer = false) => {
+    if (!suivi) return;
+    const texte = effacer ? null : (etapeTexte.trim() || null);
+    const date = effacer ? null : (etapeDate || null);
+    if (!effacer && !texte && !date) return;
+    setEnvoiEtape(true);
+    try {
+      const maj = await apiFetch<Lead>(`/leads/${suivi.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ prochaineEtape: texte, prochaineEcheance: date }),
+      });
+      setLeads((p) => p.map((l) => (l.id === suivi.id ? { ...l, prochaineEtape: maj.prochaineEtape, prochaineEcheance: maj.prochaineEcheance } : l)));
+      setSuivi((s) => (s ? { ...s, prochaineEtape: maj.prochaineEtape, prochaineEcheance: maj.prochaineEcheance } : s));
+      if (effacer) { setEtapeTexte(''); setEtapeDate(''); }
+    } catch (err: any) {
+      setError(err?.message || "Erreur lors de l'enregistrement de la prochaine étape");
+    } finally { setEnvoiEtape(false); }
+  };
 
   const ajouterNote = async () => {
     const texte = nouvelleNote.trim();
@@ -149,7 +212,22 @@ export function Prospects() {
     catch (err: any) { setError(err?.message || 'Erreur'); }
   };
 
-  const visibles = filtre === 'TOUS' ? leads : leads.filter((l) => l.status === filtre);
+  const relances = leads.filter(relanceDue);
+  const visibles =
+    filtre === 'TOUS' ? leads
+    : filtre === 'RELANCE'
+      ? [...relances].sort((a, b) => (a.prochaineEcheance || '').localeCompare(b.prochaineEcheance || ''))
+      : leads.filter((l) => l.status === filtre);
+
+  const labelOnglet = (s: string) => {
+    if (s === 'TOUS') return 'Tous';
+    if (s === 'RELANCE') return `À relancer${relances.length > 0 ? ` · ${relances.length}` : ''}`;
+    if (s === 'NEW') {
+      const n = leads.filter((l) => l.status === 'NEW').length;
+      return `Nouveau${n > 0 ? ` · ${n}` : ''}`;
+    }
+    return labelStatut(s);
+  };
 
   return (
     <div className="space-y-6">
@@ -197,13 +275,19 @@ export function Prospects() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {['TOUS', ...STATUTS.map((s) => s.value)].map((s) => (
+        {ONGLETS.map((s) => (
           <button
             key={s}
             onClick={() => setFiltre(s)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border ${filtre === s ? 'bg-cshp-red text-white border-cshp-red' : 'bg-white text-cshp-gray border-gray-300'}`}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+              filtre === s
+                ? 'bg-cshp-red text-white border-cshp-red'
+                : s === 'RELANCE' && relances.length > 0
+                  ? 'bg-red-50 text-red-600 border-red-300'
+                  : 'bg-white text-cshp-gray border-gray-300'
+            }`}
           >
-            {s === 'TOUS' ? 'Tous' : labelStatut(s)}
+            {labelOnglet(s)}
           </button>
         ))}
       </div>
@@ -242,6 +326,18 @@ export function Prospects() {
                     </span>
                   )}
                 </div>
+                {(l.prochaineEtape || l.prochaineEcheance) && (() => {
+                  const b = badgeEcheance(l);
+                  return (
+                    <button
+                      onClick={() => setSuivi(l)}
+                      className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-semibold ${b?.classe || 'bg-gray-50 text-gray-600 border-gray-200'}`}
+                      title="Prochaine étape — cliquer pour modifier"
+                    >
+                      📌 {l.prochaineEtape || 'Relance'}{b ? ` · ${b.texte}` : ''}
+                    </button>
+                  );
+                })()}
                 <p className="text-xs text-gray-500 mt-1">
                   {l.sport} · {l.requestType} · {l.phone || '—'} · {l.email || '—'} ·
                   demande du {new Date(l.createdAt).toLocaleDateString('fr-CA')}
@@ -322,6 +418,50 @@ export function Prospects() {
       >
         {suivi && (
           <div className="space-y-4">
+            {/* La prochaine action à poser : QUOI et POUR QUAND. L'alerte de la
+                carte et l'onglet « À relancer » se nourrissent d'ici. */}
+            <div className="p-3 rounded-lg border border-gray-200 bg-white space-y-2">
+              <p className="text-xs font-bold text-cshp-gray uppercase tracking-wider">📌 Prochaine étape</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={etapeTexte}
+                  onChange={(e) => setEtapeTexte(e.target.value)}
+                  placeholder="RDV essai jeudi 17 h · Rappeler après relâche…"
+                  maxLength={200}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cshp-red"
+                />
+                <input
+                  type="date"
+                  value={etapeDate}
+                  onChange={(e) => setEtapeDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cshp-red"
+                  title="Échéance : la carte s'allume à l'approche, et le prospect entre dans « À relancer » le jour venu"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-gray-400">
+                  L'heure d'un rendez-vous s'écrit dans le texte ; la date sert d'alerte.
+                </span>
+                <div className="flex gap-2">
+                  {(suivi.prochaineEtape || suivi.prochaineEcheance) && (
+                    <Button
+                      variant="outline"
+                      onClick={() => sauverEtape(true)}
+                      disabled={envoiEtape}
+                      className="!min-h-0 h-9 px-3 text-xs whitespace-nowrap"
+                      title="Étape faite : efface le texte et l'échéance"
+                    >
+                      Fait ✓
+                    </Button>
+                  )}
+                  <Button onClick={() => sauverEtape(false)} disabled={envoiEtape || (!etapeTexte.trim() && !etapeDate)} className="!min-h-0 h-9 px-4 text-xs">
+                    {envoiEtape ? '…' : 'Enregistrer'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <textarea
                 value={nouvelleNote}

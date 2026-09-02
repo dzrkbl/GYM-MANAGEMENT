@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from '../lib/api-response';
 import { authenticate, requireRole } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { sendEmail, htmlCourriel } from '../lib/mailer';
+import { dateAMidi } from '../lib/tarifs';
 
 const router = Router();
 
@@ -94,6 +95,27 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
   }
 });
 
+// GET /api/leads/alertes — les compteurs du tableau de bord : prospects à
+// contacter = les NOUVEAUX jamais traités + les relances dont l'échéance est
+// atteinte (aujourd'hui, jour civil de Montréal, ou avant).
+router.get('/alertes', authenticate, requireRole(['ADMIN']), async (_req: Request, res: Response): Promise<any> => {
+  try {
+    const isoAuj = new Intl.DateTimeFormat('fr-CA', { timeZone: 'America/Toronto' }).format(new Date());
+    const finJour = new Date(isoAuj + 'T23:59:59Z'); // les échéances vivent à midi UTC
+    const clauseRelance = { status: { in: ['NEW', 'CONTACTED'] }, prochaineEcheance: { lte: finJour } };
+    const [nouveaux, relances, total] = await Promise.all([
+      prisma.lead.count({ where: { status: 'NEW' } }),
+      prisma.lead.count({ where: clauseRelance }),
+      // L'union, pour ne compter personne deux fois (un NOUVEAU avec une
+      // échéance atteinte est UNE personne à contacter).
+      prisma.lead.count({ where: { OR: [{ status: 'NEW' }, clauseRelance] } }),
+    ]);
+    return sendSuccess(res, { nouveaux, relances, total });
+  } catch {
+    return sendError(res, 'Erreur du compte des prospects à contacter', 500);
+  }
+});
+
 // GET /api/leads?status=NEW — liste (ADMIN)
 router.get('/', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
@@ -129,17 +151,34 @@ const updateSchema = z.object({
   email: z.string().optional().nullable(),
   sport: z.string().optional().nullable(),
   requestType: z.enum(['ESSAI', 'RAPPEL', 'TARIFS', 'AUTRE']).optional(),
+  // Prochaine action et son échéance (AAAA-MM-JJ, ou null pour effacer les
+  // deux) : « RDV essai jeudi 17 h », « Rappeler la semaine prochaine »…
+  prochaineEtape: z.string().max(200).optional().nullable(),
+  prochaineEcheance: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
 });
 
-// PUT /api/leads/:id — mise à jour (statut, infos) (ADMIN)
+// PUT /api/leads/:id — mise à jour (statut, infos, prochaine étape) (ADMIN)
 router.put('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
   try {
     const data = updateSchema.parse(req.body);
-    const lead = await prisma.lead.update({ where: { id: req.params.id }, data });
+    const { prochaineEcheance, prochaineEtape, ...reste } = data;
+    const donnees: any = { ...reste };
+    if (prochaineEtape !== undefined) donnees.prochaineEtape = prochaineEtape ? prochaineEtape.trim() : null;
+    if (prochaineEcheance !== undefined) donnees.prochaineEcheance = prochaineEcheance ? dateAMidi(prochaineEcheance) : null;
+
+    const lead = await prisma.lead.update({ where: { id: req.params.id }, data: donnees });
     if (data.status) {
       logAudit(req, {
         action: 'UPDATE', entity: 'Lead', entityId: lead.id,
         description: `Prospect ${lead.firstName} ${lead.lastName} → ${data.status}`,
+      });
+    }
+    if (prochaineEtape !== undefined || prochaineEcheance !== undefined) {
+      logAudit(req, {
+        action: 'UPDATE', entity: 'Lead', entityId: lead.id,
+        description: lead.prochaineEtape || lead.prochaineEcheance
+          ? `Prospect ${lead.firstName} ${lead.lastName} — prochaine étape : « ${lead.prochaineEtape || 'sans texte'} »${lead.prochaineEcheance ? ` pour le ${lead.prochaineEcheance.toISOString().slice(0, 10)}` : ''}`
+          : `Prospect ${lead.firstName} ${lead.lastName} — prochaine étape effacée`,
       });
     }
     return sendSuccess(res, lead);
