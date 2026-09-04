@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { KATAS_KARATE, estKarate } from '../lib/katas';
 import { etatPaiement } from '../lib/echeances';
+import { lirePointageEnCours } from '../lib/pointageEnCours';
 import { ajouterMoisISO } from '../lib/tarifs';
 import { saisonCourante, saisonsChoix } from '../lib/saison';
 import { CEINTURES_LIST } from '../components/membres/MembreForm';
@@ -408,6 +409,22 @@ export function MembreDetail() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-12 px-4">
+      {/* Un pointage est en cours (brouillon frais avec des coches non
+          soumises) : le coach est probablement venu corriger un groupe pendant
+          la prise des présences — le chemin du retour reste sous ses yeux,
+          ses coches l'attendent. Sans coche, pas de bandeau : une simple
+          visite de la page Pointage n'est pas « un pointage en cours ». */}
+      {(lirePointageEnCours()?.coches.length ?? 0) > 0 && (
+        <button
+          onClick={() => navigate('/pointer')}
+          title="Vos coches sont conservées : le pointage reprend exactement là où il était"
+          className="w-full flex items-center justify-between gap-2 bg-cshp-black text-white px-4 py-2.5 rounded-xl shadow-sm text-sm font-semibold sticky top-0 z-20"
+        >
+          <span className="truncate">⏱ Un pointage est en cours</span>
+          <span className="shrink-0 bg-cshp-red px-3 py-1.5 rounded-lg whitespace-nowrap">Y revenir →</span>
+        </button>
+      )}
+
       {/* Bouton retour et modification */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-0 md:relative z-10">
         <button

@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { UserRound } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
+import { Modal } from '../components/ui/Modal';
 import { useSections } from '../hooks/useSections';
 import { formatDateLocal } from '../lib/format';
 import { etatPaiement } from '../lib/echeances';
 import { HAUTEUR_ECRAN } from '../lib/layout';
+import { lirePointageEnCours, ecrirePointageEnCours, purgerPointageEnCours } from '../lib/pointageEnCours';
 
 interface Course {
   id: string;
@@ -77,22 +81,39 @@ const dateLocaleISO = () => {
 
 export function Pointer() {
   const { codes: sections, getLabel } = useSections();
-  const [selectedSection, setSelectedSection] = useState<string>('');
+  const navigate = useNavigate();
+  // Brouillon laissé par une visite précédente (ex. : parti corriger le groupe
+  // d'un enfant dans sa fiche) : on repart exactement là où on était.
+  const [brouillon] = useState(lirePointageEnCours);
+  const [selectedSection, setSelectedSection] = useState<string>(brouillon?.section || '');
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [selectedCourseId, setSelectedCourseId] = useState<string>(brouillon?.courseId || '');
   // Jour du COURS pointé : aujourd'hui par défaut, mais modifiable vers le
   // passé (pointage oublié — ex. le karaté d'hier). Jamais le futur.
-  const [dateCours, setDateCours] = useState<string>(dateLocaleISO());
+  const [dateCours, setDateCours] = useState<string>(brouillon?.dateCours || dateLocaleISO());
   const [dejaPointes, setDejaPointes] = useState<Set<string>>(new Set());
-  
+
   const [members, setMembers] = useState<Member[]>([]);
   const [pointedMemberIds, setPointedMemberIds] = useState<Set<string>>(new Set());
-  
+  // Les coches du brouillon se réappliquent UNE fois, à l'arrivée de la liste
+  // des membres (intersection : un enfant déplacé de groupe entre-temps
+  // disparaît proprement de la sélection).
+  const cochesARestaurer = useRef<string[] | null>(
+    brouillon && brouillon.coches.length > 0 ? brouillon.coches : null
+  );
+
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [error, setError] = useState('');
+
+  // Résumé affiché à la confirmation : qui est là, qui doit de l'argent.
+  const [resume, setResume] = useState<{
+    pointes: number;
+    dejaAvant: number;
+    lignes: { membre: Member; rappel: { texte: string; enRetard: boolean } | null }[];
+  } | null>(null);
 
   // 1. Cours du jour CHOISI (aujourd'hui par défaut ; une date passée liste
   // les cours de CE jour-là pour un pointage rétroactif).
@@ -123,11 +144,26 @@ export function Pointer() {
   useEffect(() => {
     const sectionCourses = courses.filter(c => c.section === selectedSection);
     if (sectionCourses.length > 0) {
-      setSelectedCourseId(sectionCourses[0].id);
+      // Le cours déjà choisi (ou restauré du brouillon) reste choisi tant
+      // qu'il appartient au groupe ; sinon, le premier du groupe.
+      setSelectedCourseId((actuel) =>
+        sectionCourses.some((c) => c.id === actuel) ? actuel : sectionCourses[0].id
+      );
     } else {
       setSelectedCourseId('');
     }
   }, [selectedSection, courses]);
+
+  // Le brouillon suit chaque geste : jour, groupe, cours, coches. Ouvrir une
+  // fiche membre (ou recharger la page) ne perd plus rien.
+  useEffect(() => {
+    ecrirePointageEnCours({
+      dateCours,
+      section: selectedSection,
+      courseId: selectedCourseId,
+      coches: Array.from(pointedMemberIds),
+    });
+  }, [dateCours, selectedSection, selectedCourseId, pointedMemberIds]);
 
   // 2. Fetch members for selected section
   useEffect(() => {
@@ -142,6 +178,12 @@ export function Pointer() {
         // Sort alphabetically
         fetchedMembers.sort((a, b) => a.lastName.localeCompare(b.lastName));
         setMembers(fetchedMembers);
+        // Coches du brouillon, réappliquées une seule fois sur SON groupe.
+        if (cochesARestaurer.current && selectedSection === brouillon?.section) {
+          const idsConnus = new Set(fetchedMembers.map((m) => m.id));
+          setPointedMemberIds(new Set(cochesARestaurer.current.filter((id) => idsConnus.has(id))));
+          cochesARestaurer.current = null;
+        }
       } catch (err: any) {
         setError("Erreur de chargement des membres. " + err.message);
       } finally {
@@ -218,7 +260,23 @@ export function Pointer() {
       });
 
       setSuccessMessage(`${res.pointed} membre(s) pointé(s) pour le ${dateCours} !${res.skipped > 0 ? ` (${res.skipped} déjà pointés)` : ''}`);
+
+      // Résumé de confirmation : QUI est là (les pointés à l'instant + ceux
+      // déjà pointés du cours) et QUI doit de l'argent — la même logique que
+      // les badges de la liste (rappelPaiement), aucune deuxième vérité.
+      const idsPresents = new Set([...dejaPointes, ...pointedMemberIds]);
+      const lignes = members
+        .filter((m) => idsPresents.has(m.id))
+        .map((membre) => ({ membre, rappel: rappelPaiement(membre) }))
+        .sort((a, b) =>
+          Number(!!b.rappel && b.rappel.enRetard) - Number(!!a.rappel && a.rappel.enRetard) ||
+          a.membre.lastName.localeCompare(b.membre.lastName)
+        );
+      setResume({ pointes: res.pointed, dejaAvant: dejaPointes.size, lignes });
+
       setPointedMemberIds(new Set()); // Reset after success
+      // Pointage soumis : le brouillon a fait son travail.
+      purgerPointageEnCours();
       // La confirmation vit dans l'en-tête FIXE : elle est visible sans avoir
       // à remonter quoi que ce soit (avant, il fallait faire défiler le
       // <main> et l'écran semblait planter au téléphone).
@@ -402,7 +460,17 @@ export function Pointer() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Ouvrir la fiche SANS perdre le pointage : le brouillon est
+                      écrit à chaque geste, et la fiche offre le retour direct. */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/membres/${member.id}`); }}
+                    className="p-2.5 -my-1 rounded-full text-gray-300 hover:text-cshp-red hover:bg-gray-100 transition-colors"
+                    title="Ouvrir sa fiche — le pointage en cours est conservé"
+                    aria-label={`Fiche de ${member.firstName} ${member.lastName}`}
+                  >
+                    <UserRound size={19} />
+                  </button>
                   {estDejaPointe ? (
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-full">Déjà pointé ✓</span>
                   ) : (
@@ -433,6 +501,77 @@ export function Pointer() {
           {pointedMemberIds.size > 0 ? `Pointer ${pointedMemberIds.size} présence(s)` : 'Soumettre'}
         </Button>
       </div>
+
+      {/* ---------- RÉSUMÉ DE CONFIRMATION ----------
+          Qui est là, et qui doit de l'argent : le parent est AU dojo, c'est
+          le moment d'encaisser. Mêmes montants que les badges de la liste. */}
+      <Modal
+        isOpen={!!resume}
+        onClose={() => setResume(null)}
+        title="Pointage enregistré ✅"
+        width="lg"
+      >
+        {resume && (() => {
+          const enSouffrance = resume.lignes.filter((l) => l.rappel?.enRetard);
+          const aVenir = resume.lignes.filter((l) => l.rappel && !l.rappel.enRetard);
+          const ligneMembre = (l: (typeof resume.lignes)[number], rouge: boolean) => (
+            <li key={l.membre.id} className={`p-3 rounded-lg border flex items-center justify-between gap-2 ${rouge ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
+              <div className="min-w-0">
+                <span className="font-bold text-cshp-black block">
+                  {(l.membre.lastName ?? '').toUpperCase()} {l.membre.firstName ?? ''}
+                </span>
+                <span className={`text-xs font-semibold ${rouge ? 'text-red-600' : 'text-amber-700'}`}>{l.rappel!.texte}</span>
+              </div>
+              <button
+                onClick={() => { setResume(null); navigate(`/membres/${l.membre.id}`); }}
+                className="shrink-0 p-2 rounded-full text-gray-400 hover:text-cshp-red hover:bg-white"
+                title="Ouvrir sa fiche"
+                aria-label={`Fiche de ${l.membre.firstName} ${l.membre.lastName}`}
+              >
+                <UserRound size={18} />
+              </button>
+            </li>
+          );
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-cshp-black">
+                <strong>{resume.lignes.length} présent(s)</strong> à ce cours
+                {resume.pointes > 0 && <> — {resume.pointes} pointé(s) à l'instant{resume.dejaAvant > 0 ? `, ${resume.dejaAvant} déjà pointé(s)` : ''}</>}.
+              </p>
+
+              {enSouffrance.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-red-600 uppercase tracking-wider">
+                    💰 À encaisser parmi les présents ({enSouffrance.length})
+                  </p>
+                  <ul className="space-y-2 max-h-[38vh] overflow-y-auto">
+                    {enSouffrance.map((l) => ligneMembre(l, true))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm font-semibold text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
+                  🎉 Personne ne doit d'argent parmi les présents.
+                </p>
+              )}
+
+              {aVenir.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                    📅 Échéances qui approchent ({aVenir.length})
+                  </p>
+                  <ul className="space-y-2 max-h-[24vh] overflow-y-auto">
+                    {aVenir.map((l) => ligneMembre(l, false))}
+                  </ul>
+                </div>
+              )}
+
+              <Button fullWidth onClick={() => setResume(null)} className="min-h-[48px]">
+                Fermer
+              </Button>
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }
