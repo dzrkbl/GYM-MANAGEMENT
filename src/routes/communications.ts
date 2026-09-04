@@ -37,6 +37,56 @@ router.post('/test', authenticate, requireRole(['ADMIN']), async (req: Request, 
   }
 });
 
+// GET /api/communications/adresses?sections=A,B&statuts=ACTIF,EN_ATTENTE,INACTIF
+// TOUTES les adresses des fiches visées (courriel de l'enfant ET du parent,
+// adresses multiples séparées, sans doublon) — pour un envoi de MASSE depuis
+// la boîte personnelle de l'admin, quand le fournisseur intégré plafonne.
+// Rien n'est envoyé ici ; l'extraction est journalisée (renseignements
+// personnels sortis de l'app).
+router.get('/adresses', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const STATUTS_VALIDES = ['ACTIF', 'EN_ATTENTE', 'INACTIF'];
+    const statuts = String(req.query.statuts || '')
+      .split(',').map((s) => s.trim().toUpperCase())
+      .filter((s) => STATUTS_VALIDES.includes(s));
+    const codes = String(req.query.sections || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+    const where: any = { status: { in: statuts.length > 0 ? statuts : STATUTS_VALIDES } };
+    if (codes.length > 0) where.sections = { some: { section: { in: codes } } };
+
+    const membres = await prisma.member.findMany({
+      where,
+      select: { firstName: true, lastName: true, status: true, email: true, parentEmail: true },
+      orderBy: { lastName: 'asc' },
+    });
+
+    const set = new Set<string>();
+    const sansCourriel: string[] = [];
+    for (const m of membres) {
+      const adresses = [...parseDestinataires(m.email), ...parseDestinataires(m.parentEmail)]
+        .map((a) => a.toLowerCase())
+        .filter((a) => a.includes('@') && !/\s/.test(a));
+      if (adresses.length === 0) sansCourriel.push(`${m.lastName || ''} ${m.firstName || ''}`.trim());
+      for (const a of adresses) set.add(a);
+    }
+
+    logAudit(req, {
+      action: 'CREATE', entity: 'Communication',
+      description: `Adresses copiées pour envoi externe : ${set.size} adresse(s) de ${membres.length} fiche(s)${codes.length > 0 ? ` (${codes.join(', ')})` : ' (tous les groupes)'} — statuts ${statuts.length > 0 ? statuts.join('/') : 'tous'}`,
+    });
+
+    return sendSuccess(res, {
+      adresses: [...set].sort(),
+      nbMembres: membres.length,
+      nbSansCourriel: sansCourriel.length,
+      sansCourriel: sansCourriel.slice(0, 100),
+    });
+  } catch (error) {
+    console.error('Error in GET /api/communications/adresses:', error);
+    return sendError(res, 'Erreur lors de la collecte des adresses', 500);
+  }
+});
+
 const schema = z.object({
   section: z.string().optional().nullable(),            // rétrocompatibilité : un seul code, ou 'TOUS'
   sections: z.array(z.string()).optional().nullable(),  // plusieurs codes de sections à la fois

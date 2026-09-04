@@ -39,6 +39,55 @@ export function Communications() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<ResultatEnvoi | null>(null);
 
+  // Copie des adresses des groupes cochés, pour un envoi de MASSE depuis sa
+  // propre boîte (le fournisseur intégré plafonne). Tous les statuts par
+  // défaut : actifs, en attente ET inactifs — c'est le besoin de la relance.
+  const STATUTS_COPIE = [
+    { code: 'ACTIF', label: 'Actifs' },
+    { code: 'EN_ATTENTE', label: 'En attente' },
+    { code: 'INACTIF', label: 'Inactifs' },
+  ];
+  const [statutsCopie, setStatutsCopie] = useState<string[]>(['ACTIF', 'EN_ATTENTE', 'INACTIF']);
+  const [copie, setCopie] = useState<{ adresses: string[]; nbMembres: number; nbSansCourriel: number; sansCourriel: string[] } | null>(null);
+  const [copieEnCours, setCopieEnCours] = useState(false);
+  const [copieMessage, setCopieMessage] = useState<{ ok: boolean; texte: string } | null>(null);
+  const [montrerAdresses, setMontrerAdresses] = useState(false);
+
+  const copierAdresses = async () => {
+    setCopieEnCours(true);
+    setCopieMessage(null);
+    setMontrerAdresses(false);
+    try {
+      const params = new URLSearchParams();
+      if (sectionsChoisies.length > 0) params.set('sections', sectionsChoisies.join(','));
+      params.set('statuts', statutsCopie.join(','));
+      const r = await apiFetch<{ adresses: string[]; nbMembres: number; nbSansCourriel: number; sansCourriel: string[] }>(
+        `/communications/adresses?${params.toString()}`
+      );
+      setCopie(r);
+      if (r.adresses.length === 0) {
+        setCopieMessage({ ok: false, texte: 'Aucune adresse courriel pour ce filtre.' });
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(r.adresses.join(', '));
+        setCopieMessage({
+          ok: true,
+          texte: `✅ ${r.adresses.length} adresse(s) copiée(s) (${r.nbMembres} fiches) — collez-les dans le champ Cci de votre courriel.`,
+        });
+      } catch {
+        // Copie refusée par le navigateur : le bloc s'affiche, prêt à
+        // sélectionner-copier à la main.
+        setMontrerAdresses(true);
+        setCopieMessage({ ok: false, texte: 'Copie automatique bloquée par le navigateur : touchez le bloc ci-dessous, tout est déjà sélectionné.' });
+      }
+    } catch (err: any) {
+      setCopieMessage({ ok: false, texte: err?.message || 'Erreur lors de la collecte des adresses' });
+    } finally {
+      setCopieEnCours(false);
+    }
+  };
+
   // Diagnostic de la configuration courriel + envoi de test
   const [config, setConfig] = useState<ConfigCourriel | null>(null);
   const [testEnCours, setTestEnCours] = useState(false);
@@ -215,6 +264,74 @@ export function Communications() {
             <p className="text-xs text-cshp-gray">
               Cochez un ou plusieurs groupes — ou « Toutes les sections ». Chaque destinataire ne reçoit le courriel qu'une seule fois, même s'il est dans plusieurs groupes.
             </p>
+
+            {/* Envoi de MASSE depuis sa propre boîte : copier toutes les
+                adresses des fiches des groupes cochés ci-dessus. */}
+            <div className="pt-3 mt-1 border-t border-gray-200 space-y-2">
+              <p className="text-sm font-semibold text-cshp-black">📋 Copier les adresses des groupes cochés</p>
+              <p className="text-xs text-cshp-gray">
+                Pour un envoi de masse depuis votre propre boîte (Gmail, Outlook…) : toutes les adresses des fiches —
+                courriel de l'enfant <strong>et</strong> du parent — sans doublon.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                {STATUTS_COPIE.map((s) => (
+                  <label key={s.code} className="flex items-center gap-1.5 text-sm text-cshp-black">
+                    <input
+                      type="checkbox"
+                      checked={statutsCopie.includes(s.code)}
+                      onChange={(e) =>
+                        setStatutsCopie((prev) =>
+                          e.target.checked ? [...prev, s.code] : prev.filter((x) => x !== s.code)
+                        )
+                      }
+                      className="w-4 h-4 rounded text-cshp-red focus:ring-cshp-red"
+                    />
+                    {s.label}
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={copierAdresses}
+                  isLoading={copieEnCours}
+                  disabled={statutsCopie.length === 0}
+                  className="!min-h-0 h-10"
+                >
+                  📋 Copier les adresses
+                </Button>
+                {copie && copie.adresses.length > 0 && (
+                  <button
+                    onClick={() => setMontrerAdresses((v) => !v)}
+                    className="text-xs font-semibold text-cshp-gray hover:text-cshp-black underline decoration-dotted"
+                  >
+                    {montrerAdresses ? 'Masquer la liste' : `Voir les ${copie.adresses.length} adresses`}
+                  </button>
+                )}
+              </div>
+              {copieMessage && (
+                <p className={`text-sm ${copieMessage.ok ? 'text-emerald-700' : 'text-red-700'}`}>{copieMessage.texte}</p>
+              )}
+              {copie && montrerAdresses && (
+                <textarea
+                  readOnly
+                  value={copie.adresses.join(', ')}
+                  onFocus={(e) => e.target.select()}
+                  rows={5}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-xs font-mono"
+                />
+              )}
+              {copie && copie.nbSansCourriel > 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  ⚠️ {copie.nbSansCourriel} fiche(s) sans aucune adresse courriel — ces familles ne recevront rien :{' '}
+                  {copie.sansCourriel.slice(0, 12).join(' · ')}{copie.nbSansCourriel > 12 ? '…' : ''}
+                </p>
+              )}
+              <p className="text-[11px] text-cshp-gray">
+                💡 Collez-les toujours dans le champ <strong>Cci</strong> (copie cachée) : chaque parent ne doit jamais
+                voir les adresses des autres. La copie est notée au journal d'audit.
+              </p>
+            </div>
           </div>
         </div>
 
